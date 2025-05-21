@@ -1,0 +1,40 @@
+{
+  "name": "journi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test:bigquery": "NODE_OPTIONS='--loader ts-node/esm' ts-node --esm scripts/test-bigquery.ts",
+    "fetch:trades": "ts-node scripts/fetch-trading-history.ts"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^8.0.0",
+    "@solana/web3.js": "^1.98.2",
+    "@supabase/supabase-js": "^2.49.8",
+    "@types/axios": "^0.9.36",
+    "axios": "^1.9.0",
+    "fastify": "^4.24.3",
+    "next": "14.0.3",
+    "react": "^18",
+    "react-dom": "^18",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/uuid": "^9.0.7",
+    "autoprefixer": "^10.0.1",
+    "dotenv": "^16.5.0",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.3",
+    "postcss": "^8",
+    "tailwindcss": "^3.3.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5"
+  }
+}

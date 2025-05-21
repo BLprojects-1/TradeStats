@@ -1,0 +1,7 @@
+
+# Enable Email Confirmations in Supabase 
+1. Go to Authentication > Providers > Email
+2. Turn on "Enable Email Confirmations"
+3. Make sure SMTP settings are configured or use Supabase SMTP service
+
+
