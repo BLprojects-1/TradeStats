@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import axios from 'axios';
+import { drpcClient } from '../../../services/drpcClient';
 
 // Use environment variable for DRPC API key with a fallback for development
 const FALLBACK_DRPC_API_KEY = 'AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF';
@@ -163,184 +163,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Address is required' });
     }
 
-    console.log('API: Fetching signatures for address:', address, 'limit:', limit, 'beforeSignature:', beforeSignature, 'afterTimestamp:', afterTimestamp);
+    console.log('API: Fetching transactions for address:', address, 'limit:', limit, 'beforeSignature:', beforeSignature, 'afterTimestamp:', afterTimestamp);
     
-    // First request to get signatures
-    let signaturesResponse: { data: DRPCResponse };
-    try {
-      signaturesResponse = await axios.post<DRPCResponse>(DRPC_ENDPOINT, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getSignaturesForAddress',
-        params: [
-          address,
-          {
-            limit: parseInt(String(limit), 10),
-            before: beforeSignature || undefined
-          }
-        ]
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-    } catch (error: any) {
-      console.error('API: DRPC request failed:', error.message);
-      if (error.response?.data?.error) {
-        console.error('API: DRPC error details:', error.response.data.error);
-      }
-      throw new Error(`DRPC API error: ${error.message}`);
+    // Parse afterTimestamp if it's a string
+    let parsedAfterTimestamp: Date | undefined;
+    if (afterTimestamp) {
+      parsedAfterTimestamp = new Date(afterTimestamp);
     }
 
-    if (signaturesResponse.data.error) {
-      const errorMessage = signaturesResponse.data.error.message;
-      console.error('API: DRPC API error for signatures:', errorMessage);
-      if (errorMessage.includes('Invalid API key') || errorMessage.includes('unauthorized')) {
-        return res.status(401).json({ 
-          error: 'DRPC API key is invalid or expired',
-          details: 'Please check your DRPC API key configuration'
-        });
-      }
-      return res.status(400).json({ error: errorMessage });
-    }
-
-    const signatures = signaturesResponse.data.result;
-    if (!Array.isArray(signatures)) {
-      console.error('API: Invalid signatures response:', signatures);
-      return res.status(500).json({ 
-        error: 'Invalid response format from DRPC API',
-        details: 'Expected an array of signatures but received something else'
-      });
-    }
-
-    console.log('API: Found', signatures.length, 'signatures');
-
-    // Get transaction details for each signature
-    const transactions = await Promise.all(
-      signatures.map(async (sig: { signature: string; blockTime: number }) => {
-        try {
-          // If we have an afterTimestamp and this transaction is older, skip it
-          if (afterTimestamp && sig.blockTime * 1000 <= afterTimestamp) {
-            console.log('API: Skipping older transaction:', sig.signature);
-            return null;
-          }
-
-          console.log('API: Fetching transaction details for signature:', sig.signature);
-          const txResponse = await axios.post<DRPCResponse>(DRPC_ENDPOINT, {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getTransaction',
-            params: [
-              sig.signature,
-              {
-                encoding: 'jsonParsed',
-                maxSupportedTransactionVersion: 0,
-                commitment: 'confirmed',
-                rewards: false,
-                accounts: {
-                  encoding: 'jsonParsed',
-                  addresses: [address]
-                }
-              }
-            ]
-          }, {
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (txResponse.data.error) {
-            console.error('API: dRPC API error for transaction:', sig.signature, txResponse.data.error);
-            return null;
-          }
-
-          const tx = txResponse.data.result as Transaction;
-          if (!tx || !tx.meta) {
-            console.log('API: No transaction data for signature:', sig.signature);
-            return null;
-          }
-
-          // Log the raw transaction data for debugging
-          console.log('API: Raw transaction data:', JSON.stringify(tx, null, 2));
-
-          const transaction = {
-            blockTime: tx.blockTime,
-            slot: tx.slot,
-            signature: sig.signature,
-            preBalances: tx.meta.preBalances || [],
-            postBalances: tx.meta.postBalances || [],
-            meta: {
-              err: tx.meta.err,
-              fee: tx.meta.fee,
-              preBalances: tx.meta.preBalances,
-              postBalances: tx.meta.postBalances,
-              preTokenBalances: tx.meta.preTokenBalances,
-              postTokenBalances: tx.meta.postTokenBalances,
-              logMessages: tx.meta.logMessages
-            },
-            tokenBalanceChanges: await parseTokenBalanceChanges(tx),
-            solBalanceChange: tx.meta.preBalances && tx.meta.postBalances ? 
-              (tx.meta.postBalances[0] - tx.meta.preBalances[0]) / 1e9 : 0, // Convert lamports to SOL
-            status: tx.meta.err ? 'failed' : 'success',
-            fee: tx.meta.fee || 0,
-            logMessages: tx.meta.logMessages || [],
-            type: determineTransactionType(tx),
-            timestamp: tx.blockTime * 1000 // Convert to milliseconds
-          };
-
-          console.log('API: Processed transaction:', {
-            signature: transaction.signature,
-            type: transaction.type,
-            status: transaction.status,
-            tokenBalanceChanges: transaction.tokenBalanceChanges
-          });
-
-          return transaction;
-        } catch (error) {
-          console.error('API: Error fetching transaction:', sig.signature, error);
-          if (error && typeof error === 'object' && 'response' in error) {
-            const axiosError = error as { response?: { status?: number; data?: any; message?: string } };
-            console.error('API: Request error details:', {
-              status: axiosError.response?.status,
-              data: axiosError.response?.data,
-              message: axiosError.response?.message
-            });
-          }
-          return null;
-        }
-      })
+    // Use our improved direct client implementation
+    const result = await drpcClient.getTransactions(
+      address,
+      parseInt(String(limit), 10),
+      beforeSignature,
+      parsedAfterTimestamp
     );
 
-    // Filter out any failed transaction fetches and transactions before afterTimestamp
-    const validTransactions = transactions.filter(tx => tx !== null);
-    console.log('API: Returning', validTransactions.length, 'valid transactions');
-
-    // Use the last valid transaction's signature for lastSignature in response
-    const lastSignature = validTransactions.length > 0 
-      ? validTransactions[validTransactions.length - 1].signature 
-      : null;
-
-    return res.status(200).json({ 
-      transactions: validTransactions,
-      lastSignature
+    console.log(`API: Successfully fetched ${result.transactions.length} transactions`);
+    
+    return res.status(200).json({
+      transactions: result.transactions,
+      lastSignature: result.lastSignature
     });
-  } catch (error) {
-    console.error('API: Error in handler:', error);
-    if (error && typeof error === 'object' && 'response' in error) {
-      const axiosError = error as { response?: { status?: number; data?: any; message?: string } };
-      console.error('API: Request error details:', {
-        status: axiosError.response?.status,
-        data: axiosError.response?.data,
-        message: axiosError.response?.message
-      });
-      return res.status(axiosError.response?.status || 500).json({ 
-        error: 'Failed to fetch transactions',
-        details: axiosError.response?.data || 'Unknown error'
-      });
-    }
-    return res.status(500).json({ 
-      error: 'Failed to fetch transactions',
-      details: error instanceof Error ? error.message : 'Unknown error'
+  } catch (error: any) {
+    console.error('API: Error fetching transactions:', error);
+    
+    const errorMessage = error.message || 'Unknown error occurred';
+    const statusCode = error.statusCode || 500;
+    
+    return res.status(statusCode).json({ 
+      error: errorMessage,
+      details: 'An error occurred while fetching transactions from Solana. Please try again later.'
     });
   }
 }

@@ -6,6 +6,7 @@ import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
 import { ProcessedTrade } from '../../services/tradeProcessor';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
+import ApiErrorBanner from '../../components/ApiErrorBanner';
 
 const TRADES_PER_PAGE = 20; // Increase from 10 to 20 for more trades per page
 
@@ -131,6 +132,7 @@ export default function TradingHistory() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [wallets, setWallets] = useState<TrackedWallet[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [trades, setTrades] = useState<ProcessedTrade[]>([]);
@@ -144,6 +146,7 @@ export default function TradingHistory() {
   const [lastSignature, setLastSignature] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [rawTransactions, setRawTransactions] = useState<any[]>([]);
+  const [initialScanInProgress, setInitialScanInProgress] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -191,6 +194,9 @@ export default function TradingHistory() {
         // Reset pagination when filters change
         setCurrentPage(1);
         
+        // Check if initial scan is complete
+        setInitialScanInProgress(selectedWallet.initial_scan_complete === false);
+
         // Load first page of trades
         await loadPage(1, selectedWallet.wallet_address);
       } catch (err) {
@@ -198,75 +204,54 @@ export default function TradingHistory() {
         setError('Failed to load trading history. Please try again.');
       } finally {
         setDataLoading(false);
-        setLoadingMessage('');
       }
     };
     
-    getTradeHistory();
-  }, [selectedWalletId, wallets, timeFilter, tokenFilter]);
+    if (selectedWalletId) {
+      getTradeHistory();
+    }
+  }, [selectedWalletId, timeFilter, tokenFilter, user?.id]);
 
   const loadPage = async (page: number, walletAddress: string) => {
-    if (!user?.id) {
-      throw new Error('User not authenticated');
-    }
-
-    setDataLoading(true);
-    setLoadingMessage(`Loading page ${page} of transactions...`);
-    
     try {
-      console.log('Fetching page', page, 'for wallet', walletAddress);
+      setDataLoading(true);
+      setLoadingMessage(`Loading page ${page} of transactions...`);
+      setApiError(null);
       
-      // Get trades from the trading history service
-      const { trades: processedTrades, totalCount } = await tradingHistoryService.getTradingHistory(
-        user.id,
+      // Calculate offset
+      const offset = (page - 1) * TRADES_PER_PAGE;
+      
+      console.log('Loading page', page, 'with offset', offset);
+
+      const result = await tradingHistoryService.getTradingHistory(
+        user!.id,
         walletAddress,
         TRADES_PER_PAGE,
         page
       );
 
-      console.log('Received trades:', processedTrades.length, 'Sample trade:', processedTrades[0]);
-
-      // Apply time filter
-      let filteredTrades = processedTrades;
-      if (timeFilter !== 'all') {
-        const now = Date.now();
-        const timeFilters = {
-          '30d': 30 * 24 * 60 * 60 * 1000,
-          '7d': 7 * 24 * 60 * 60 * 1000,
-          '24h': 24 * 60 * 60 * 1000
-        };
-        filteredTrades = processedTrades.filter(t => {
-          const tradeTime = new Date(t.timestamp).getTime();
-          return (now - tradeTime) <= timeFilters[timeFilter as keyof typeof timeFilters];
-        });
+      if (result.trades.length === 0 && page === 1) {
+        // No trades found for first page
+        console.log('No trades found for this wallet');
+      } else {
+        console.log(`Loaded ${result.trades.length} trades`);
       }
 
-      // Apply token filter
-      if (tokenFilter !== 'all') {
-        filteredTrades = filteredTrades.filter(t => 
-          t.tokenSymbol?.toLowerCase().includes(tokenFilter.toLowerCase())
-        );
-      }
-
-      // Calculate totals
-      const totalVolume = filteredTrades.reduce((sum, trade) => 
-        sum + (trade.valueUSD || 0), 0
-      );
-
-      const netPL = filteredTrades.reduce((sum, trade) => {
-        const value = trade.valueUSD || 0;
-        return sum + (trade.type === 'BUY' ? -value : value);
-      }, 0);
-
-      // Update state
-      setTrades(filteredTrades);
-      setTotalTrades(totalCount);
+      setTrades(result.trades);
+      setTotalTrades(result.totalCount);
+      setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
       setCurrentPage(page);
-      setTotalPages(Math.ceil(totalCount / TRADES_PER_PAGE));
+    } catch (err: any) {
+      console.error('Error loading page:', err);
       
-    } catch (err) {
-      console.error('Error in loadPage:', err);
-      throw err;
+      // Check for specific API errors
+      if (err.message?.includes('DRPC API') || err.message?.includes('RPC')) {
+        setApiError('We are experiencing issues connecting to the Solana network. Please try again later.');
+      } else if (err.message?.includes('Jupiter') || err.message?.includes('price')) {
+        setApiError('We are experiencing issues fetching token prices. Some price data may be unavailable.');
+      } else {
+        setError('Failed to load trading history. Please try again.');
+      }
     } finally {
       setDataLoading(false);
       setLoadingMessage('');
@@ -280,6 +265,16 @@ export default function TradingHistory() {
     if (!selectedWallet) return;
     
     await loadPage(newPage, selectedWallet.wallet_address);
+  };
+
+  const handleRetry = () => {
+    if (selectedWalletId) {
+      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+      if (selectedWallet) {
+        setApiError(null);
+        loadPage(currentPage, selectedWallet.wallet_address);
+      }
+    }
   };
 
   if (loading) {
@@ -301,14 +296,48 @@ export default function TradingHistory() {
       selectedWalletId={selectedWalletId}
       onWalletChange={setSelectedWalletId}
     >
-      {error && (
-        <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
-          {error}
+      <div className="p-4 md:p-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold mb-2">Trading History</h1>
+          <p className="text-slate-500">View your Solana trading history across DEXs</p>
         </div>
-      )}
 
-      <div className="space-y-6">
-        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
+        {error && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+            <p>{error}</p>
+          </div>
+        )}
+        
+        {apiError && <ApiErrorBanner message={apiError} onRetry={handleRetry} />}
+
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-8">
+          <div className="mb-4">
+            <label htmlFor="wallet-select" className="block text-sm font-medium text-gray-700 mb-2">
+              Select Wallet
+            </label>
+            <select
+              id="wallet-select"
+              className="block w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              value={selectedWalletId || ''}
+              onChange={(e) => setSelectedWalletId(e.target.value)}
+            >
+              <option value="">Select a wallet</option>
+              {wallets.map((wallet) => (
+                <option key={wallet.id} value={wallet.id}>
+                  {wallet.wallet_address} {wallet.label || wallet.nickname ? `(${wallet.label || wallet.nickname})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {initialScanInProgress && (
+            <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
+              <p className="font-bold">Initial wallet scan in progress</p>
+              <p>This may take up to 2 minutes for the first scan. Subsequent updates will be much faster.</p>
+              <p className="mt-2 text-sm">We're scanning your wallet's transaction history and processing trades. Please wait...</p>
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center">
               <h2 className="text-2xl font-semibold text-indigo-200">Trade History</h2>

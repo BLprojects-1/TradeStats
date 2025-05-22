@@ -12,6 +12,8 @@ export interface TrackedWallet {
   user_id: string;
   wallet_address: string;
   label?: string;
+  nickname?: string;
+  initial_scan_complete?: boolean;
   created_at?: string;
   updated_at?: string;
 }

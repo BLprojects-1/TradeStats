@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-interface QuoteResponse {
+export interface QuoteResponse {
   inputMint: string;
   outputMint: string;
   inAmount: string;
@@ -15,7 +15,7 @@ interface QuoteResponse {
   timeTaken: number;
 }
 
-interface TokenInfoResponse {
+export interface TokenInfoResponse {
   address: string;
   name: string;
   symbol: string;
@@ -31,152 +31,232 @@ interface TokenInfoResponse {
   extensions?: {
     coingeckoId?: string;
   };
+  marketCap?: number;
 }
 
-// In-memory cache to reduce API calls
-interface CacheEntry {
-  timestamp: number;
+export interface TokenPriceResponse {
   priceUsd: number;
-}
-
-// Add a new cache for token info
-interface TokenInfoCacheEntry {
+  priceSol: number;
   timestamp: number;
-  tokenInfo: TokenInfoResponse;
 }
 
-interface QuoteParams {
-  inputMint: string;
-  outputMint: string;
-  amount: string;
-  slippageBps: number;
-  blockTime?: number;
+// Mock data for development when APIs are unavailable
+const mockTokenInfo: Record<string, TokenInfoResponse> = {
+  // Some common tokens for development
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': {
+    address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    name: 'USD Coin',
+    symbol: 'USDC',
+    decimals: 6,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png',
+    marketCap: 25000000000
+  },
+  'So11111111111111111111111111111111111111112': {
+    address: 'So11111111111111111111111111111111111111112',
+    name: 'Wrapped SOL',
+    symbol: 'SOL',
+    decimals: 9,
+    logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+    marketCap: 50000000000
+  },
+  // Default for unknown tokens
+  'default': {
+    address: 'unknown',
+    name: 'Unknown Token',
+    symbol: 'UNKNOWN',
+    decimals: 9,
+    logoURI: '',
+    marketCap: 0
+  }
+};
+
+// Environment detection
+const isDevelopment = process.env.NODE_ENV === 'development';
+const USE_MOCK_DATA = isDevelopment;
+
+// Updated Jupiter API response interfaces
+interface JupiterPriceData {
+  id: string;
+  mintSymbol: string;
+  vsToken: string;
+  vsTokenSymbol: string;
+  price: number;
 }
 
-interface JupiterQuoteResponse {
-  outAmount: string;
-  inAmount: string;
-  // Add other fields as needed
+interface JupiterPriceResponse {
+  data: {
+    [key: string]: JupiterPriceData;
+  };
 }
 
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+export interface JupiterTokensResponse {
+  tokens: {
+    [key: string]: TokenInfoResponse;
+  };
+}
 
 class JupiterApiService {
-  private readonly client;
-  private readonly v6BaseUrl = 'https://quote-api.jup.ag/v6';
-  private readonly v5BaseUrl = 'https://quote-api.jup.ag/v5';
-  private readonly tokenApiBaseUrl = 'https://lite-api.jup.ag/tokens/v1';
-  private readonly priceApiBaseUrl = 'https://price.jup.ag/v4';
-  private readonly cache = new Map<string, CacheEntry>();
-  private readonly tokenInfoCache = new Map<string, TokenInfoCacheEntry>();
-  // Cache validity period - 5 minutes
-  private readonly CACHE_TTL = 5 * 60 * 1000;
-  // Token info cache validity period - 30 minutes (longer as token info changes less frequently)
-  private readonly TOKEN_INFO_CACHE_TTL = 30 * 60 * 1000;
+  // Updated API endpoints as per Jupiter docs
+  private readonly priceApiUrl = 'https://price.jup.ag/v4';
+  private readonly tokenApiUrl = 'https://token.jup.ag/all';
 
-  constructor() {
-    // Initialize with v6 client by default
-    this.client = axios.create({
-      baseURL: this.v6BaseUrl,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+  /**
+   * Get mock token info during development
+   */
+  private getMockTokenInfo(mintAddress: string): TokenInfoResponse {
+    console.log(`Using mock data for token: ${mintAddress}`);
+    return mockTokenInfo[mintAddress] || {
+      ...mockTokenInfo.default,
+      address: mintAddress,
+      symbol: `TOKEN-${mintAddress.slice(0, 4)}`
+    };
   }
 
   /**
-   * Fetches price data for a token
-   * @param tokenAddress The SPL token mint address
-   * @param blockTime Optional Unix timestamp for historical pricing
-   * @returns Price in USD or null if not found
+   * Get mock price data during development
    */
-  async fetchTokenPrice(tokenAddress: string, blockTime: number): Promise<{ priceUsd: number; timestamp: number }> {
-    try {
-      const response = await axios.get<{ data: { [key: string]: { price: number } } }>(
-        `${this.priceApiBaseUrl}/price`,
-        {
-          params: {
-            ids: tokenAddress,
-            vsToken: 'SOL'
-          }
-        }
-      );
+  private getMockPriceData(tokenAddress: string, blockTime: number): TokenPriceResponse {
+    // Generate pseudo-random but consistent price for each token
+    const hash = tokenAddress.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    // Random price between $0.01 and $100
+    const randomPrice = Math.abs(hash % 10000) / 100;
+    
+    console.log(`Using mock price for token: ${tokenAddress} - $${randomPrice}`);
+    
+    return {
+      priceUsd: randomPrice,
+      priceSol: randomPrice / 50, // Assume SOL is around $50
+      timestamp: blockTime
+    };
+  }
 
-      const priceData = response.data.data[tokenAddress];
+  /**
+   * Fetches price data for a token from Jupiter's API
+   */
+  async fetchTokenPrice(tokenAddress: string, blockTime: number): Promise<TokenPriceResponse> {
+    try {
+      if (USE_MOCK_DATA) {
+        return this.getMockPriceData(tokenAddress, blockTime);
+      }
+
+      // Get token price in USD
+      const response = await axios.get<JupiterPriceResponse>(`${this.priceApiUrl}/price`, {
+        params: {
+          ids: tokenAddress
+        }
+      });
+
+      // Check if we got a valid response with token price data
+      if (!response.data || !response.data.data || !response.data.data[tokenAddress]) {
+        console.warn(`No price data found for token: ${tokenAddress}`);
+        return {
+          priceUsd: 0,
+          priceSol: 0,
+          timestamp: blockTime
+        };
+      }
+
+      const tokenPriceInUsd = response.data.data[tokenAddress].price || 0;
+
+      // Get SOL price to calculate priceSol
+      let priceSol = 0;
+      if (tokenPriceInUsd > 0) {
+        const solResponse = await axios.get<JupiterPriceResponse>(`${this.priceApiUrl}/price`, {
+          params: {
+            ids: 'So11111111111111111111111111111111111111112'
+          }
+        });
+        
+        const solData = solResponse.data.data;
+        const solPriceUsd = solData?.So11111111111111111111111111111111111111112?.price || 0;
+        
+        // Calculate price in SOL
+        priceSol = solPriceUsd > 0 ? tokenPriceInUsd / solPriceUsd : 0;
+      }
+
       return {
-        priceUsd: priceData?.price || 0,
+        priceUsd: tokenPriceInUsd,
+        priceSol,
         timestamp: blockTime
       };
     } catch (error) {
-      console.error('Jupiter API: Error fetching price for', tokenAddress, ':', error);
+      console.error('Error fetching token price:', error);
+      // Return zero values instead of throwing error to allow the app to continue
       return {
         priceUsd: 0,
+        priceSol: 0,
         timestamp: blockTime
       };
     }
   }
 
+  // Cache for token info to avoid repeated API calls
+  private tokenInfoCache: Map<string, TokenInfoResponse> = new Map();
+  private allTokensPromise: Promise<JupiterTokensResponse> | null = null;
+
   /**
-   * Fetches token information from Jupiter API
-   * @param mintAddress The SPL token mint address
-   * @returns Object with token symbol, name, logo, etc. or null if not found
+   * Fetches all token information from Jupiter's API
+   */
+  private async fetchAllTokens(): Promise<JupiterTokensResponse> {
+    if (!this.allTokensPromise) {
+      // Use type assertion to work around TypeScript's complaint about Promise compatibility
+      this.allTokensPromise = (axios.get<JupiterTokensResponse>(this.tokenApiUrl)
+        .then(response => response.data)
+        .catch(error => {
+          console.error('Error fetching token list:', error);
+          this.allTokensPromise = null; // Reset so we can try again
+          return { tokens: {} } as JupiterTokensResponse;
+        })) as Promise<JupiterTokensResponse>;
+    }
+    
+    try {
+      // Type assertion to satisfy TypeScript
+      const response = await this.allTokensPromise as JupiterTokensResponse;
+      return response;
+    } catch (error) {
+      // This shouldn't happen since we're already catching in the promise above,
+      // but just in case
+      console.error('Error resolving token list promise:', error);
+      this.allTokensPromise = null;
+      return { tokens: {} } as JupiterTokensResponse;
+    }
+  }
+
+  /**
+   * Fetches token information from Jupiter's API
    */
   async fetchTokenInfo(mintAddress: string): Promise<TokenInfoResponse | null> {
     try {
-      console.log(`Jupiter API: Fetching token info for ${mintAddress}`);
-      
+      if (USE_MOCK_DATA) {
+        return this.getMockTokenInfo(mintAddress);
+      }
+
       // Check cache first
-      const cacheKey = `info:${mintAddress}`;
-      const cachedData = this.tokenInfoCache.get(cacheKey);
-      const now = Date.now();
-      
-      if (cachedData && (now - cachedData.timestamp) < this.TOKEN_INFO_CACHE_TTL) {
-        console.log(`Jupiter API: Using cached token info for ${mintAddress} - symbol: "${cachedData.tokenInfo.symbol}"`);
-        return cachedData.tokenInfo;
+      if (this.tokenInfoCache.has(mintAddress)) {
+        return this.tokenInfoCache.get(mintAddress) || null;
       }
       
-      // Fetch token info from Jupiter API
-      console.log(`Jupiter API: Making request to ${this.tokenApiBaseUrl}/token/${mintAddress}`);
+      // Fetch all tokens if needed
+      const allTokens = await this.fetchAllTokens();
       
-      const response = await axios.get<TokenInfoResponse>(
-        `${this.tokenApiBaseUrl}/token/${mintAddress}`
-      );
+      // Find the token in the list
+      const tokenInfo = allTokens.tokens[mintAddress];
       
-      if (response.data) {
-        console.log(`Jupiter API: Found token info for ${mintAddress}:`, {
-          symbol: `"${response.data.symbol}"`,
-          name: `"${response.data.name}"`,
-          logoExists: !!response.data.logoURI
-        });
-        
+      if (tokenInfo) {
         // Cache the result
-        this.tokenInfoCache.set(cacheKey, {
-          timestamp: now,
-          tokenInfo: response.data
-        });
-        
-        return response.data;
+        this.tokenInfoCache.set(mintAddress, tokenInfo);
+        return tokenInfo;
       }
       
-      console.log(`Jupiter API: No token info found for ${mintAddress}`);
+      console.warn(`Token info not found for ${mintAddress}`);
       return null;
-      
-    } catch (error: any) {
-      console.error(`Jupiter API: Error fetching token info for ${mintAddress}:`, error.message);
-      
-      // Log more details about the error for debugging
-      if (error.response) {
-        console.error('Jupiter API Error Response:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data
-        });
-      } else if (error.request) {
-        console.error('Jupiter API No Response:', error.request);
-      }
-      
-      return null;
+    } catch (error) {
+      console.error(`Error fetching token info for ${mintAddress}:`, error);
+      return null; // Return null instead of throwing to allow the app to continue
     }
   }
 }

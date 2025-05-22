@@ -44,8 +44,12 @@ export async function walletRoutes(fastify: FastifyInstance) {
 
         const startSlot = slotData?.last_slot || sinceSlot;
         
-        // Fetch trades from dRPC
-        const trades = await drpcClient.getTransactions(address, startSlot, limit);
+        // Fetch trades from dRPC - Use the address and limit parameters
+        // The updated API doesn't support filtering by slot directly, so we'll fetch all and filter
+        const result = await drpcClient.getTransactions(address, limit);
+        
+        // Filter by slot if needed
+        const trades = result.transactions.filter(tx => tx.slot > startSlot);
         
         // Process trades
         const processedTrades = await tradeProcessor.processTrades(trades);

@@ -31,21 +31,29 @@ export interface CachedTrade extends ProcessedTrade {
 
 export class TradingHistoryService {
   /**
-   * Ensure wallet exists in the database
+   * Ensure wallet exists in the database and check initial scan status
    */
-  private async ensureWalletExists(userId: string, walletAddress: string): Promise<string> {
+  private async ensureWalletExists(userId: string, walletAddress: string): Promise<{
+    walletId: string;
+    initialScanComplete: boolean;
+    lastUpdated: Date | null;
+  }> {
     try {
       // First try to find existing wallet
       const { data: existingWallet } = await supabase
         .from('wallets')
-        .select('id, initial_scan_complete')
+        .select('id, initial_scan_complete, updated_at')
         .eq('user_id', userId)
         .eq('wallet_address', walletAddress)
         .single();
 
       if (existingWallet) {
         console.log('Found existing wallet:', existingWallet.id);
-        return existingWallet.id;
+        return {
+          walletId: existingWallet.id,
+          initialScanComplete: existingWallet.initial_scan_complete,
+          lastUpdated: existingWallet.updated_at ? new Date(existingWallet.updated_at) : null
+        };
       }
 
       // If not found, create new wallet
@@ -68,7 +76,11 @@ export class TradingHistoryService {
         throw error;
       }
 
-      return walletId;
+      return {
+        walletId,
+        initialScanComplete: false,
+        lastUpdated: null
+      };
     } catch (error) {
       console.error('Error in ensureWalletExists:', error);
       throw error;
@@ -241,50 +253,122 @@ export class TradingHistoryService {
   }
 
   /**
+   * Process a single transaction into a trade
+   */
+  private async processTransaction(tx: Transaction, walletId: string): Promise<ProcessedTrade | null> {
+    try {
+      if (!tx.meta?.preTokenBalances || !tx.meta?.postTokenBalances) {
+        return null;
+      }
+
+      // Get token balances that changed
+      const tokenChanges = tx.tokenBalanceChanges || [];
+      if (tokenChanges.length === 0) {
+        return null;
+      }
+
+      // Get the first significant token change
+      const tokenChange = tokenChanges[0];
+      if (!tokenChange) {
+        return null;
+      }
+
+      // Set default values
+      let tokenInfo = null;
+      let priceData = {
+        priceUsd: 0,
+        priceSol: 0,
+        timestamp: tx.blockTime
+      };
+      
+      try {
+        // Try to get token info
+        tokenInfo = await jupiterApiService.fetchTokenInfo(tokenChange.tokenAddress);
+      } catch (error) {
+        console.error('Failed to fetch token info, using fallback values:', error);
+      }
+      
+      try {
+        // Try to get price data
+        priceData = await jupiterApiService.fetchTokenPrice(tokenChange.tokenAddress, tx.blockTime);
+      } catch (error) {
+        console.error('Failed to fetch price data, using fallback values:', error);
+      }
+      
+      // Calculate trade values
+      const amount = Math.abs(tokenChange.uiAmount);
+      const priceUSD = priceData.priceUsd || 0;
+      const valueUSD = amount * priceUSD;
+      const priceSOL = priceData.priceSol || 0;
+      const valueSOL = amount * priceSOL;
+
+      // Determine trade type based on SOL balance change
+      const preBalance = tx.preBalances[0] || 0;
+      const postBalance = tx.postBalances[0] || 0;
+      const balanceChange = postBalance - preBalance;
+      const type = balanceChange < 0 ? 'BUY' : 'SELL';
+
+      // Calculate profit/loss
+      const profitLoss = type === 'BUY' ? -valueUSD : valueUSD;
+
+      // Add a delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      return {
+        id: `${tx.signature}-${tokenChange.tokenAddress}`,
+        signature: tx.signature,
+        timestamp: tx.blockTime * 1000,
+        blockTime: tx.blockTime,
+        type,
+        tokenSymbol: tokenInfo?.symbol || tokenChange.tokenTicker || 'Unknown',
+        tokenAddress: tokenChange.tokenAddress,
+        tokenLogoURI: tokenInfo?.logoURI || tokenChange.logo || '',
+        decimals: tokenChange.decimals,
+        amount,
+        price: priceSOL,
+        priceUSD,
+        value: valueSOL,
+        valueUSD,
+        profitLoss,
+        marketCap: tokenInfo?.marketCap
+      };
+    } catch (error) {
+      console.error('Error processing transaction:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get trading history for a wallet, using cache and fetching new trades if needed
    */
   async getTradingHistory(
     userId: string,
     walletAddress: string,
-    limit: number = 100, // Increased default limit
+    limit: number = 100,
     page: number = 1
   ): Promise<{
     trades: ProcessedTrade[];
     totalCount: number;
   }> {
     try {
-      console.log('Getting trading history for wallet:', walletAddress, {
-        userId,
-        limit,
-        page
-      });
+      console.log('Getting trading history for wallet:', walletAddress);
 
-      // First ensure the wallet exists and get its ID
-      const walletId = await this.ensureWalletExists(userId, walletAddress);
+      // First ensure the wallet exists and get its scan status
+      const { walletId, initialScanComplete, lastUpdated } = await this.ensureWalletExists(userId, walletAddress);
       
-      // Check if we've done the initial historical scan
-      const { data: walletData } = await supabase
-        .from('wallets')
-        .select('initial_scan_complete')
-        .eq('id', walletId)
-        .single();
+      let transactions: Transaction[] = [];
+      const BATCH_SIZE = 50;
+      let lastSignature: string | undefined;
+      let hasMore = true;
+      let retryCount = 0;
+      const MAX_RETRIES = 3;
 
-      const initialScanComplete = walletData?.initial_scan_complete || false;
-
+      // If initial scan is not complete, fetch all historical transactions
       if (!initialScanComplete) {
-        console.log('Initial scan not complete, fetching all historical data...');
+        console.log('Initial scan not complete. Fetching all historical transactions...');
         
-        // For initial scan, fetch in smaller batches to avoid timeouts
-        const BATCH_SIZE = 50;
-        let allTransactions: ProcessedTrade[] = [];
-        let lastSignature: string | undefined;
-        let hasMore = true;
-        let retryCount = 0;
-        const MAX_RETRIES = 3;
-
         while (hasMore && retryCount < MAX_RETRIES) {
           try {
-            console.log('Fetching batch of transactions, lastSignature:', lastSignature);
             const response = await drpcClient.getTransactions(walletAddress, BATCH_SIZE, lastSignature);
             
             if (!response.transactions || response.transactions.length === 0) {
@@ -292,104 +376,108 @@ export class TradingHistoryService {
               break;
             }
 
-            // Process transactions in smaller sub-batches to avoid rate limits
-            const SUB_BATCH_SIZE = 5;
-            for (let i = 0; i < response.transactions.length; i += SUB_BATCH_SIZE) {
-              const subBatch = response.transactions.slice(i, i + SUB_BATCH_SIZE);
-              const processedTrades = await this.processAndStoreTrades(walletId, subBatch);
-              allTransactions = [...allTransactions, ...processedTrades];
-              
-              // Add a small delay between sub-batches
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-            // Update lastSignature for next batch
+            transactions = [...transactions, ...response.transactions];
             lastSignature = response.lastSignature || undefined;
-            
-            // If we got fewer transactions than requested, we're done
+
             if (response.transactions.length < BATCH_SIZE) {
               hasMore = false;
             }
 
-            // Reset retry count on successful fetch
             retryCount = 0;
-
           } catch (error) {
             console.error('Error fetching transaction batch:', error);
             retryCount++;
-            // Add exponential backoff
             await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
           }
         }
 
-        // Mark initial scan as complete even if we hit retry limit
+        // Mark initial scan as complete
         await supabase
           .from('wallets')
           .update({ initial_scan_complete: true })
           .eq('id', walletId);
+      } 
+      // If initial scan is complete, only fetch new transactions
+      else if (lastUpdated) {
+        console.log('Fetching new transactions since:', lastUpdated);
+        
+        while (hasMore && retryCount < MAX_RETRIES) {
+          try {
+            const response = await drpcClient.getTransactions(
+              walletAddress, 
+              BATCH_SIZE, 
+              lastSignature,
+              lastUpdated
+            );
+            
+            if (!response.transactions || response.transactions.length === 0) {
+              hasMore = false;
+              break;
+            }
 
-        // Return paginated results
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        return {
-          trades: allTransactions.slice(startIndex, endIndex),
-          totalCount: allTransactions.length
-        };
-      }
+            transactions = [...transactions, ...response.transactions];
+            lastSignature = response.lastSignature || undefined;
 
-      // If initial scan is complete, just fetch new transactions since the last one
-      const { data: latestTrade } = await supabase
-        .from('trading_history')
-        .select('timestamp')
-        .eq('wallet_id', walletId)
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .single();
+            if (response.transactions.length < BATCH_SIZE) {
+              hasMore = false;
+            }
 
-      const afterTimestamp = latestTrade ? new Date(latestTrade.timestamp) : undefined;
-      console.log('Fetching new transactions after:', afterTimestamp);
-      
-      // Fetch new transactions in batches
-      const BATCH_SIZE = 50;
-      let newTransactions: Transaction[] = [];
-      let lastSignature: string | undefined;
-      let hasMore = true;
-      let retryCount = 0;
-      const MAX_RETRIES = 3;
-
-      while (hasMore && retryCount < MAX_RETRIES) {
-        try {
-          const response = await drpcClient.getTransactions(walletAddress, BATCH_SIZE, lastSignature, afterTimestamp);
-          
-          if (!response.transactions || response.transactions.length === 0) {
-            break;
+            retryCount = 0;
+          } catch (error) {
+            console.error('Error fetching new transactions:', error);
+            retryCount++;
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
           }
-
-          newTransactions = [...newTransactions, ...response.transactions];
-          lastSignature = response.lastSignature || undefined;
-
-          if (response.transactions.length < BATCH_SIZE) {
-            hasMore = false;
-          }
-
-          // Reset retry count on successful fetch
-          retryCount = 0;
-
-        } catch (error) {
-          console.error('Error fetching new transactions:', error);
-          retryCount++;
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
         }
       }
 
-      if (newTransactions.length > 0) {
-        // Process new transactions in smaller batches
-        const SUB_BATCH_SIZE = 5;
-        for (let i = 0; i < newTransactions.length; i += SUB_BATCH_SIZE) {
-          const subBatch = newTransactions.slice(i, i + SUB_BATCH_SIZE);
-          await this.processAndStoreTrades(walletId, subBatch);
-          // Add delay between sub-batches
-          await new Promise(resolve => setTimeout(resolve, 1000));
+      // Process transactions in batches
+      const processedTrades: ProcessedTrade[] = [];
+      const SUB_BATCH_SIZE = 5;
+
+      for (let i = 0; i < transactions.length; i += SUB_BATCH_SIZE) {
+        const batch = transactions.slice(i, i + SUB_BATCH_SIZE);
+        
+        for (const tx of batch) {
+          const trade = await this.processTransaction(tx, walletId);
+          if (trade) {
+            processedTrades.push(trade);
+          }
+        }
+        
+        // Add delay between batches
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Store trades in Supabase
+      if (processedTrades.length > 0) {
+        const tradesToInsert = processedTrades.map(trade => ({
+          wallet_id: walletId,
+          signature: trade.signature,
+          timestamp: new Date(trade.timestamp).toISOString(),
+          block_time: trade.blockTime,
+          type: trade.type,
+          token_symbol: trade.tokenSymbol,
+          token_address: trade.tokenAddress,
+          token_logo_uri: trade.tokenLogoURI,
+          decimals: trade.decimals,
+          amount: trade.amount,
+          price_sol: trade.price,
+          price_usd: trade.priceUSD,
+          value_sol: trade.value,
+          value_usd: trade.valueUSD,
+          profit_loss: trade.profitLoss,
+          market_cap: trade.marketCap
+        }));
+
+        const { error } = await supabase
+          .from('trading_history')
+          .upsert(tradesToInsert, {
+            onConflict: 'wallet_id,signature'
+          });
+
+        if (error) {
+          console.error('Error storing trades:', error);
         }
       }
 
@@ -412,128 +500,6 @@ export class TradingHistoryService {
     } catch (error) {
       console.error('Error in getTradingHistory:', error);
       throw error;
-    }
-  }
-
-  /**
-   * Process and store trades in the database
-   */
-  private async processAndStoreTrades(walletId: string, transactions: Transaction[]): Promise<ProcessedTrade[]> {
-    const processedTrades: ProcessedTrade[] = [];
-
-    for (const tx of transactions) {
-      try {
-        // Process the transaction
-        const trade = await this.processTransaction(tx);
-        if (!trade) continue;
-
-        // Add wallet ID to the trade and map to database columns
-        const tradeRecord = {
-          wallet_id: walletId,
-          signature: trade.signature,
-          timestamp: new Date(trade.timestamp).toISOString(),
-          block_time: trade.blockTime,
-          type: trade.type,
-          token_symbol: trade.tokenSymbol,
-          token_address: trade.tokenAddress,
-          token_logo_uri: trade.tokenLogoURI,
-          decimals: trade.decimals,
-          amount: trade.amount,
-          price_sol: trade.price,
-          price_usd: trade.priceUSD,
-          value_sol: trade.value,
-          value_usd: trade.valueUSD,
-          profit_loss: trade.profitLoss,
-          market_cap: trade.marketCap
-        };
-
-        // Store in database
-        const { error } = await supabase
-          .from('trading_history')
-          .upsert(tradeRecord, {
-            onConflict: 'wallet_id,signature',
-            ignoreDuplicates: true
-          });
-
-        if (error) {
-          console.error('Error storing trade:', error);
-          continue;
-        }
-
-        processedTrades.push(trade);
-      } catch (error) {
-        console.error('Error processing transaction:', error);
-      }
-    }
-
-    return processedTrades;
-  }
-
-  /**
-   * Process a single transaction into a trade
-   */
-  private async processTransaction(tx: Transaction): Promise<ProcessedTrade | null> {
-    try {
-      if (!tx.meta?.preTokenBalances || !tx.meta?.postTokenBalances) {
-        return null;
-      }
-
-      // Get token balances that changed
-      const tokenChanges = tx.tokenBalanceChanges || [];
-      if (tokenChanges.length === 0) {
-        return null;
-      }
-
-      // Get the first significant token change
-      const tokenChange = tokenChanges[0];
-      if (!tokenChange) {
-        return null;
-      }
-
-      let priceUsd = 0;
-      let retryCount = 0;
-      const MAX_RETRIES = 3;
-
-      while (retryCount < MAX_RETRIES) {
-        try {
-          // Try to get the token price
-          const priceData = await jupiterApiService.fetchTokenPrice(
-            tokenChange.tokenAddress,
-            tx.blockTime
-          );
-          priceUsd = priceData.priceUsd || 0;
-          break;
-        } catch (error) {
-          console.error(`Error fetching price (attempt ${retryCount + 1}):`, error);
-          retryCount++;
-          if (retryCount < MAX_RETRIES) {
-            // Add exponential backoff
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-          }
-        }
-      }
-
-      // Proceed with trade processing even if price fetch failed
-      return {
-        id: tx.signature,
-        signature: tx.signature,
-        timestamp: tx.blockTime * 1000,
-        blockTime: tx.blockTime,
-        type: tx.type || 'UNKNOWN',
-        tokenSymbol: tokenChange.tokenTicker,
-        tokenAddress: tokenChange.tokenAddress,
-        tokenLogoURI: tokenChange.logo,
-        decimals: tokenChange.decimals,
-        amount: Math.abs(tokenChange.uiAmount),
-        price: priceUsd,
-        priceUSD: priceUsd,
-        value: Math.abs(tokenChange.uiAmount) * priceUsd,
-        valueUSD: Math.abs(tokenChange.uiAmount) * priceUsd,
-        profitLoss: tokenChange.uiAmount * priceUsd
-      };
-    } catch (error) {
-      console.error('Error processing transaction:', error);
-      return null;
     }
   }
 }
