@@ -24,6 +24,19 @@ const SOL_TO_USD_RATE = 70; // Assuming 1 SOL = $70 USD
 // SOL mint address
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
+// Interface for token balances in transaction metadata
+interface TokenBalanceItem {
+  mint: string;
+  owner: string;
+  accountIndex: number;
+  uiTokenAmount: {
+    amount: string;
+    decimals: number;
+    uiAmount: number | null;
+    uiAmountString: string;
+  };
+}
+
 export class TradeProcessor {
   async processTrades(transactions: Transaction[]): Promise<ProcessedTrade[]> {
     console.log('TradeProcessor: Starting to process trades:', {
@@ -92,7 +105,7 @@ export class TradeProcessor {
           tx.meta.postTokenBalances && tx.meta.postTokenBalances.length > 0) {
         
         // Log out all pre token balances for debugging
-        console.log('TradeProcessor: Pre token balances:', tx.meta.preTokenBalances.map(tb => ({
+        console.log('TradeProcessor: Pre token balances:', tx.meta.preTokenBalances.map((tb: TokenBalanceItem) => ({
           accountIndex: tb.accountIndex,
           mint: tb.mint,
           owner: tb.owner,
@@ -100,7 +113,7 @@ export class TradeProcessor {
         })));
         
         // Log out all post token balances for debugging  
-        console.log('TradeProcessor: Post token balances:', tx.meta.postTokenBalances.map(tb => ({
+        console.log('TradeProcessor: Post token balances:', tx.meta.postTokenBalances.map((tb: TokenBalanceItem) => ({
           accountIndex: tb.accountIndex,
           mint: tb.mint,
           owner: tb.owner,
@@ -121,10 +134,10 @@ export class TradeProcessor {
         }
         
         // Process each pre-token balance
-        for (const preTB of tx.meta.preTokenBalances) {
+        for (const preTB of tx.meta.preTokenBalances as TokenBalanceItem[]) {
           // Find the corresponding post-token balance by accountIndex
           const postTB = tx.meta.postTokenBalances.find(
-            post => post.accountIndex === preTB.accountIndex
+            (post: TokenBalanceItem) => post.accountIndex === preTB.accountIndex
           );
 
           if (!postTB) continue;
@@ -215,7 +228,7 @@ export class TradeProcessor {
       const tokenInflows: TokenChangeInfo[] = [];
       
       // Sort token changes into inflows and outflows
-      for (const tc of tokenChanges.values()) {
+      for (const tc of Array.from(tokenChanges.values())) {
         if (tc.change < 0) {
           tokenOutflows.push(tc);
         } else if (tc.change > 0) {
