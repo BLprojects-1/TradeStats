@@ -34,7 +34,7 @@ export class TradingHistoryService {
   /**
    * Ensure wallet exists in the database and check initial scan status
    */
-  private async ensureWalletExists(userId: string, walletAddress: string): Promise<{
+  async ensureWalletExists(userId: string, walletAddress: string): Promise<{
     walletId: string;
     initialScanComplete: boolean;
     lastUpdated: Date | null;
@@ -152,6 +152,9 @@ export class TradingHistoryService {
         valueSOL: trade.value_sol || 0,
         profitLoss: trade.profit_loss || 0,
         blockTime: trade.block_time,
+        starred: trade.starred || false,
+        notes: trade.notes || '',
+        tags: trade.tags || '',
         wallet_id: trade.wallet_id,
         created_at: trade.created_at,
         updated_at: trade.updated_at
@@ -544,7 +547,10 @@ export class TradingHistoryService {
         valueUSD: trade.value_usd || 0,
         valueSOL: trade.value_sol || 0,
         profitLoss: trade.profit_loss || 0,
-        blockTime: trade.block_time
+        blockTime: trade.block_time,
+        starred: trade.starred || false,
+        notes: trade.notes || '',
+        tags: trade.tags || ''
       }));
 
       return {
@@ -663,6 +669,128 @@ export class TradingHistoryService {
       }
     } catch (error) {
       console.error('Error refreshing trading history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Toggle starred status for a trade
+   */
+  async toggleStarredTrade(walletId: string, signature: string, starred: boolean): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('trading_history')
+        .update({ starred })
+        .eq('wallet_id', walletId)
+        .eq('signature', signature);
+
+      if (error) {
+        console.error('Error toggling starred status:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error in toggleStarredTrade:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update notes and tags for a trade
+   */
+  async updateTradeNotes(walletId: string, signature: string, notes: string, tags?: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('trading_history')
+        .update({ 
+          notes,
+          tags: tags || ''
+        })
+        .eq('wallet_id', walletId)
+        .eq('signature', signature);
+
+      if (error) {
+        console.error('Error updating trade notes:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error in updateTradeNotes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get starred trades for trade log
+   */
+  async getStarredTrades(
+    userId: string,
+    walletAddress?: string,
+    limit?: number,
+    offset?: number
+  ): Promise<{ trades: ProcessedTrade[], totalCount: number }> {
+    try {
+      const { walletId } = await this.ensureWalletExists(userId, walletAddress || '');
+
+      let query = supabase
+        .from('trading_history')
+        .select('*', { count: 'exact' })
+        .eq('starred', true)
+        .order('timestamp', { ascending: false });
+
+      // If walletAddress is provided, filter by specific wallet
+      if (walletAddress) {
+        query = query.eq('wallet_id', walletId);
+      } else {
+        // Get all wallets for this user
+        const { data: wallets } = await supabase
+          .from('wallets')
+          .select('id')
+          .eq('user_id', userId);
+
+        if (wallets && wallets.length > 0) {
+          const walletIds = wallets.map(w => w.id);
+          query = query.in('wallet_id', walletIds);
+        }
+      }
+
+      // Apply pagination if provided
+      if (limit !== undefined && offset !== undefined) {
+        query = query.range(offset, offset + limit - 1);
+      }
+
+      const { data: trades, error, count } = await query;
+
+      if (error) {
+        console.error('Error fetching starred trades:', error);
+        throw error;
+      }
+
+      // Map to ProcessedTrade format
+      const processedTrades: ProcessedTrade[] = (trades || []).map(trade => ({
+        signature: trade.signature,
+        timestamp: new Date(trade.timestamp).getTime(),
+        type: trade.type as 'BUY' | 'SELL' | 'UNKNOWN',
+        tokenAddress: trade.token_address,
+        tokenSymbol: trade.token_symbol || 'Unknown',
+        tokenLogoURI: trade.token_logo_uri || null,
+        amount: trade.amount,
+        decimals: trade.decimals || 9,
+        priceUSD: trade.price_usd || 0,
+        priceSOL: trade.price_sol || 0,
+        valueUSD: trade.value_usd || 0,
+        valueSOL: trade.value_sol || 0,
+        profitLoss: trade.profit_loss || 0,
+        blockTime: trade.block_time,
+        starred: trade.starred || false,
+        notes: trade.notes || '',
+        tags: trade.tags || ''
+      }));
+
+      return {
+        trades: processedTrades,
+        totalCount: count || 0
+      };
+    } catch (error) {
+      console.error('Error in getStarredTrades:', error);
       throw error;
     }
   }

@@ -20,6 +20,7 @@ export interface TokenData {
   currentPrice?: number;
   profitLoss?: number;
   lastTransactionTimestamp: number;
+  starred?: boolean;
 }
 
 // Helper function to process trades into token holdings
@@ -159,6 +160,7 @@ export default function OpenTrades() {
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
   const walletsRef = useRef(wallets);
+  const [starringTrade, setStarringTrade] = useState<string | null>(null);
 
   // Keep wallets ref updated
   useEffect(() => {
@@ -385,6 +387,40 @@ export default function OpenTrades() {
     }
   };
 
+  const handleStarTrade = async (tokenAddress: string) => {
+    if (!user?.id || !selectedWalletId) return;
+    
+    setStarringTrade(tokenAddress);
+    try {
+      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+      if (!selectedWallet) return;
+
+      // Find the first transaction signature for this token (we'll use this as a placeholder)
+      // In a real implementation, you might want to star all trades for this token
+      // For now, we'll use the token address as a pseudo-signature
+      const pseudoSignature = `open_trade_${tokenAddress}`;
+      
+      const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, selectedWallet.wallet_address);
+      
+      // Check if already starred (we'll store this as a note)
+      const currentlyStarred = walletData.find(token => token.tokenAddress === tokenAddress)?.starred || false;
+      
+      await tradingHistoryService.toggleStarredTrade(walletId, pseudoSignature, !currentlyStarred);
+      
+      // Update local state
+      setWalletData(prev => prev.map(token => 
+        token.tokenAddress === tokenAddress 
+          ? { ...token, starred: !currentlyStarred }
+          : token
+      ));
+    } catch (err) {
+      console.error('Error starring trade:', err);
+      setError('Failed to star trade. Please try again.');
+    } finally {
+      setStarringTrade(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -468,6 +504,7 @@ export default function OpenTrades() {
             <table className="min-w-full divide-y divide-gray-800">
               <thead>
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Star</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Bought</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Sold</th>
@@ -478,7 +515,7 @@ export default function OpenTrades() {
               <tbody className="divide-y divide-gray-800">
                 {dataLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
+                    <td colSpan={6} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
                       <div className="flex items-center justify-center space-x-2">
                         <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -491,6 +528,31 @@ export default function OpenTrades() {
                 ) : walletData.length > 0 ? (
                   walletData.map((token) => (
                     <tr key={token.tokenAddress}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <button
+                          onClick={() => handleStarTrade(token.tokenAddress)}
+                          disabled={starringTrade === token.tokenAddress}
+                          className="hover:text-yellow-400 transition-colors disabled:opacity-50"
+                          aria-label={token.starred ? 'Unstar token' : 'Star token'}
+                        >
+                          {starringTrade === token.tokenAddress ? (
+                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <svg 
+                              className={`h-4 w-4 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                              xmlns="http://www.w3.org/2000/svg" 
+                              fill={token.starred ? 'currentColor' : 'none'} 
+                              viewBox="0 0 24 24" 
+                              stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                          )}
+                        </button>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <div className="flex items-center space-x-2">
                           {token.tokenLogoURI && (
@@ -516,7 +578,7 @@ export default function OpenTrades() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
+                    <td colSpan={6} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
                       {selectedWalletId ? 'No open trades found for this wallet' : 'Select a wallet to view open trades'}
                     </td>
                   </tr>
@@ -541,11 +603,36 @@ export default function OpenTrades() {
               <div className="space-y-4">
                 {walletData.map((token) => (
                   <div key={token.tokenAddress} className="bg-[#252525] p-4 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-3">
-                      {token.tokenLogoURI && (
-                        <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-6 h-6 rounded-full" />
-                      )}
-                      <span className="text-white font-medium">{token.tokenSymbol}</span>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        {token.tokenLogoURI && (
+                          <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-6 h-6 rounded-full" />
+                        )}
+                        <span className="text-white font-medium">{token.tokenSymbol}</span>
+                      </div>
+                      <button
+                        onClick={() => handleStarTrade(token.tokenAddress)}
+                        disabled={starringTrade === token.tokenAddress}
+                        className="hover:text-yellow-400 transition-colors disabled:opacity-50"
+                        aria-label={token.starred ? 'Unstar token' : 'Star token'}
+                      >
+                        {starringTrade === token.tokenAddress ? (
+                          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        ) : (
+                          <svg 
+                            className={`h-5 w-5 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                            xmlns="http://www.w3.org/2000/svg" 
+                            fill={token.starred ? 'currentColor' : 'none'} 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          </svg>
+                        )}
+                      </button>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>

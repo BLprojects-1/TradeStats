@@ -16,6 +16,9 @@ export interface ProcessedTrade {
   valueSOL: number;
   profitLoss: number;
   blockTime?: number;  // Optional for backward compatibility
+  starred?: boolean;   // For trade log functionality
+  notes?: string;      // For trade log functionality
+  tags?: string;       // For trade log functionality
 }
 
 // Approximate SOL to USD conversion - in a real app you'd use an API for this

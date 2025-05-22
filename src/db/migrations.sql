@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS trading_history (
   value_usd DECIMAL,
   profit_loss DECIMAL,
   market_cap DECIMAL,
+  starred BOOLEAN DEFAULT FALSE,
+  notes TEXT,
+  tags TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(wallet_id, signature)
@@ -63,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_trading_history_wallet_id ON trading_history(wall
 CREATE INDEX IF NOT EXISTS idx_trading_history_timestamp ON trading_history(timestamp);
 CREATE INDEX IF NOT EXISTS idx_trading_history_signature ON trading_history(signature);
 CREATE INDEX IF NOT EXISTS idx_trading_history_wallet_timestamp ON trading_history(wallet_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_trading_history_starred ON trading_history(starred);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
