@@ -1,5 +1,5 @@
 import { jupiterApiService } from './jupiterApiService';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../utils/supabaseClient';
 
 interface TokenInfo {
   symbol: string;
@@ -33,16 +33,26 @@ export class TokenInfoService {
 
   private static async getTokenPriceAtTime(tokenAddress: string, timestamp: number): Promise<TokenPriceInfo> {
     try {
-      // Get current SOL price as reference (historical prices not available in free API)
-      const solPrice = await jupiterApiService.getTokenPriceInUSD('So11111111111111111111111111111111111111112');
-      const tokenPriceUSD = await jupiterApiService.getTokenPriceInUSD(tokenAddress);
+      // Jupiter API doesn't support historical prices, so we get current prices
+      // For recent trading history (last 24-48 hours), current prices provide reasonable approximation
+      console.log(`Fetching current price for token ${tokenAddress} (transaction timestamp: ${new Date(timestamp).toISOString()})`);
+      
+      // Get current prices from Jupiter API
+      const [solPrice, tokenPriceUSD] = await Promise.all([
+        jupiterApiService.getTokenPriceInUSD('So11111111111111111111111111111111111111112'),
+        jupiterApiService.getTokenPriceInUSD(tokenAddress)
+      ]);
+      
+      const priceSOL = solPrice > 0 ? tokenPriceUSD / solPrice : 0;
+      
+      console.log(`Price fetched for ${tokenAddress}: $${tokenPriceUSD} USD, ${priceSOL} SOL`);
       
       return {
         priceUSD: tokenPriceUSD,
-        priceSOL: tokenPriceUSD / solPrice
+        priceSOL: priceSOL
       };
     } catch (error) {
-      console.error(`Error fetching token price for ${tokenAddress}:`, error);
+      console.error(`Error fetching token price for ${tokenAddress} at timestamp ${timestamp}:`, error);
       return {
         priceUSD: 0,
         priceSOL: 0

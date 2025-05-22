@@ -99,44 +99,51 @@ export default function Account() {
     <DashboardLayout 
       title="Account Settings"
     >
-      {error && (
-        <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
-          {error}
+      <div className="space-y-4 sm:space-y-6">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-semibold mb-2 text-white">Account Settings</h1>
+          <p className="text-gray-500">Manage your account information and connected wallets</p>
         </div>
-      )}
 
-      <div className="max-w-2xl mx-auto space-y-8">
+        {error && (
+          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4 sm:mb-6">
+            {error}
+          </div>
+        )}
+
         {/* Account Info */}
-        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Account Information</h2>
-          <div className="space-y-6">
+        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
+          <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Account Information</h2>
+          <div className="space-y-4 sm:space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Display Name</label>
               {editName ? (
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
                   <input
-                    className="px-3 py-2 rounded bg-[#23232b] text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full sm:w-auto px-3 py-2 rounded bg-[#23232b] text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value)}
                     disabled={saving}
                   />
-                  <button
-                    className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
-                    onClick={handleSaveName}
-                    disabled={saving}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="px-3 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
-                    onClick={() => { setEditName(false); setDisplayName(profile?.display_name || ''); }}
-                    disabled={saving}
-                  >
-                    Cancel
-                  </button>
+                  <div className="flex gap-2 mt-2 sm:mt-0">
+                    <button
+                      className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
+                      onClick={handleSaveName}
+                      disabled={saving}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="px-3 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
+                      onClick={() => { setEditName(false); setDisplayName(profile?.display_name || ''); }}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
                   <div className="text-white">{profile?.display_name || 'Not set'}</div>
                   <button
                     className="px-2 py-1 text-xs bg-gray-700 text-white rounded hover:bg-gray-600 transition"
@@ -149,7 +156,7 @@ export default function Account() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Email Address</label>
-              <div className="text-white">{user.email}</div>
+              <div className="text-white break-all">{user.email}</div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Account Created</label>
@@ -159,14 +166,14 @@ export default function Account() {
         </div>
 
         {/* Manage Wallets */}
-        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Manage Wallets</h2>
+        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
+          <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Manage Wallets</h2>
           <WalletList userId={user.id} onAddWallet={handleAddWallet} />
         </div>
 
         {/* Account Actions */}
-        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6 mb-12">
-          <h2 className="text-xl font-semibold text-white mb-4">Account Actions</h2>
+        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
+          <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Account Actions</h2>
           <div className="flex flex-col gap-4">
             <button
               className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition font-semibold"
@@ -183,8 +190,8 @@ export default function Account() {
           </div>
           {/* Delete confirmation modal */}
           {showDeleteConfirm && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-              <div className="bg-[#23232b] rounded-lg shadow-lg p-8 max-w-sm w-full border border-red-700">
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+              <div className="bg-[#23232b] rounded-lg shadow-lg p-5 sm:p-8 max-w-sm w-full border border-red-700">
                 <h3 className="text-lg font-bold text-red-400 mb-4">Are you sure you want to delete your account?</h3>
                 <p className="text-gray-300 mb-6">This action cannot be undone. All your data will be permanently deleted.</p>
                 <div className="flex gap-4 justify-end">

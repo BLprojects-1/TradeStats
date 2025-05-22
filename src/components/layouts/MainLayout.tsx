@@ -1,37 +1,41 @@
 import React, { ReactNode } from 'react';
 import Head from 'next/head';
 import Footer from '../Footer';
+import Link from 'next/link';
 
 interface MainLayoutProps {
   children: ReactNode;
-  title: string;
+  title?: string;
   description?: string;
   showHeader?: boolean;
   userName?: string;
   onSignOut?: () => void;
 }
 
-const MainLayout = ({
+export default function MainLayout({
   children,
-  title,
+  title = "Home",
   description = "Solana Trading Journal",
   showHeader = true,
   userName,
   onSignOut
-}: MainLayoutProps) => {
+}: MainLayoutProps) {
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <Head>
-        <title>{title} | Journi</title>
+        <title>{title} | ryvu</title>
         <meta name="description" content={description} />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       {showHeader && (
-        <header className="bg-black shadow-md border-b border-gray-800">
+        <header className="bg-gradient-to-r from-[#0c0c0f] to-[#1a1a1a] shadow-md border-b border-gray-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-indigo-400">Journi</h1>
+              <Link href="/" className="flex items-center">
+                <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto mr-3" />
+                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">ryvu</h1>
+              </Link>
             </div>
             
             {userName && onSignOut && (
@@ -56,6 +60,4 @@ const MainLayout = ({
       <Footer />
     </div>
   );
-};
-
-export default MainLayout; 
+} 

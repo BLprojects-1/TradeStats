@@ -97,35 +97,57 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout title="Dashboard">
-      {error && (
-        <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
-          {error}
-          <button 
-            onClick={() => window.location.reload()}
-            className="ml-2 underline"
-          >
-            Refresh
-          </button>
+      <div className="space-y-4 sm:space-y-6">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-semibold mb-2 text-white">Dashboard Overview</h1>
+          <p className="text-gray-500">Welcome to your Solana trading dashboard</p>
         </div>
-      )}
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#1a1a1a] p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-indigo-200">Recent Activity</h2>
-          {wallets.length === 0 ? (
-            <p className="text-gray-300">You haven't connected any wallets yet. Add a wallet to see your activity.</p>
-          ) : (
-            <p className="text-gray-300">Your recent transactions will appear here.</p>
-          )}
-        </div>
+
+        {error && (
+          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4 sm:mb-6">
+            {error}
+            <button 
+              onClick={() => window.location.reload()}
+              className="ml-2 underline"
+            >
+              Refresh
+            </button>
+          </div>
+        )}
         
-        <div className="bg-[#1a1a1a] p-6 rounded-lg shadow-md lg:col-span-2">
-          <h2 className="text-xl font-semibold mb-4 text-indigo-200">Performance Overview</h2>
-          {wallets.length === 0 ? (
-            <p className="text-gray-300">Track your trading performance once you connect your wallets.</p>
-          ) : (
-            <p className="text-gray-300">Your trading performance metrics will appear here.</p>
-          )}
+        <div className="grid grid-cols-1 gap-4 sm:gap-6">
+          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Recent Activity</h2>
+            {wallets.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-400 mb-4">You haven&apos;t connected any wallets yet. Add a wallet to see your activity.</p>
+                <button
+                  onClick={handleOpenAddWalletModal}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition font-semibold"
+                >
+                  Add Wallet
+                </button>
+              </div>
+            ) : (
+              <p className="text-gray-300">Your recent transactions will appear here.</p>
+            )}
+          </div>
+          
+          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Performance Overview</h2>
+            {wallets.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-400">Track your trading performance once you connect your wallets.</p>
+              </div>
+            ) : (
+              <p className="text-gray-300">Your trading performance metrics will appear here.</p>
+            )}
+          </div>
+          
+          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Manage Wallets</h2>
+            <WalletList userId={user.id} onAddWallet={handleOpenAddWalletModal} />
+          </div>
         </div>
       </div>
 

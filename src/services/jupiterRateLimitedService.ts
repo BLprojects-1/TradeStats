@@ -95,20 +95,8 @@ class RequestQueue {
   }
 }
 
-// Check if a Supabase table exists or create it if it doesn't
-async function ensureSupabaseTable(tableName: string, schema: Record<string, any>) {
-  try {
-    // First try to query the table to see if it exists
-    const { error } = await supabase.from(tableName).select('count').limit(1);
-    
-    if (error && error.code === '42P01') { // Table doesn't exist
-      console.log(`Table ${tableName} doesn't exist. Please create it manually in Supabase.`);
-      // We can't create tables via client API, so we'll just log the error
-    }
-  } catch (err) {
-    console.error(`Error checking/creating Supabase table ${tableName}:`, err);
-  }
-}
+// Tables are managed via migrations in src/db/migrations.sql
+// Token data is stored directly in the trading_history table
 
 export class JupiterRateLimitedService {
   private readonly priceApiBaseUrl = 'https://lite-api.jup.ag/price/v2';
@@ -137,23 +125,10 @@ export class JupiterRateLimitedService {
   private async ensureTables() {
     if (this.tablesChecked) return;
 
-    // Check and create tables if needed
-    await Promise.all([
-      ensureSupabaseTable('token_info', {
-        mint_address: 'text primary key',
-        symbol: 'text',
-        name: 'text',
-        logo_uri: 'text',
-        decimals: 'integer',
-        last_updated: 'timestamp with time zone'
-      }),
-      ensureSupabaseTable('token_prices', {
-        mint_address: 'text',
-        price_usd: 'numeric',
-        timestamp: 'timestamp with time zone',
-        primary_key: '(mint_address, timestamp)'
-      })
-    ]);
+    // Tables are managed via migrations, not here
+    // We don't need to create token_info or token_prices tables
+    // Token data is stored directly in trading_history table
+    console.log('Tables check complete - using existing trading_history table schema');
 
     this.tablesChecked = true;
   }
@@ -181,45 +156,8 @@ export class JupiterRateLimitedService {
       return cachedEntry.data;
     }
     
-    // Check if we already have this token info in Supabase
-    try {
-      await this.ensureTables();
-      
-      const { data: tokenData, error } = await supabase
-        .from('token_info')
-        .select('mint_address, symbol, name, logo_uri, decimals')
-        .eq('mint_address', mintAddress)
-        .single();
-      
-      if (!error && tokenData && tokenData.symbol) {
-        // Convert Supabase format to TokenInfoResponse format
-        const cachedInfo: TokenInfoResponse = {
-          address: mintAddress,
-          name: tokenData.name,
-          symbol: tokenData.symbol,
-          decimals: tokenData.decimals,
-          logoURI: tokenData.logo_uri,
-          tags: null,
-          daily_volume: null,
-          created_at: new Date().toISOString(),
-          freeze_authority: null,
-          mint_authority: null,
-          permanent_delegate: null,
-          minted_at: null
-        };
-        
-        // Update cache
-        this.cache.tokenInfo.set(cacheKey, {
-          data: cachedInfo,
-          timestamp: Date.now()
-        });
-        
-        return cachedInfo;
-      }
-    } catch (err) {
-      console.error('Error checking token info in Supabase:', err);
-      // Continue to Jupiter API if Supabase lookup fails
-    }
+    // Skip Supabase lookup - token info is cached in memory and stored in trading_history table when needed
+    // No need to maintain a separate token_info table
     
     // Not in cache or Supabase, fetch from API with rate limiting
     const fetchTask = async () => {
@@ -235,24 +173,8 @@ export class JupiterRateLimitedService {
           throw new Error('Invalid token info response from Jupiter API');
         }
         
-        // Store in Supabase for future reference
-        try {
-          await this.ensureTables();
-          
-          await supabase.from('token_info').upsert({
-            mint_address: mintAddress,
-            symbol: response.data.symbol,
-            name: response.data.name,
-            logo_uri: response.data.logoURI,
-            decimals: response.data.decimals,
-            last_updated: new Date().toISOString()
-          }, {
-            onConflict: 'mint_address'
-          });
-        } catch (err) {
-          console.error('Error storing token info in Supabase:', err);
-          // Continue even if Supabase storage fails
-        }
+        // Token info will be stored in trading_history table when trades are processed
+        // No need to maintain a separate token_info table
         
         return response.data;
       } catch (error) {
@@ -317,69 +239,8 @@ export class JupiterRateLimitedService {
       return cachedEntry.data;
     }
     
-    // Check if we already have this price in Supabase
-    if (timestamp) {
-      try {
-        await this.ensureTables();
-        
-        const { data: priceData, error } = await supabase
-          .from('token_prices')
-          .select('price_usd')
-          .eq('mint_address', tokenAddress)
-          .eq('timestamp', formattedTimestamp)
-          .single();
-        
-        if (!error && priceData && priceData.price_usd) {
-          // Construct a response that matches the Jupiter API format but with minimal data
-          const cachedPrice: TokenPriceResponse = {
-            data: {
-              [tokenAddress]: {
-                id: tokenAddress,
-                type: 'token',
-                price: priceData.price_usd.toString(),
-                extraInfo: {
-                  lastSwappedPrice: {
-                    lastJupiterSellAt: null,
-                    lastJupiterSellPrice: null,
-                    lastJupiterBuyAt: null,
-                    lastJupiterBuyPrice: null
-                  },
-                  quotedPrice: {
-                    buyPrice: priceData.price_usd.toString(),
-                    buyAt: 0,
-                    sellPrice: priceData.price_usd.toString(),
-                    sellAt: 0
-                  },
-                  confidenceLevel: 'high',
-                  depth: {
-                    buyPriceImpactRatio: {
-                      depth: {},
-                      timestamp: 0
-                    },
-                    sellPriceImpactRatio: {
-                      depth: {},
-                      timestamp: 0
-                    }
-                  }
-                }
-              }
-            },
-            timeTaken: 0
-          };
-          
-          // Update cache
-          this.cache.tokenPrice.set(cacheKey, {
-            data: cachedPrice,
-            timestamp: Date.now()
-          });
-          
-          return cachedPrice;
-        }
-      } catch (err) {
-        console.error('Error checking price in Supabase:', err);
-        // Continue to Jupiter API if Supabase lookup fails
-      }
-    }
+    // Skip Supabase price lookup - prices are fetched fresh from Jupiter API and cached in memory
+    // Historical prices are stored in trading_history table when trades are processed
     
     // Not in cache or Supabase, fetch from API with rate limiting
     const fetchTask = async () => {
@@ -398,30 +259,8 @@ export class JupiterRateLimitedService {
         throw new Error('Invalid price response from Jupiter API');
       }
       
-      // Store price in Supabase for historical reference
-      try {
-        await this.ensureTables();
-        
-        // Format the timestamp for storage
-        const storedTimestamp = timestamp 
-          ? typeof timestamp === 'object' 
-            ? timestamp.toISOString() 
-            : typeof timestamp === 'number'
-              ? new Date(timestamp).toISOString()
-              : timestamp
-          : new Date().toISOString();
-        
-        await supabase.from('token_prices').upsert({
-          mint_address: tokenAddress,
-          price_usd: parseFloat(response.data.data[tokenAddress].price),
-          timestamp: storedTimestamp
-        }, {
-          onConflict: 'mint_address,timestamp'
-        });
-      } catch (err) {
-        console.error('Error storing price in Supabase:', err);
-        // Continue even if Supabase storage fails
-      }
+      // Price data will be stored in trading_history table when trades are processed
+      // No need to maintain a separate token_prices table
       
       return response.data;
     };

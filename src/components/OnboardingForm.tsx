@@ -212,15 +212,16 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <Head>
-        <title>Setup | Journi</title>
+        <title>Setup | ryvu</title>
         <meta name="description" content="Set up your Solana Trading Journal" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <header className="bg-black shadow-md border-b border-gray-800">
+      <header className="bg-gradient-to-r from-[#0c0c0f] to-[#1a1a1a] shadow-md border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-indigo-400">Journi</h1>
+            <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto mr-3" />
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">ryvu</h1>
           </div>
         </div>
       </header>

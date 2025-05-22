@@ -360,7 +360,7 @@ export class TradingHistoryService {
   }
 
   /**
-   * Get trading history for a wallet
+   * Get trading history for a wallet - ONLY fetches from database if already scanned, performs initial scan if not
    * @param userId The user ID
    * @param walletAddress The wallet address
    * @param limit The maximum number of results to return
@@ -387,21 +387,26 @@ export class TradingHistoryService {
         lastUpdated: lastUpdated ? lastUpdated.toISOString() : null
       });
 
-      // Fetch trades from DRPC based on wallet status
-      let newTradesProcessed = false;
-      
-      if (!initialScanComplete || !lastUpdated) {
-        // For initial scan, fetch last 7 days of trades
+      // If wallet is already scanned, ONLY fetch from database - no API calls
+      if (initialScanComplete) {
+        console.log('Wallet already scanned - fetching from database only');
+      } else {
+        // For initial scan, fetch only last 24 hours of trades to match the UI display
         console.log('Performing initial scan for wallet:', walletAddress);
         
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+        
+        console.log(`Fetching transactions from last 24 hours: ${twentyFourHoursAgo.toISOString()}`);
         
         try {
-          // Get transactions from DRPC for the last 7 days
+          // Get transactions from DRPC for the last 24 hours only
           const transactions = await drpcClient.getTransactionsByWallet(
             walletAddress,
-            { from: sevenDaysAgo }
+            { 
+              from: twentyFourHoursAgo,
+              limit: 50 // Limit to 50 transactions to avoid endless scraping
+            }
           );
           
           console.log(`Retrieved ${transactions.length} transactions for initial scan`);
@@ -419,7 +424,6 @@ export class TradingHistoryService {
           // Cache processed trades
           if (processedTrades.length > 0) {
             await this.cacheTrades(userId, walletAddress, processedTrades);
-            newTradesProcessed = true;
           } else {
             // Even if no trades were found, mark the wallet as scanned to prevent constant rescanning
             const { error: walletUpdateError } = await supabase
@@ -463,87 +467,28 @@ export class TradingHistoryService {
           }
           // Continue to return cached data even if the scan fails
         }
-      } else {
-        // For subsequent scans, fetch only trades since last update
-        console.log('Performing incremental scan since:', lastUpdated.toISOString());
-        
-        try {
-          // Get transactions from DRPC since the last update
-          const transactions = await drpcClient.getTransactionsByWallet(
-            walletAddress,
-            { from: lastUpdated }
-          );
-          
-          console.log(`Retrieved ${transactions.length} transactions since last update`);
-          
-          // Process transactions into trades
-          const processedTrades: ProcessedTrade[] = [];
-          
-          for (const tx of transactions) {
-            const trade = await this.processTransaction(tx, walletId);
-            if (trade) {
-              processedTrades.push(trade);
-            }
-          }
-          
-          // Cache processed trades
-          if (processedTrades.length > 0) {
-            await this.cacheTrades(userId, walletAddress, processedTrades);
-            newTradesProcessed = true;
-          } else {
-            // Even if no new trades, update the last update timestamp
-            const { error: timestampUpdateError } = await supabase
-              .from('wallets')
-              .update({ 
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', walletId);
-              
-            if (timestampUpdateError) {
-              console.error('Error updating wallet timestamp after empty scan:', timestampUpdateError);
-            }
-          }
-          
-        } catch (error) {
-          console.error('Error during incremental scan:', error);
-          
-          // If the error is related to "Minimum context slot", we can still proceed
-          if (error instanceof Error && 
-              (error.message.includes('Minimum context slot') || 
-               error.message.includes('TRANSACTION_FETCH_ERROR'))) {
-            console.log('Continuing despite RPC error during incremental scan');
-            
-            // Update the wallet timestamp anyway to prevent repeated scanning
-            const { error: timestampUpdateError } = await supabase
-              .from('wallets')
-              .update({ 
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', walletId);
-              
-            if (timestampUpdateError) {
-              console.error('Error updating wallet timestamp after failed scan:', timestampUpdateError);
-            }
-          } else {
-            // For other errors, we might want to rethrow or handle differently
-            console.error('Unexpected error during incremental scan:', error);
-          }
-          // Continue to return cached data even if the scan fails
-        }
       }
 
       // Fetch trades from database with pagination
+      // Always enforce 24-hour limit regardless of minTimestamp parameter
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+      
+      // Use the more restrictive of minTimestamp or 24 hours ago
+      let fromTimestamp = twentyFourHoursAgo;
+      if (minTimestamp) {
+        const minDate = new Date(minTimestamp);
+        fromTimestamp = minDate > twentyFourHoursAgo ? minDate : twentyFourHoursAgo;
+      }
+      
+      const fromTimestampIso = fromTimestamp.toISOString();
+      console.log(`Filtering trades to last 24 hours from: ${fromTimestampIso}`);
+      
       let query = supabase
         .from('trading_history')
         .select('*', { count: 'exact' })
-        .eq('wallet_id', walletId);
-        
-      // Apply timestamp filter if provided
-      if (minTimestamp) {
-        const minTimestampIso = new Date(minTimestamp).toISOString();
-        console.log(`Filtering trades after timestamp: ${minTimestampIso}`);
-        query = query.gte('timestamp', minTimestampIso);
-      }
+        .eq('wallet_id', walletId)
+        .gte('timestamp', fromTimestampIso); // Always apply 24-hour filter
       
       // Apply sorting and pagination
       query = query
@@ -608,6 +553,116 @@ export class TradingHistoryService {
       };
     } catch (error) {
       console.error('Error fetching trading history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Refresh trading history for a wallet - performs incremental scan from updated_at timestamp
+   * @param userId The user ID
+   * @param walletAddress The wallet address
+   */
+  async refreshTradingHistory(
+    userId: string,
+    walletAddress: string
+  ): Promise<{ newTradesCount: number, message: string }> {
+    try {
+      // Check wallet status and ensure it exists
+      const { walletId, initialScanComplete, lastUpdated } = await this.ensureWalletExists(userId, walletAddress);
+      
+      if (!initialScanComplete) {
+        return { newTradesCount: 0, message: 'Wallet not yet scanned. Please wait for initial scan to complete.' };
+      }
+
+      if (!lastUpdated) {
+        return { newTradesCount: 0, message: 'No last update timestamp found.' };
+      }
+
+      console.log('Refreshing trading history since:', lastUpdated.toISOString());
+      
+      // Ensure we don't go back more than 24 hours
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+      
+      // Use the more recent of lastUpdated or 24 hours ago
+      const fromDate = lastUpdated > twentyFourHoursAgo ? lastUpdated : twentyFourHoursAgo;
+      
+      console.log(`Fetching transactions since: ${fromDate.toISOString()} (limited to last 24 hours)`);
+      
+      try {
+        // Get transactions from DRPC since the last update, but limited to 24 hours
+        const transactions = await drpcClient.getTransactionsByWallet(
+          walletAddress,
+          { 
+            from: fromDate,
+            limit: 50 // Limit to 50 transactions to avoid endless scraping
+          }
+        );
+        
+        console.log(`Retrieved ${transactions.length} transactions since last update`);
+        
+        // Process transactions into trades
+        const processedTrades: ProcessedTrade[] = [];
+        
+        for (const tx of transactions) {
+          const trade = await this.processTransaction(tx, walletId);
+          if (trade) {
+            processedTrades.push(trade);
+          }
+        }
+        
+        // Cache processed trades
+        if (processedTrades.length > 0) {
+          await this.cacheTrades(userId, walletAddress, processedTrades);
+          return { 
+            newTradesCount: processedTrades.length, 
+            message: `Found ${processedTrades.length} new trade${processedTrades.length > 1 ? 's' : ''}.` 
+          };
+        } else {
+          // Even if no new trades, update the last update timestamp
+          const { error: timestampUpdateError } = await supabase
+            .from('wallets')
+            .update({ 
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', walletId);
+            
+          if (timestampUpdateError) {
+            console.error('Error updating wallet timestamp after empty refresh:', timestampUpdateError);
+          }
+          
+          return { newTradesCount: 0, message: 'No new trades found.' };
+        }
+        
+      } catch (error) {
+        console.error('Error during refresh scan:', error);
+        
+        // If the error is related to "Minimum context slot", we can still proceed
+        if (error instanceof Error && 
+            (error.message.includes('Minimum context slot') || 
+             error.message.includes('TRANSACTION_FETCH_ERROR'))) {
+          console.log('Continuing despite RPC error during refresh');
+          
+          // Update the wallet timestamp anyway to prevent repeated scanning
+          const { error: timestampUpdateError } = await supabase
+            .from('wallets')
+            .update({ 
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', walletId);
+            
+          if (timestampUpdateError) {
+            console.error('Error updating wallet timestamp after failed refresh:', timestampUpdateError);
+          }
+          
+          return { newTradesCount: 0, message: 'RPC service temporarily unavailable. Please try again later.' };
+        } else {
+          // For other errors, rethrow
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing trading history:', error);
       throw error;
     }
   }

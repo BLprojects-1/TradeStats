@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { supabase } from '../utils/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from '../components/Footer';
+import Link from 'next/link';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -84,20 +85,23 @@ export default function ResetPassword() {
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <Head>
-        <title>Reset Password | Journi</title>
-        <meta name="description" content="Reset your Journi account password" />
+        <title>Reset Password | ryvu</title>
+        <meta name="description" content="Reset your ryvu account password" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <header className="bg-black shadow-md border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="bg-gradient-to-r from-[#0c0c0f] to-[#1a1a1a] shadow-md border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-indigo-400">Journi</h1>
+            <Link href="/" className="flex items-center">
+              <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto mr-3" />
+              <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">ryvu</h1>
+            </Link>
           </div>
         </div>
       </header>
 
-      <main className="flex-grow flex justify-center items-center py-16 px-4">
+      <main className="flex-grow flex items-center justify-center p-4">
         <div className="bg-[#121212] rounded-lg p-8 max-w-md w-full shadow-2xl">
           <h2 className="text-2xl font-bold text-white mb-6">Reset Your Password</h2>
           

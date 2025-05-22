@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
@@ -151,12 +151,20 @@ export default function TradingHistory() {
   const [totalTrades, setTotalTrades] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [lastSignature, setLastSignature] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(false);
-  const [rawTransactions, setRawTransactions] = useState<any[]>([]);
+
   const [errorType, setErrorType] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMoreTrades, setHasMoreTrades] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
+  const walletsRef = useRef(wallets);
+
+  // Keep wallets ref updated
+  useEffect(() => {
+    walletsRef.current = wallets;
+  }, [wallets]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -169,7 +177,8 @@ export default function TradingHistory() {
     const getTradeHistory = async () => {
       if (!selectedWalletId || !user?.id) return;
       
-      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+      // Get fresh wallet data from ref to avoid triggering re-renders
+      const selectedWallet = walletsRef.current.find(w => w.id === selectedWalletId);
       if (!selectedWallet) return;
       
       // Check if initial scan is complete first - use explicit comparison to ensure boolean value
@@ -179,11 +188,67 @@ export default function TradingHistory() {
       // Only set initial scan in progress if scan is NOT complete AND not already scanning
       const walletIsCurrentlyScanning = isWalletScanning(selectedWalletId);
       
-      // Check cache first - use cached data if available and less than 5 minutes old
+      // Set up cache variables first
       const cacheKey = `${selectedWalletId}_${currentPage}`;
       const cachedData = tradesCache.get(cacheKey);
       const now = Date.now();
       const fiveMinutesAgo = now - 5 * 60 * 1000;
+      
+      // If wallet is already complete, skip all scanning logic
+      if (isInitialScanComplete) {
+        setDataLoading(true);
+        setLoadingMessage("Loading trade history from database...");
+        
+        try {
+          // Calculate timestamp for 24 hours ago
+          const oneDayAgo = new Date();
+          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+          
+          const result = await tradingHistoryService.getTradingHistory(
+            user!.id,
+            selectedWallet.wallet_address,
+            TRADES_PER_PAGE,
+            1,
+            oneDayAgo.getTime()
+          );
+          
+          if (result && result.trades.length > 0) {
+            setTrades(result.trades);
+            setTotalTrades(result.totalCount);
+            setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
+            
+            // Cache the result for future use
+            tradesCache.set(cacheKey, {
+              trades: result.trades,
+              totalCount: result.totalCount,
+              timestamp: now
+            });
+            
+            console.log(`Loaded ${result.trades.length} trades from database`);
+          } else {
+            console.log('No trades found for this wallet in the last 24 hours');
+            setTrades([]);
+            setTotalTrades(0);
+            
+            // Cache empty result to prevent unnecessary requests
+            tradesCache.set(cacheKey, {
+              trades: [],
+              totalCount: 0,
+              timestamp: now
+            });
+          }
+        } catch (error) {
+          console.error('Error loading trades from database:', error);
+          setApiError('Unable to load trading history. Please try again later.');
+          setErrorType('general');
+        } finally {
+          setDataLoading(false);
+          setLoadingMessage('');
+        }
+        return;
+      }
+      
+      // Check cache first - use cached data if available and less than 5 minutes old
       
       // Use cached data if it's recent and wallet is already being scanned or scan is complete
       if (cachedData && cachedData.timestamp > fiveMinutesAgo && (isInitialScanComplete || walletIsCurrentlyScanning)) {
@@ -201,16 +266,24 @@ export default function TradingHistory() {
       setApiError(null);
       setNextCursor(null); // Reset cursor when changing wallet or filters
       
-      // If initial scan is not complete, mark this wallet as scanning in the context
-      if (!isInitialScanComplete && !walletIsCurrentlyScanning) {
-        markWalletAsScanning(selectedWalletId);
-      }
+      // Check if we've already initiated scanning for this wallet in this session
+      const hasBeenScanned = scannedWallets.has(selectedWalletId);
       
-      // Set appropriate loading message based on initial scan status
-      if (isInitialScanComplete) {
+      // Track if we initiated the scan in this call
+      let weInitiatedScan = false;
+      
+      // Only mark as scanning and show initial scan message if we're actually doing an initial scan
+      if (!isInitialScanComplete && !walletIsCurrentlyScanning && !hasBeenScanned) {
+        markWalletAsScanning(selectedWalletId);
+        setScannedWallets(prev => new Set(prev).add(selectedWalletId));
+        weInitiatedScan = true;
+        setLoadingMessage("Initial wallet scan in progress. This may take up to 2 minutes for the first scan.");
+      } else if (isInitialScanComplete) {
+        // For wallets that are already scanned, show normal loading message
         setLoadingMessage("Loading trade history from database...");
       } else {
-        setLoadingMessage("Initial wallet scan in progress. This may take up to 2 minutes for the first scan.");
+        // Wallet is currently scanning, just show the scanning message
+        setLoadingMessage("Wallet scan in progress...");
       }
       
       try {
@@ -262,27 +335,45 @@ export default function TradingHistory() {
             });
           }
           
-          // If this was an initial scan, mark it as complete in our context
-          if (!isInitialScanComplete) {
+          // Only mark as complete if we were the ones who initiated the scan AND wallet isn't already complete
+          if (!isInitialScanComplete && weInitiatedScan) {
             markWalletScanComplete(selectedWalletId);
+            // Remove from scanned wallets since it's now complete
+            setScannedWallets(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(selectedWalletId);
+              return newSet;
+            });
           }
         } catch (apiError) {
           console.error('Error loading trades:', apiError);
           setApiError('Unable to load trading history. Please try again later.');
           setErrorType('rpc');
           
-          // If error during initial scan, still mark it as complete to prevent endless retries
-          if (!isInitialScanComplete) {
+          // If error during initial scan that we initiated, mark it as complete to prevent endless retries
+          if (!isInitialScanComplete && weInitiatedScan) {
             markWalletScanComplete(selectedWalletId);
+            // Remove from scanned wallets since we're marking it complete
+            setScannedWallets(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(selectedWalletId);
+              return newSet;
+            });
           }
         }
       } catch (err) {
         console.error('Error loading trade history:', err);
         setError('Failed to load trading history. Please try again.');
         
-        // If error during initial scan, still mark it as complete to prevent endless retries
-        if (!isInitialScanComplete) {
+        // If error during initial scan that we initiated, mark it as complete to prevent endless retries
+        if (!isInitialScanComplete && weInitiatedScan) {
           markWalletScanComplete(selectedWalletId);
+          // Remove from scanned wallets since we're marking it complete
+          setScannedWallets(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(selectedWalletId);
+            return newSet;
+          });
         }
       } finally {
         setDataLoading(false);
@@ -293,7 +384,7 @@ export default function TradingHistory() {
     if (selectedWalletId) {
       getTradeHistory();
     }
-  }, [selectedWalletId, user?.id, wallets, currentPage, markWalletAsScanning, markWalletScanComplete, isWalletScanning]);
+  }, [selectedWalletId, user?.id, currentPage]);
 
   // Update the loadMoreTrades function to use tradingHistoryService instead
   const loadMoreTrades = async () => {
@@ -399,6 +490,56 @@ export default function TradingHistory() {
     }
   };
 
+  const handleRefresh = async () => {
+    if (!selectedWalletId || !user?.id || refreshing) return;
+    
+    const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+    if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
+    
+    setRefreshing(true);
+    setRefreshMessage(null);
+    
+    try {
+      const result = await tradingHistoryService.refreshTradingHistory(
+        user.id,
+        selectedWallet.wallet_address
+      );
+      
+      setRefreshMessage(result.message);
+      
+      // If new trades were found, reload the data
+      if (result.newTradesCount > 0) {
+        // Clear cache and reload the data to show new trades
+        tradesCache.clear();
+        
+        const oneDayAgo = new Date();
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+        
+        const dataResult = await tradingHistoryService.getTradingHistory(
+          user.id,
+          selectedWallet.wallet_address,
+          TRADES_PER_PAGE,
+          1,
+          oneDayAgo.getTime()
+        );
+        
+        setTrades(dataResult.trades);
+        setTotalTrades(dataResult.totalCount);
+        setTotalPages(Math.ceil(dataResult.totalCount / TRADES_PER_PAGE));
+        setCurrentPage(1);
+      }
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setRefreshMessage(null), 5000);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setRefreshMessage('Failed to refresh data. Please try again.');
+      setTimeout(() => setRefreshMessage(null), 5000);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -415,14 +556,49 @@ export default function TradingHistory() {
     <DashboardLayout 
       title="Trading History"
     >
-      <div className="p-4 md:p-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2 text-white">24h Trading History</h1>
+      <div className="space-y-4 sm:space-y-6">
+        <div className="mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-white">24h Trading History</h1>
+            {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+              >
+                {refreshing ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Refreshing...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Refresh</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
           <p className="text-gray-500">View your recent Solana trading activity (last 24 hours)</p>
+          {refreshMessage && (
+            <div className={`mt-3 p-3 rounded-md text-sm ${
+              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
+                ? 'bg-red-900/30 border border-red-500 text-red-200' 
+                : 'bg-green-900/30 border border-green-500 text-green-200'
+            }`}>
+              {refreshMessage}
+            </div>
+          )}
         </div>
 
         {error && (
-          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6" role="alert">
+          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4 sm:mb-6" role="alert">
             <p>{error}</p>
           </div>
         )}
@@ -433,49 +609,22 @@ export default function TradingHistory() {
           errorType={errorType as 'rpc' | 'auth' | 'timeout' | 'general'} 
         />}
 
-        <div className="bg-[#1a1a1a] rounded-lg p-6 mb-8">
-          <div className="mb-4">
-            <label htmlFor="wallet-select" className="block text-sm font-medium text-gray-400 mb-2">
-              Select Wallet
-            </label>
-            <select
-              id="wallet-select"
-              className="block w-full p-2 bg-[#23232b] text-white border border-gray-700 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              value={selectedWalletId || ''}
-              onChange={(e) => setSelectedWalletId(e.target.value)}
-            >
-              <option value="">Select a wallet</option>
-              {wallets.map((wallet) => (
-                <option key={wallet.id} value={wallet.id}>
-                  {wallet.wallet_address} {wallet.label || wallet.nickname ? `(${wallet.label || wallet.nickname})` : ''}
-                </option>
-              ))}
-            </select>
+        {!selectedWalletId && (
+          <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-4 sm:mb-6">
+            Please select a wallet from the dropdown menu to view your trading history.
           </div>
+        )}
 
-          {!selectedWalletId && (
-            <div className="bg-[#23232b] border border-indigo-500/20 text-indigo-200 px-4 py-3 rounded mb-6">
-              Please select a wallet from the dropdown menu to view your trading history.
-            </div>
-          )}
+        <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6 mb-6 sm:mb-8">
           
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 gap-3 sm:gap-0">
             <div className="flex items-center">
-              <h2 className="text-xl font-semibold text-indigo-200">Recent Trades</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-indigo-200">Recent Trades</h2>
               <span className="ml-2 text-sm text-indigo-400">(Last 24 hours)</span>
-              {dataLoading && (
-                <div className="ml-4 flex items-center text-indigo-400 text-sm">
-                  <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  {loadingMessage || 'Loading...'}
-                </div>
-              )}
             </div>
             <div className="flex gap-4">
               <select 
-                className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
+                className="w-full sm:w-auto bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
                 value={tokenFilter}
                 onChange={(e) => setTokenFilter(e.target.value)}
                 disabled={dataLoading}
@@ -494,7 +643,8 @@ export default function TradingHistory() {
             </div>
           </div>
           
-          <div className="overflow-x-auto">
+          {/* Desktop Table - Hidden on Mobile */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-800">
               <thead>
                 <tr>
@@ -575,6 +725,69 @@ export default function TradingHistory() {
             </table>
           </div>
           
+          {/* Mobile Card View - Visible Only on Small Screens */}
+          <div className="sm:hidden">
+            {dataLoading ? (
+              <div className="flex items-center justify-center py-4 text-gray-400">
+                <div className="flex items-center space-x-2">
+                  <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>{loadingMessage || 'Loading transactions...'}</span>
+                </div>
+              </div>
+            ) : trades.length > 0 ? (
+              <div className="space-y-4">
+                {trades.map((trade) => (
+                  <div key={trade.signature} className="bg-[#252525] p-4 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-3">
+                      {trade.tokenLogoURI && (
+                        <img src={trade.tokenLogoURI} alt={trade.tokenSymbol} className="w-6 h-6 rounded-full" />
+                      )}
+                      <div>
+                        <span className="text-white font-medium">{trade.tokenSymbol || 'Unknown'}</span>
+                        {trade.tokenAddress && (
+                          <div className="text-xs text-gray-500">
+                            {`${trade.tokenAddress.substring(0, 4)}...${trade.tokenAddress.substring(trade.tokenAddress.length - 4)}`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+                      <div>
+                        <p className="text-gray-400">Type</p>
+                        <p className="text-gray-300">{trade.type || 'UNKNOWN'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Amount</p>
+                        <p className="text-gray-300">{trade.amount ? formatTokenAmount(trade.amount, trade.decimals) : '0'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Price (USD)</p>
+                        <p className="text-gray-300">{trade.priceUSD ? formatSmallPrice(trade.priceUSD) : '$0'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Value (USD)</p>
+                        <p className="text-gray-300">{trade.valueUSD ? `$${trade.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '$0'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-gray-400 border-t border-gray-700 pt-2 flex justify-between">
+                      <span>{formatDate(trade.timestamp)}</span>
+                      <span>{formatTime(trade.timestamp)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-300 text-center py-4">
+                {selectedWalletId ? 'No trades found for this wallet' : 'Select a wallet to view trade history'}
+              </div>
+            )}
+          </div>
+          
           {/* Add load more button */}
           {hasMoreTrades && (
             <div className="mt-6 flex justify-center">
@@ -601,22 +814,22 @@ export default function TradingHistory() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-[#1a1a1a] rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">24h Trades</h3>
-            <p className="text-2xl font-semibold text-white">{trades.length}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
+            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Trades</h3>
+            <p className="text-lg sm:text-2xl font-semibold text-white">{trades.length}</p>
           </div>
           
-          <div className="bg-[#1a1a1a] rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">24h Volume</h3>
-            <p className="text-2xl font-semibold text-white">
+          <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
+            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Volume</h3>
+            <p className="text-lg sm:text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
           </div>
           
-          <div className="bg-[#1a1a1a] rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">24h P/L</h3>
-            <p className="text-2xl font-semibold text-white">
+          <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
+            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h P/L</h3>
+            <p className="text-lg sm:text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => {
                 const value = trade.valueUSD || 0;
                 return sum + (trade.type === 'BUY' ? -value : value);
@@ -625,56 +838,14 @@ export default function TradingHistory() {
           </div>
         </div>
 
-        {/* Debug section */}
-        <div className="bg-[#1a1a1a] rounded-lg p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-indigo-200">Debugging</h3>
-            <button 
-              onClick={() => setShowDebug(!showDebug)}
-              className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm hover:bg-[#303030] transition-colors border border-gray-700"
-            >
-              {showDebug ? 'Hide Raw Data' : 'Show Raw Data'}
-            </button>
-          </div>
-          
-          {showDebug && (
-            <div className="mt-4 bg-[#23232b] p-4 rounded-md">
-              <h4 className="text-md font-semibold text-indigo-200 mb-2">Raw Transaction Data</h4>
-              <div className="space-y-4">
-                {rawTransactions.map((tx, index) => (
-                  <div key={index} className="border-b border-gray-800 pb-4">
-                    <div className="text-sm text-gray-400 mb-2">
-                      <div className="font-semibold text-indigo-300">Transaction {index + 1}</div>
-                      <div>Signature: {tx.signature}</div>
-                      <div className="text-yellow-500">
-                        SOL Balance Changes:
-                        <div className="pl-4">
-                          <div>Before: {tx.preBalances?.[0] ? (tx.preBalances[0] / 1e9).toFixed(9) : 'N/A'} SOL</div>
-                          <div>After: {tx.postBalances?.[0] ? (tx.postBalances[0] / 1e9).toFixed(9) : 'N/A'} SOL</div>
-                          <div>Change: {tx.preBalances?.[0] && tx.postBalances?.[0] 
-                            ? ((tx.postBalances[0] - tx.preBalances[0]) / 1e9).toFixed(9) 
-                            : 'N/A'} SOL</div>
-                        </div>
-                      </div>
-                    </div>
-                    <pre className="text-xs text-gray-400 max-h-40 overflow-auto">
-                      {JSON.stringify(tx, null, 2)}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <LoadingToast 
+          isVisible={!!(dataLoading || (selectedWalletId && isWalletScanning(selectedWalletId) && trades.length === 0))} 
+          message={selectedWalletId && isWalletScanning(selectedWalletId) && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete !== true ? 
+            "Initial wallet scan in progress. This may take a moment. We're scanning your transaction history." : 
+            loadingMessage || ''
+          } 
+        />
       </div>
-
-      <LoadingToast 
-        isVisible={!!(dataLoading || (selectedWalletId && isWalletScanning(selectedWalletId) && trades.length === 0))} 
-        message={selectedWalletId && isWalletScanning(selectedWalletId) ? 
-          "Initial wallet scan in progress. This may take a moment. We're scanning your transaction history." : 
-          loadingMessage || ''
-        } 
-      />
     </DashboardLayout>
   );
 }
