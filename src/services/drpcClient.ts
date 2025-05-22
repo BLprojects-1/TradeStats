@@ -1,49 +1,28 @@
 import axios from 'axios';
 
 export interface TokenBalanceChange {
-  accountIndex: number;
-  mint?: string;  // Made optional since tokenAddress is used instead
-  rawTokenAmount?: {
-    decimals: number;
-    uiAmount: number;
-    uiAmountString: string;
-  };
-  tokenAmount?: number;
+  tokenAddress: string;
+  accountIndex?: number;
   uiAmount: number;
   decimals: number;
-  tokenAddress: string;
   tokenTicker?: string;
-  logo?: string;
-  priceUSD?: number;
-  marketCap?: number;
+  logo?: string | null;
   owner?: string;
-  isUserAccount?: boolean;
 }
 
 export interface Transaction {
+  signature: string;
+  timestamp: number;
   blockTime: number;
   slot: number;
-  signature: string;
-  transaction?: {
-    signatures: string[];
-  };
-  meta?: {
-    err: any;
-    fee: number;
-    preBalances: number[];
-    postBalances: number[];
-    preTokenBalances: TokenBalance[];
-    postTokenBalances: TokenBalance[];
-    logMessages: string[];
-  };
+  status: 'success' | 'failed';
+  tokenBalanceChanges: TokenBalanceChange[];
   preBalances: number[];
   postBalances: number[];
-  tokenBalanceChanges: TokenBalanceChange[];
-  status: string;
-  fee: number;
-  logMessages: string[];
-  type?: string;
-  timestamp?: number;
+  meta: any;
+  type: string;
+  fee?: number;
+  logMessages?: string[];
 }
 
 export interface PaginatedTransactions {
@@ -189,6 +168,13 @@ interface RpcResponse {
     code: number;
     message: string;
   };
+}
+
+// Add interface for transaction filter options
+interface TransactionFilterOptions {
+  from?: Date;
+  to?: Date;
+  limit?: number;
 }
 
 class DrpcClient {
@@ -626,7 +612,7 @@ class DrpcClient {
                 meta: txData.meta,
                 preBalances: txData.meta?.preBalances || [],
                 postBalances: txData.meta?.postBalances || [],
-                tokenBalanceChanges: this.processTokenBalanceChanges(txData.meta),
+                tokenBalanceChanges: this.getTokenBalanceChanges(txData),
                 status: txData.meta?.status ? 
                   ('Ok' in txData.meta.status ? 'success' : 'failed') : 
                   'unknown',
@@ -672,42 +658,50 @@ class DrpcClient {
     }
   }
 
-  private processTokenBalanceChanges(meta: any): TokenBalanceChange[] {
-    if (!meta || !meta.preTokenBalances || !meta.postTokenBalances) {
-      return [];
-    }
-
+  private getTokenBalanceChanges(txData: any): TokenBalanceChange[] {
     const changes: TokenBalanceChange[] = [];
     
-    // Create a map of pre-balances by mint and account
-    const preBalMap = new Map<string, TokenBalance>();
-    meta.preTokenBalances.forEach((bal: TokenBalance) => {
-      preBalMap.set(`${bal.mint}-${bal.accountIndex}`, bal);
+    if (!txData.meta || !txData.meta.preTokenBalances || !txData.meta.postTokenBalances) {
+      return changes;
+    }
+    
+    const preBalances = new Map();
+    txData.meta.preTokenBalances.forEach((bal: any) => {
+      const key = `${bal.mint}:${bal.accountIndex}`;
+      preBalances.set(key, {
+        amount: bal.uiTokenAmount.uiAmount || 0,
+        decimals: bal.uiTokenAmount.decimals
+      });
     });
     
-    // Process post balances and compare with pre-balances
-    meta.postTokenBalances.forEach((postBal: TokenBalance) => {
-      const key = `${postBal.mint}-${postBal.accountIndex}`;
-      const preBal = preBalMap.get(key);
+    txData.meta.postTokenBalances.forEach((bal: any) => {
+      const key = `${bal.mint}:${bal.accountIndex}`;
+      const preBal = preBalances.get(key);
+      const postBal = bal.uiTokenAmount.uiAmount || 0;
       
-      const preAmount = preBal?.uiTokenAmount?.uiAmount || 0;
-      const postAmount = postBal.uiTokenAmount?.uiAmount || 0;
-      
-      // Skip if no change
-      if (Math.abs(postAmount - preAmount) < 0.000001) {
-        return;
+      if (preBal) {
+        const change = postBal - preBal.amount;
+        
+        // Only record significant changes
+        if (Math.abs(change) > 0.000001) {
+          changes.push({
+            tokenAddress: bal.mint,
+            accountIndex: bal.accountIndex,
+            uiAmount: change,
+            decimals: bal.uiTokenAmount.decimals
+          });
+        }
+      } else {
+        // New token (no pre-balance)
+        if (postBal > 0.000001) {
+          changes.push({
+            tokenAddress: bal.mint,
+            accountIndex: bal.accountIndex,
+            uiAmount: postBal,
+            decimals: bal.uiTokenAmount.decimals
+          });
+        }
       }
-      
-      changes.push({
-        tokenAddress: postBal.mint,
-        mint: postBal.mint,
-        tokenTicker: postBal.symbol || 'Unknown',
-        decimals: postBal.uiTokenAmount.decimals,
-        uiAmount: postAmount - preAmount,
-        logo: postBal.logo || '',
-        accountIndex: postBal.accountIndex,
-        owner: postBal.owner
-      });
     });
     
     return changes;
@@ -814,6 +808,208 @@ class DrpcClient {
     }
     
     return 'TOKEN_TRANSFER';
+  }
+
+  /**
+   * Get transaction details for a specific signature
+   * @param signature The transaction signature
+   * @returns The transaction details or null if not found
+   */
+  async getTransaction(signature: string): Promise<Transaction | null> {
+    try {
+      const endpoint = this.getCurrentEndpoint();
+      
+      const payload = {
+        method: 'getTransaction',
+        params: [
+          signature,
+          {
+            encoding: 'jsonParsed',
+            maxSupportedTransactionVersion: 0
+          }
+        ]
+      };
+      
+      const response = await this.makeRequest(endpoint, payload);
+      
+      if (!response?.result) {
+        console.warn(`No transaction data found for signature: ${signature}`);
+        return null;
+      }
+      
+      // Process the transaction data into our Transaction format
+      return this.processTransactionData(response.result, signature);
+    } catch (error) {
+      console.error(`Error fetching transaction ${signature}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Process raw transaction data into our Transaction format
+   * @param data The raw transaction data from RPC
+   * @param signature The transaction signature
+   * @returns Processed Transaction object
+   */
+  private processTransactionData(data: any, signature: string): Transaction {
+    // Extract token balance changes
+    const tokenBalanceChanges: TokenBalanceChange[] = [];
+    
+    try {
+      if (data.meta?.preTokenBalances && data.meta?.postTokenBalances) {
+        const preBalances = new Map();
+        data.meta.preTokenBalances.forEach((balance: any) => {
+          const key = `${balance.mint}:${balance.accountIndex}`;
+          preBalances.set(key, balance.uiTokenAmount.uiAmount || 0);
+        });
+        
+        data.meta.postTokenBalances.forEach((balance: any) => {
+          const key = `${balance.mint}:${balance.accountIndex}`;
+          const preBal = preBalances.get(key) || 0;
+          const postBal = balance.uiTokenAmount.uiAmount || 0;
+          const change = postBal - preBal;
+          
+          // Only record significant changes
+          if (Math.abs(change) > 0.000001) {
+            tokenBalanceChanges.push({
+              tokenAddress: balance.mint,
+              accountIndex: balance.accountIndex,
+              uiAmount: change,
+              decimals: balance.uiTokenAmount.decimals,
+              tokenTicker: '',
+              logo: null,
+              owner: balance.owner
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error processing token balance changes:', err);
+    }
+    
+    // Create the transaction object
+    return {
+      signature,
+      timestamp: data.blockTime ? data.blockTime * 1000 : Date.now(),
+      blockTime: data.blockTime || Math.floor(Date.now() / 1000),
+      slot: data.slot || 0,
+      status: data.meta?.err ? 'failed' : 'success',
+      tokenBalanceChanges,
+      preBalances: data.meta?.preBalances || [],
+      postBalances: data.meta?.postBalances || [],
+      meta: data.meta,
+      type: this.determineTransactionType(data),
+      fee: data.meta?.fee || 0,
+      logMessages: data.meta?.logMessages || []
+    };
+  }
+
+  /**
+   * Get transactions for a specific wallet address with optional time filtering
+   * @param walletAddress The wallet address to fetch transactions for
+   * @param options Optional filter options (from date, to date, limit)
+   * @returns Array of processed transactions
+   */
+  async getTransactionsByWallet(
+    walletAddress: string,
+    options: TransactionFilterOptions = {}
+  ): Promise<Transaction[]> {
+    try {
+      console.log(`Fetching transactions for wallet: ${walletAddress}`, options);
+      
+      // Calculate limit - we get extra transactions because we'll filter by date later
+      const limit = options.limit || 100; // Default to 100 transactions
+      // Get more transactions than requested to account for filtering
+      const fetchLimit = Math.min(limit * 2, 200);
+      
+      // Construct the getSignaturesForAddress request without using date filters
+      // since they need to be applied after we get the data
+      const signaturesPayload = {
+        method: 'getSignaturesForAddress',
+        params: [
+          walletAddress,
+          {
+            limit: fetchLimit
+          }
+        ]
+      };
+      
+      // Get signatures for the wallet
+      const endpoint = this.getCurrentEndpoint();
+      const signaturesResponse = await this.makeRequest(endpoint, signaturesPayload);
+      
+      if (!signaturesResponse?.result || !Array.isArray(signaturesResponse.result)) {
+        console.warn('No signatures returned for wallet:', walletAddress);
+        return [];
+      }
+      
+      const signatures = signaturesResponse.result.map((item: any) => item.signature);
+      console.log(`Retrieved ${signatures.length} signatures for wallet ${walletAddress}`);
+      
+      // Now fetch the transaction details for each signature
+      const transactions: Transaction[] = [];
+      
+      // Process in batches to avoid rate limits
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < signatures.length; i += BATCH_SIZE) {
+        const batch = signatures.slice(i, i + BATCH_SIZE);
+        
+        // Process batch in parallel
+        const batchPromises = batch.map((signature: string) => 
+          this.getTransaction(signature)
+            .catch((err: Error) => {
+              console.error(`Failed to fetch transaction ${signature}:`, err);
+              return null;
+            })
+        );
+        
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Add valid transactions to the result
+        for (const tx of batchResults) {
+          // Skip null transactions
+          if (!tx) continue;
+          
+          // Apply date filtering
+          const txTimestamp = tx.blockTime * 1000; // Convert to milliseconds
+          const fromDate = options.from?.getTime();
+          const toDate = options.to?.getTime();
+          
+          // Skip if transaction is before the from date
+          if (fromDate && txTimestamp < fromDate) {
+            continue;
+          }
+          
+          // Skip if transaction is after the to date
+          if (toDate && txTimestamp > toDate) {
+            continue;
+          }
+          
+          transactions.push(tx);
+          
+          // Stop if we have enough transactions after filtering
+          if (transactions.length >= limit) {
+            break;
+          }
+        }
+        
+        // Stop fetching more batches if we have enough transactions
+        if (transactions.length >= limit) {
+          break;
+        }
+        
+        // Add a small delay between batches to avoid rate limits
+        if (i + BATCH_SIZE < signatures.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      console.log(`Successfully processed ${transactions.length} transactions for wallet ${walletAddress}`);
+      return transactions;
+    } catch (error) {
+      console.error('Error in getTransactionsByWallet:', error);
+      throw error;
+    }
   }
 }
 

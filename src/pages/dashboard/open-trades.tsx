@@ -2,10 +2,109 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
-import { fetchWalletData, TokenData } from '../../utils/heliusData';
 import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
+import { tradingHistoryService } from '../../services/tradingHistoryService';
+import { ProcessedTrade } from '../../services/tradeProcessor';
+import { jupiterApiService } from '../../services/jupiterApiService';
+
+export interface TokenData {
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenLogoURI?: string;
+  totalBought: number;
+  totalSold: number;
+  remaining: number;
+  totalValue: number;
+  currentPrice?: number;
+  profitLoss?: number;
+}
+
+// Helper function to process trades into token holdings
+const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenData[]> => {
+  // Group trades by token
+  const tokenMap = new Map<string, {
+    tokenSymbol: string,
+    tokenLogoURI: string | null,
+    buys: number,
+    sells: number,
+    buyValue: number,
+    sellValue: number
+  }>();
+  
+  // Process each trade
+  for (const trade of trades) {
+    // Skip trades without required data
+    if (!trade.tokenAddress || !trade.amount) continue;
+    
+    // Get or create token entry
+    let tokenData = tokenMap.get(trade.tokenAddress);
+    if (!tokenData) {
+      tokenData = {
+        tokenSymbol: trade.tokenSymbol,
+        tokenLogoURI: trade.tokenLogoURI,
+        buys: 0,
+        sells: 0,
+        buyValue: 0,
+        sellValue: 0
+      };
+      tokenMap.set(trade.tokenAddress, tokenData);
+    }
+    
+    // Add to buys or sells
+    if (trade.type === 'BUY') {
+      tokenData.buys += trade.amount;
+      tokenData.buyValue += trade.valueUSD;
+    } else if (trade.type === 'SELL') {
+      tokenData.sells += trade.amount;
+      tokenData.sellValue += trade.valueUSD;
+    }
+  }
+  
+  // Calculate remaining tokens and fetch current prices
+  const holdings: TokenData[] = [];
+  const pricePromises: Promise<void>[] = [];
+  
+  for (const [tokenAddress, data] of tokenMap.entries()) {
+    const remaining = data.buys - data.sells;
+    
+    // Only include tokens with a positive remaining balance
+    if (remaining <= 0) continue;
+    
+    const tokenData: TokenData = {
+      tokenAddress,
+      tokenSymbol: data.tokenSymbol,
+      tokenLogoURI: data.tokenLogoURI || undefined,
+      totalBought: data.buys,
+      totalSold: data.sells,
+      remaining,
+      totalValue: 0, // Will be calculated after getting price
+    };
+    
+    // Fetch current price
+    const pricePromise = jupiterApiService.getTokenPriceInUSD(tokenAddress)
+      .then(price => {
+        tokenData.currentPrice = price;
+        tokenData.totalValue = remaining * price;
+        tokenData.profitLoss = tokenData.totalValue - (data.buyValue - data.sellValue);
+      })
+      .catch(err => {
+        console.error(`Error fetching price for ${tokenAddress}:`, err);
+        tokenData.currentPrice = 0;
+        tokenData.totalValue = 0;
+      });
+    
+    pricePromises.push(pricePromise);
+    holdings.push(tokenData);
+  }
+  
+  // Wait for all price fetches to complete
+  await Promise.all(pricePromises);
+  
+  // Sort by total value (highest first)
+  return holdings.sort((a, b) => b.totalValue - a.totalValue);
+};
 
 export default function OpenTrades() {
   const { user, loading } = useAuth();
@@ -75,13 +174,28 @@ export default function OpenTrades() {
       }, 3000);
       
       try {
-        const data = await fetchWalletData(selectedWallet.wallet_address);
-        setWalletData(data);
+        // Use the tradingHistoryService to get all trading history
+        const result = await tradingHistoryService.getTradingHistory(
+          user!.id,
+          selectedWallet.wallet_address,
+          500, // Get a larger number of trades for better analysis
+          1
+        );
+        
+        // Process the trades to find open positions
+        const openPositions = await processTradesToHoldings(result.trades);
+        setWalletData(openPositions);
+        
       } catch (err: any) {
         console.error('Error loading wallet data:', err);
         
         // Enhanced error handling with more specific messages
-        if (err.message?.includes('TRANSACTION_FETCH_ERROR') || err.message?.includes('getTransaction')) {
+        if (err.message?.includes('Minimum context slot')) {
+          // This is a known DRPC API limitation
+          console.log('RPC provider reported: Minimum context slot has not been reached');
+          setApiError('The Solana RPC service reported a sync delay. We\'re using cached data for now.');
+          setErrorType('rpc');
+        } else if (err.message?.includes('TRANSACTION_FETCH_ERROR') || err.message?.includes('getTransaction')) {
           setApiError('Unable to connect to Solana network to fetch your transaction data. We are using public RPC endpoints which have lower reliability. Please try again in a few moments.');
           setErrorType('rpc');
         } else if (err.message?.includes('Service Unavailable') || err.message?.includes('503')) {
@@ -107,7 +221,7 @@ export default function OpenTrades() {
     };
     
     getWalletData();
-  }, [selectedWalletId, wallets]);
+  }, [selectedWalletId, wallets, user?.id]);
 
   const handleRetry = () => {
     if (selectedWalletId) {
@@ -118,8 +232,19 @@ export default function OpenTrades() {
           try {
             setDataLoading(true);
             setLoadingMessage("Retrying...");
-            const data = await fetchWalletData(selectedWallet.wallet_address);
-            setWalletData(data);
+            
+            // Use the tradingHistoryService to get all trading history
+            const result = await tradingHistoryService.getTradingHistory(
+              user!.id,
+              selectedWallet.wallet_address,
+              500,
+              1
+            );
+            
+            // Process the trades to find open positions
+            const openPositions = await processTradesToHoldings(result.trades);
+            setWalletData(openPositions);
+            
           } catch (err) {
             console.error('Error retrying wallet data fetch:', err);
           } finally {
@@ -254,10 +379,7 @@ export default function OpenTrades() {
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-2">Unrealized P/L</h3>
               <p className="text-2xl font-semibold text-white">
-                ${walletData.reduce((sum, token) => {
-                  const unrealizedPL = (token.currentPrice || 0) * token.remaining - token.totalBought;
-                  return sum + unrealizedPL;
-                }, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                ${walletData.reduce((sum, token) => sum + (token.profitLoss || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>

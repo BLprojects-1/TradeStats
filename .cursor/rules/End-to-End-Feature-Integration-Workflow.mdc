@@ -1,0 +1,70 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Requirements & Resource Validation
+Mindset & Rationale:
+Senior engineers always start by fully understanding the data model and UI contracts before writing code—so every change is rooted in fact, not guesswork.
+
+Rule:
+Before touching any code, Cursor must verify table schemas, column names, and existing page props in the relevant files.
+
+System Behavior Specifications:
+
+Schema Introspection: Query Supabase for the wallets and trading_history table definitions (columns, types, constraints).
+
+Page Prop Audit: Parse the React components (@trading-history.tsx, @top-trades.tsx, @open-trades.tsx) to extract the data fields they consume.
+
+Mismatch Detection: If any column used by the page isn’t present in the DB schema (or vice versa), Cursor logs an error and halts further changes until reconciled.
+
+2. API Endpoint Verification
+Mindset & Rationale:
+Never assume an endpoint exists or behaves correctly—always “smoke-test” and inspect its payload before relying on it in production code.
+
+Rule:
+Cursor must exercise each DRPC and Jup.ag API endpoint with representative test parameters and validate that the response includes all required fields.
+
+System Behavior Specifications:
+
+Dry-Run Requests: For a given wallet ID, invoke the DRPC “getTrades” RPC for both initial and incremental scans (based on initial_scan_complete) and confirm the JSON contains trade timestamps, amounts, and wallet identifiers.
+
+Jup.ag Data Retrieval: For each unique token mint in those trades, call the price API and token-info API and verify presence of price, symbol, and logoURI.
+
+Field Coverage Check: Compare the combined API payload fields against the page prop audit; any missing fields trigger a warning.
+
+3. Incremental Implementation & Supabase Ingestion
+Mindset & Rationale:
+Building large features in one go is risky; a senior approach is to ingest and persist data step by step, verifying correctness at each stage.
+
+Rule:
+Cursor must insert trade records into Supabase immediately upon receipt of each fully validated trade + Jup.ag enrichment, then mark initial_scan_complete or update updated_at.
+
+System Behavior Specifications:
+
+Initial vs. Delta Logic:
+
+If initial_scan_complete === FALSE, fetch 7 days of history → insert all trades → set initial_scan_complete = TRUE and record the latest trade’s timestamp to updated_at.
+
+If initial_scan_complete === TRUE, fetch since updated_at → insert only new trades → update updated_at.
+
+Enrichment Pipeline: For each trade row, enrich with price, symbol, logoURI from Jup.ag before insertion.
+
+Atomic Inserts: Use Supabase’s batch insert with upsert on unique trade IDs to avoid duplicates.
+
+4. Dev-Server QA & Display Verification
+Mindset & Rationale:
+Code isn’t done until you can see it in action. Senior engineers automate checks but also eyeball the UI to catch subtle mismatches.
+
+Rule:
+After implementing data ingestion, Cursor must spin up the local dev server, navigate to each target page, and verify that all columns display correctly and no console errors appear.
+
+System Behavior Specifications:
+
+Automated Smoke Tests: Launch a headless browser to load /trading-history, /top-trades, and /open-trades, asserting HTTP 200 and zero JS errors.
+
+Data Presence Assertion: Confirm the number of rows rendered matches the count of Supabase records for the test wallet.
+
+Visual Spot-Check Prompt: If any styling/layout anomalies are detected (e.g., overflowing columns), log a low-severity alert for manual review—but do not alter UI code under @deployment-rule.mdc or other protected flags.
+
+Cursor agent should follow a disciplined, senior-developer workflow: fully understand the data contracts, verify APIs, implement incrementally with enriched data, and validate end-to-end on the dev server—without stray changes or guesswork.

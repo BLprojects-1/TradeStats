@@ -2,16 +2,136 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
-import { fetchTopTrades, fetchTradingHistory, TradeData } from '../../utils/heliusData';
 import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
+import { tradingHistoryService } from '../../services/tradingHistoryService';
+import { ProcessedTrade } from '../../services/tradeProcessor';
+
+// Modified TradeData interface that matches our processed trades
+export interface TradeData {
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenLogoURI?: string;
+  totalBought: number;
+  totalSold: number;
+  profitLoss: number;
+  duration: string;
+  firstBuyTimestamp?: number;
+  lastSellTimestamp?: number;
+}
+
+// Helper function to calculate duration between timestamps
+const calculateDuration = (start: number, end: number): string => {
+  if (!start || !end) return 'Unknown';
+  
+  const durationMs = end - start;
+  const seconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) return `${days} day${days > 1 ? 's' : ''}`;
+  if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''}`;
+  if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+  return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+};
+
+// Helper function to process trades and find top performers
+const processTradesForTopPerformers = (trades: ProcessedTrade[]): TradeData[] => {
+  // Group trades by token
+  const tokenMap = new Map<string, {
+    buys: { amount: number, timestamp: number, valueUSD: number }[],
+    sells: { amount: number, timestamp: number, valueUSD: number }[],
+    tokenSymbol: string,
+    tokenLogoURI: string | null
+  }>();
+  
+  // Process each trade
+  for (const trade of trades) {
+    // Skip trades without required data
+    if (!trade.tokenAddress || !trade.amount) continue;
+    
+    // Get or create token entry
+    let tokenData = tokenMap.get(trade.tokenAddress);
+    if (!tokenData) {
+      tokenData = {
+        buys: [],
+        sells: [],
+        tokenSymbol: trade.tokenSymbol,
+        tokenLogoURI: trade.tokenLogoURI
+      };
+      tokenMap.set(trade.tokenAddress, tokenData);
+    }
+    
+    // Add to buys or sells
+    if (trade.type === 'BUY') {
+      tokenData.buys.push({
+        amount: trade.amount,
+        timestamp: trade.timestamp,
+        valueUSD: trade.valueUSD
+      });
+    } else if (trade.type === 'SELL') {
+      tokenData.sells.push({
+        amount: trade.amount,
+        timestamp: trade.timestamp,
+        valueUSD: trade.valueUSD
+      });
+    }
+  }
+  
+  // Calculate metrics for each token
+  const result: TradeData[] = [];
+  
+  for (const [tokenAddress, data] of tokenMap.entries()) {
+    // Only include tokens that have both buys and sells
+    if (data.buys.length === 0 || data.sells.length === 0) continue;
+    
+    // Calculate total bought/sold
+    const totalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
+    const totalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
+    
+    // Calculate profit/loss
+    const totalBuyValue = data.buys.reduce((sum, buy) => sum + buy.valueUSD, 0);
+    const totalSellValue = data.sells.reduce((sum, sell) => sum + sell.valueUSD, 0);
+    const profitLoss = totalSellValue - totalBuyValue;
+    
+    // Find first buy and last sell
+    const firstBuy = data.buys.reduce(
+      (earliest, buy) => buy.timestamp < earliest.timestamp ? buy : earliest, 
+      data.buys[0]
+    );
+    
+    const lastSell = data.sells.reduce(
+      (latest, sell) => sell.timestamp > latest.timestamp ? sell : latest, 
+      data.sells[0]
+    );
+    
+    // Calculate duration
+    const duration = calculateDuration(firstBuy.timestamp, lastSell.timestamp);
+    
+    result.push({
+      tokenAddress,
+      tokenSymbol: data.tokenSymbol,
+      tokenLogoURI: data.tokenLogoURI || undefined,
+      totalBought,
+      totalSold,
+      profitLoss,
+      duration,
+      firstBuyTimestamp: firstBuy.timestamp,
+      lastSellTimestamp: lastSell.timestamp
+    });
+  }
+  
+  // Sort by profit (highest first)
+  return result.sort((a, b) => b.profitLoss - a.profitLoss);
+};
 
 export default function TopTrades() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [topTrades, setTopTrades] = useState<TradeData[]>([]);
-  const [tradingHistory, setTradingHistory] = useState<any[]>([]);
+  const [tradingHistory, setTradingHistory] = useState<ProcessedTrade[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -82,19 +202,29 @@ export default function TopTrades() {
       }, 5000);
       
       try {
-        // Fetch top trades and trading history in parallel
-        const [tradesData, historyData] = await Promise.all([
-          fetchTopTrades(selectedWallet.wallet_address),
-          fetchTradingHistory(selectedWallet.wallet_address)
-        ]);
+        // Use the tradingHistoryService to get all trading history
+        const result = await tradingHistoryService.getTradingHistory(
+          user!.id,
+          selectedWallet.wallet_address,
+          500, // Get a larger number of trades for better analysis
+          1
+        );
         
-        setTopTrades(tradesData);
-        setTradingHistory(historyData);
+        // Process the trades to find top performers
+        const processedTopTrades = processTradesForTopPerformers(result.trades);
+        setTopTrades(processedTopTrades);
+        setTradingHistory(result.trades);
+        
       } catch (err: any) {
         console.error('Error loading trade data:', err);
         
         // Enhanced error handling with more specific messages
-        if (err.message?.includes('TRANSACTION_FETCH_ERROR') || err.message?.includes('getTransaction')) {
+        if (err.message?.includes('Minimum context slot')) {
+          // This is a known DRPC API limitation
+          console.log('RPC provider reported: Minimum context slot has not been reached');
+          setApiError('The Solana RPC service reported a sync delay. We\'re using cached data for now.');
+          setErrorType('rpc');
+        } else if (err.message?.includes('TRANSACTION_FETCH_ERROR') || err.message?.includes('getTransaction')) {
           setApiError('Unable to fetch transaction data. Our systems are working to resolve this issue.');
           setErrorType('rpc');
         } else if (err.message?.includes('Service Unavailable') || err.message?.includes('503')) {
@@ -111,7 +241,7 @@ export default function TopTrades() {
           setApiError('Request timeout. The Solana network may be experiencing high traffic.');
           setErrorType('timeout');
         } else {
-        setError('Failed to load trade data. Please try again.');
+          setError('Failed to load trade data. Please try again.');
         }
       } finally {
         setDataLoading(false);
@@ -120,7 +250,7 @@ export default function TopTrades() {
     };
     
     getTradeData();
-  }, [selectedWalletId, wallets]);
+  }, [selectedWalletId, wallets, user?.id]);
 
   // Calculate best and worst trades
   const bestTrade = topTrades.length > 0 
@@ -153,13 +283,19 @@ export default function TopTrades() {
             setDataLoading(true);
             setLoadingMessage("Retrying...");
             
-            const [tradesData, historyData] = await Promise.all([
-              fetchTopTrades(selectedWallet.wallet_address),
-              fetchTradingHistory(selectedWallet.wallet_address)
-            ]);
+            // Use the tradingHistoryService to get all trading history
+            const result = await tradingHistoryService.getTradingHistory(
+              user!.id,
+              selectedWallet.wallet_address,
+              500,
+              1
+            );
             
-            setTopTrades(tradesData);
-            setTradingHistory(historyData);
+            // Process the trades to find top performers
+            const processedTopTrades = processTradesForTopPerformers(result.trades);
+            setTopTrades(processedTopTrades);
+            setTradingHistory(result.trades);
+            
           } catch (err) {
             console.error('Error retrying trade data fetch:', err);
           } finally {

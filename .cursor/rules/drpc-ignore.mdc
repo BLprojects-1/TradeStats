@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 Mindset & Rationale:
 The DRPC (Distributed Remote Procedure Call) connection module is a critical, battle-tested foundation for cross-service communication. Senior engineers recognize that stability here outweighs exploratory changes—any modification risks systemic outages.

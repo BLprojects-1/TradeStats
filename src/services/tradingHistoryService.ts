@@ -188,53 +188,47 @@ export class TradingHistoryService {
   }
 
   /**
-   * Cache new trades in Supabase
+   * Save processed trades to Supabase
    */
   async cacheTrades(userId: string, walletAddress: string, trades: ProcessedTrade[]): Promise<void> {
     try {
-      if (!trades.length) return;
+      if (!trades || trades.length === 0) {
+        console.log('No trades to cache');
+        return;
+      }
 
-      // First ensure the wallet exists and get its ID
-      const walletId = await this.ensureWalletExists(userId, walletAddress);
-      console.log('Caching trades for wallet:', walletId, 'Number of trades:', trades.length);
+      console.log(`Caching ${trades.length} trades for wallet ${walletAddress}`);
 
-      // Convert ProcessedTrade to database format
-      const tradesToInsert = trades.map(trade => {
-        const dbTrade = {
-          wallet_id: walletId,
-          signature: trade.signature,
-          timestamp: new Date(trade.timestamp).toISOString(),
-          block_time: trade.blockTime || Math.floor(trade.timestamp / 1000),
-          type: trade.type || 'UNKNOWN',
-          token_symbol: trade.tokenSymbol || 'Unknown',
-          token_address: trade.tokenAddress || '',
-          token_logo_uri: trade.tokenLogoURI || null,
-          decimals: trade.decimals || 0,
-          amount: trade.amount || 0,
-          price_sol: trade.priceSOL || 0,
-          price_usd: trade.priceUSD || 0,
-          value_sol: trade.valueSOL || 0,
-          value_usd: trade.valueUSD || 0,
-          profit_loss: trade.profitLoss || 0
-        };
+      // 1. Get wallet ID
+      const { walletId, initialScanComplete } = await this.ensureWalletExists(userId, walletAddress);
 
-        console.log('Processing trade for caching:', {
-          signature: dbTrade.signature,
-          type: dbTrade.type,
-          token: dbTrade.token_symbol,
-          amount: dbTrade.amount,
-          timestamp: dbTrade.timestamp
-        });
+      // 2. Convert to database records
+      const tradeRecords = trades.map(trade => ({
+        id: uuidv4(),
+        wallet_id: walletId,
+        signature: trade.signature,
+        timestamp: new Date(trade.timestamp).toISOString(),
+        block_time: trade.blockTime || 0,
+        type: trade.type,
+        token_symbol: trade.tokenSymbol,
+        token_address: trade.tokenAddress,
+        token_logo_uri: trade.tokenLogoURI || null,
+        decimals: trade.decimals || 9,
+        amount: trade.amount,
+        price_sol: trade.priceSOL || 0,
+        price_usd: trade.priceUSD || 0,
+        value_sol: trade.valueSOL || 0,
+        value_usd: trade.valueUSD || 0,
+        profit_loss: trade.profitLoss || 0,
+        market_cap: 0, // We don't have market cap data
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
 
-        return dbTrade;
-      });
-
-      console.log('Inserting trades into Supabase:', tradesToInsert.length);
-
-      // Use upsert to handle duplicates
+      // 3. Upsert to database
       const { error } = await supabase
         .from('trading_history')
-        .upsert(tradesToInsert, {
+        .upsert(tradeRecords, {
           onConflict: 'wallet_id,signature'
         });
 
@@ -243,7 +237,40 @@ export class TradingHistoryService {
         throw error;
       }
 
-      console.log('Successfully cached trades');
+      // 4. Update the wallet's status if this was the initial scan
+      if (!initialScanComplete) {
+        const { error: walletUpdateError } = await supabase
+          .from('wallets')
+          .update({ 
+            initial_scan_complete: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', walletId);
+
+        if (walletUpdateError) {
+          console.error('Error updating wallet status:', walletUpdateError);
+          throw walletUpdateError;
+        }
+        
+        console.log(`Updated wallet ${walletId} to mark initial scan as complete`);
+      } else {
+        // 5. Always update the wallet's updated_at timestamp after saving trades
+        const { error: timestampUpdateError } = await supabase
+          .from('wallets')
+          .update({ 
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', walletId);
+
+        if (timestampUpdateError) {
+          console.error('Error updating wallet timestamp:', timestampUpdateError);
+          throw timestampUpdateError;
+        }
+        
+        console.log(`Updated wallet ${walletId} timestamp after saving trades`);
+      }
+
+      console.log(`Successfully cached ${trades.length} trades for wallet ${walletAddress}`);
     } catch (error) {
       console.error('Error in cacheTrades:', error);
       throw error;
@@ -345,28 +372,165 @@ export class TradingHistoryService {
       // Calculate offset
       const offset = (page - 1) * limit;
 
-      // First get the wallet_id
-      const { data: wallet, error: walletError } = await supabase
-          .from('wallets')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('wallet_address', walletAddress)
-        .single();
+      // Check wallet status and ensure it exists
+      const { walletId, initialScanComplete, lastUpdated } = await this.ensureWalletExists(userId, walletAddress);
+      
+      console.log('Wallet status:', {
+        walletId,
+        initialScanComplete,
+        lastUpdated: lastUpdated ? lastUpdated.toISOString() : null
+      });
 
-      if (walletError) {
-        console.error('Error fetching wallet:', walletError);
-        throw walletError;
+      // Fetch trades from DRPC based on wallet status
+      let newTradesProcessed = false;
+      
+      if (!initialScanComplete || !lastUpdated) {
+        // For initial scan, fetch last 7 days of trades
+        console.log('Performing initial scan for wallet:', walletAddress);
+        
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        try {
+          // Get transactions from DRPC for the last 7 days
+          const transactions = await drpcClient.getTransactionsByWallet(
+            walletAddress,
+            { from: sevenDaysAgo }
+          );
+          
+          console.log(`Retrieved ${transactions.length} transactions for initial scan`);
+          
+          // Process transactions into trades
+          const processedTrades: ProcessedTrade[] = [];
+          
+          for (const tx of transactions) {
+            const trade = await this.processTransaction(tx, walletId);
+            if (trade) {
+              processedTrades.push(trade);
+            }
           }
-
-      if (!wallet) {
-        return { trades: [], totalCount: 0 };
+          
+          // Cache processed trades
+          if (processedTrades.length > 0) {
+            await this.cacheTrades(userId, walletAddress, processedTrades);
+            newTradesProcessed = true;
+          } else {
+            // Even if no trades were found, mark the wallet as scanned to prevent constant rescanning
+            const { error: walletUpdateError } = await supabase
+              .from('wallets')
+              .update({ 
+                initial_scan_complete: true,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', walletId);
+              
+            if (walletUpdateError) {
+              console.error('Error updating wallet status after empty scan:', walletUpdateError);
+            }
+          }
+          
+        } catch (error) {
+          console.error('Error during initial scan:', error);
+          
+          // If the error is related to "Minimum context slot", we can still proceed
+          // This is a known limitation with some RPC providers
+          if (error instanceof Error && 
+              (error.message.includes('Minimum context slot') || 
+               error.message.includes('TRANSACTION_FETCH_ERROR'))) {
+            console.log('Continuing despite RPC error during initial scan');
+            
+            // Mark the wallet as scanned anyway to prevent constant rescanning
+            const { error: walletUpdateError } = await supabase
+              .from('wallets')
+              .update({ 
+                initial_scan_complete: true,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', walletId);
+              
+            if (walletUpdateError) {
+              console.error('Error updating wallet status after failed scan:', walletUpdateError);
+            }
+          } else {
+            // For other errors, we might want to rethrow or handle differently
+            console.error('Unexpected error during initial scan:', error);
+          }
+          // Continue to return cached data even if the scan fails
+        }
+      } else {
+        // For subsequent scans, fetch only trades since last update
+        console.log('Performing incremental scan since:', lastUpdated.toISOString());
+        
+        try {
+          // Get transactions from DRPC since the last update
+          const transactions = await drpcClient.getTransactionsByWallet(
+            walletAddress,
+            { from: lastUpdated }
+          );
+          
+          console.log(`Retrieved ${transactions.length} transactions since last update`);
+          
+          // Process transactions into trades
+          const processedTrades: ProcessedTrade[] = [];
+          
+          for (const tx of transactions) {
+            const trade = await this.processTransaction(tx, walletId);
+            if (trade) {
+              processedTrades.push(trade);
+            }
+          }
+          
+          // Cache processed trades
+          if (processedTrades.length > 0) {
+            await this.cacheTrades(userId, walletAddress, processedTrades);
+            newTradesProcessed = true;
+          } else {
+            // Even if no new trades, update the last update timestamp
+            const { error: timestampUpdateError } = await supabase
+              .from('wallets')
+              .update({ 
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', walletId);
+              
+            if (timestampUpdateError) {
+              console.error('Error updating wallet timestamp after empty scan:', timestampUpdateError);
+            }
+          }
+          
+        } catch (error) {
+          console.error('Error during incremental scan:', error);
+          
+          // If the error is related to "Minimum context slot", we can still proceed
+          if (error instanceof Error && 
+              (error.message.includes('Minimum context slot') || 
+               error.message.includes('TRANSACTION_FETCH_ERROR'))) {
+            console.log('Continuing despite RPC error during incremental scan');
+            
+            // Update the wallet timestamp anyway to prevent repeated scanning
+            const { error: timestampUpdateError } = await supabase
+              .from('wallets')
+              .update({ 
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', walletId);
+              
+            if (timestampUpdateError) {
+              console.error('Error updating wallet timestamp after failed scan:', timestampUpdateError);
+            }
+          } else {
+            // For other errors, we might want to rethrow or handle differently
+            console.error('Unexpected error during incremental scan:', error);
+          }
+          // Continue to return cached data even if the scan fails
+        }
       }
 
-      // Then fetch trades using wallet_id
+      // Fetch trades from database with pagination
       const { data: trades, error, count } = await supabase
         .from('trading_history')
         .select('*', { count: 'exact' })
-        .eq('wallet_id', wallet.id)
+        .eq('wallet_id', walletId)
         .order('timestamp', { ascending: false })
         .range(offset, offset + limit - 1);
 
