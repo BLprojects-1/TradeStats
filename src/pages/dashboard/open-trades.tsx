@@ -182,7 +182,7 @@ export default function OpenTrades() {
       // If initial scan is not complete and wallet is not already being scanned, mark it as scanning
       if (!isInitialScanComplete && !walletIsCurrentlyScanning) {
         markWalletAsScanning(selectedWalletId);
-        setLoadingMessage("Performing initial wallet scan. This may take a moment...");
+        setLoadingMessage("Initial wallet scan in progress. This may take up to 2 minutes for the first scan.");
       } else {
         // Show more detailed loading messages to set user expectations
         setTimeout(() => {
@@ -334,14 +334,6 @@ export default function OpenTrades() {
         </div>
       )}
       
-      {selectedWalletId && isWalletScanning(selectedWalletId) && (
-        <div className="bg-[#23232b] border border-blue-500/20 text-blue-200 px-4 py-3 rounded mb-4">
-          <p className="font-bold">Initial wallet scan in progress</p>
-          <p>This may take up to 2 minutes for the first scan. Subsequent updates will be much faster.</p>
-          <p className="mt-2 text-sm">We're scanning your wallet's transaction history and processing trades. Please wait...</p>
-        </div>
-      )}
-
       <div className="space-y-6">
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
           <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Active Positions (24h)</h2>
@@ -434,7 +426,13 @@ export default function OpenTrades() {
         </div>
       </div>
 
-      <LoadingToast isVisible={dataLoading} message={loadingMessage} />
+      <LoadingToast 
+        isVisible={!!(dataLoading || (selectedWalletId && isWalletScanning(selectedWalletId) && walletData.length === 0))} 
+        message={selectedWalletId && isWalletScanning(selectedWalletId) ? 
+          "Initial wallet scan in progress. This may take a moment. We're scanning your transaction history." : 
+          loadingMessage || ''
+        } 
+      />
     </DashboardLayout>
   );
 }
