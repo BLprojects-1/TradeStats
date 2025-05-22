@@ -13,7 +13,7 @@ const TermsOfService = () => {
       </Head>
 
       <header className="bg-[#0a0a0f]/80 backdrop-blur-md border-b border-indigo-900/20 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-5 flex justify-between items-center">
           <div className="flex items-center">
             <Link href="/" className="block">
               <Image 
@@ -21,13 +21,13 @@ const TermsOfService = () => {
                 alt="Ryvu Logo" 
                 width={140} 
                 height={40}
-                className="h-10 w-auto"
+                className="h-6 sm:h-10 w-auto"
                 priority
               />
             </Link>
           </div>
           <div>
-            <Link href="/" className="px-4 py-2 text-indigo-300 hover:text-indigo-200 font-medium transition-colors">
+            <Link href="/" className="px-3 sm:px-4 py-1 sm:py-2 text-sm sm:text-base text-indigo-300 hover:text-indigo-200 font-medium transition-colors">
               Back to Home
             </Link>
           </div>

@@ -66,20 +66,20 @@ export default function Home() {
       </div>
 
       <header className="relative z-10 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-indigo-900/20 sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-5 flex justify-between items-center">
           <div className="flex items-center">
             <a href="/" className="block">
               <Image 
                 src="/logo.png" 
-                alt="Journi Logo" 
+                alt="Ryvu Logo" 
                 width={140} 
                 height={40}
-                className="h-10 w-auto"
+                className="h-6 sm:h-10 w-auto"
                 priority
               />
             </a>
           </div>
-          <div className="flex gap-6 items-center">
+          <div className="flex gap-2 sm:gap-6 items-center">
             <div className="hidden sm:flex items-center space-x-3">
               <a 
                 href="https://x.com/Ryvujournal" 
@@ -111,14 +111,14 @@ export default function Home() {
             </div>
             <button 
               onClick={handleOpenSignIn}
-              className="px-4 py-2 text-indigo-300 hover:text-indigo-200 font-medium transition-colors"
+              className="px-2 sm:px-4 py-1 sm:py-2 text-sm sm:text-base text-indigo-300 hover:text-indigo-200 font-medium transition-colors"
               aria-label="Sign in"
             >
               Sign In
             </button>
             <button 
               onClick={handleOpenSignUp}
-              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-md hover:from-indigo-500 hover:to-indigo-400 shadow-lg shadow-indigo-900/30 transition-all duration-300 font-medium"
+              className="px-3 sm:px-5 py-1.5 sm:py-2.5 text-sm sm:text-base bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-md hover:from-indigo-500 hover:to-indigo-400 shadow-lg shadow-indigo-900/30 transition-all duration-300 font-medium"
               aria-label="Sign up for free"
             >
               Sign Up Free
