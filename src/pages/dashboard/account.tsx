@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
-import { getUserProfile, UserProfile, updateUserProfile, deleteUserAccount, getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
+import { useWalletSelection } from '../../contexts/WalletSelectionContext';
+import { getUserProfile, UserProfile, updateUserProfile, deleteUserAccount, TrackedWallet } from '../../utils/userProfile';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import WalletList from '../../components/WalletList';
 import AddWalletModal from '../../components/AddWalletModal';
 
 export default function Account() {
   const { user, loading, signOut } = useAuth();
+  const { wallets, setSelectedWalletId } = useWalletSelection();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -15,8 +17,6 @@ export default function Account() {
   const [displayName, setDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [wallets, setWallets] = useState<TrackedWallet[]>([]);
-  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
 
   useEffect(() => {
@@ -29,13 +29,10 @@ export default function Account() {
     const fetchData = async () => {
       if (!user?.id) return;
       try {
-        const [userProfile, userWallets] = await Promise.all([
-          getUserProfile(user.id),
-          getTrackedWallets(user.id)
-        ]);
+        // Only need to fetch the user profile since wallets are now managed by the context
+        const userProfile = await getUserProfile(user.id);
         setProfile(userProfile);
         setDisplayName(userProfile?.display_name || '');
-        setWallets(userWallets);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load profile. Please try again.');
@@ -82,7 +79,8 @@ export default function Account() {
   };
 
   const handleWalletAdded = (newWallet: TrackedWallet) => {
-    setWallets(prevWallets => [newWallet, ...prevWallets]);
+    // WalletList will update through the context automatically
+    setShowAddWalletModal(false);
   };
 
   if (loading) {
@@ -100,9 +98,6 @@ export default function Account() {
   return (
     <DashboardLayout 
       title="Account Settings"
-      wallets={wallets}
-      selectedWalletId={selectedWalletId}
-      onWalletChange={setSelectedWalletId}
     >
       {error && (
         <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">

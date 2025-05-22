@@ -4,12 +4,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
+import { TrackedWallet } from '../../utils/userProfile';
+import { useWalletSelection } from '../../contexts/WalletSelectionContext';
 
 interface DashboardLayoutProps {
   children: ReactNode;
   title: string;
   description?: string;
-  wallets?: { id: string; wallet_address: string; label?: string }[];
+  wallets?: TrackedWallet[];
   selectedWalletId?: string | null;
   onWalletChange?: (walletId: string | null) => void;
 }
@@ -18,9 +20,9 @@ const DashboardLayout = ({
   children,
   title,
   description = "Your Solana Trading Journal Dashboard",
-  wallets = [],
-  selectedWalletId = null,
-  onWalletChange,
+  wallets: propWallets,
+  selectedWalletId: propSelectedWalletId,
+  onWalletChange
 }: DashboardLayoutProps) => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -29,6 +31,18 @@ const DashboardLayout = ({
   const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Use the shared wallet selection context
+  const { 
+    wallets: contextWallets, 
+    selectedWalletId: contextSelectedWalletId,
+    setSelectedWalletId: contextSetSelectedWalletId,
+    loading: walletsLoading
+  } = useWalletSelection();
+
+  // Use context values, falling back to props for backward compatibility
+  const wallets = contextWallets || propWallets || [];
+  const selectedWalletId = contextSelectedWalletId !== null ? contextSelectedWalletId : propSelectedWalletId;
 
   const handleAvatarClick = () => setDropdownOpen((open) => !open);
   const handleAvatarKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -84,6 +98,19 @@ const DashboardLayout = ({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [dropdownOpen]);
+
+  // Handle wallet selection change
+  const handleWalletChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newWalletId = e.target.value || null;
+    
+    // Update the context
+    contextSetSelectedWalletId(newWalletId);
+    
+    // Also call the prop handler for backward compatibility
+    if (onWalletChange) {
+      onWalletChange(newWalletId);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-black">
@@ -183,44 +210,21 @@ const DashboardLayout = ({
               <div className="flex items-center gap-4">
                 {/* Wallet Dropdown */}
                 <div className="relative">
-                  <div
-                    className="flex items-center gap-2 px-4 py-2 bg-[#23232b] text-white rounded-lg cursor-pointer hover:bg-[#2a2a2a] focus:outline-none focus:ring-2 focus:ring-indigo-400 min-w-[140px]"
-                    tabIndex={0}
-                    aria-label="Select wallet"
-                    onClick={handleWalletDropdownClick}
-                    onKeyDown={handleWalletDropdownKeyDown}
+                  <select
+                    id="walletSelect"
+                    className="block w-full py-2 pl-3 pr-10 text-sm bg-[#252525] border border-gray-700 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    value={selectedWalletId || ""}
+                    onChange={handleWalletChange}
+                    disabled={walletsLoading}
                   >
-                    <span className="truncate">
-                      {selectedWallet ? (selectedWallet.label || 'Wallet') : 'All wallets'}
-                    </span>
-                    <svg className="w-4 h-4 ml-1 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                  {walletDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-[#23232b] rounded-md shadow-lg py-2 z-30 border border-gray-700 animate-fade-in max-h-72 overflow-y-auto">
-                      <button
-                        className={`w-full text-left px-4 py-2 text-sm ${!selectedWalletId ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800'} focus:bg-gray-800 focus:outline-none`}
-                        onClick={() => handleWalletSelect(null)}
-                        tabIndex={0}
-                        aria-label="Select all wallets"
-                      >
-                        All wallets
-                      </button>
-                      {wallets.map((wallet) => (
-                        <button
-                          key={wallet.id}
-                          className={`w-full text-left px-4 py-2 text-sm truncate ${selectedWalletId === wallet.id ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800'} focus:bg-gray-800 focus:outline-none`}
-                          onClick={() => handleWalletSelect(wallet.id)}
-                          tabIndex={0}
-                          aria-label={`Select wallet ${wallet.label || wallet.wallet_address}`}
-                        >
-                          {wallet.label || 'Wallet'}
-                          <span className="block text-xs text-gray-400 truncate">{wallet.wallet_address}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                    <option value="">Select wallet</option>
+                    {wallets.map((wallet) => (
+                      <option key={wallet.id} value={wallet.id}>
+                        {wallet.wallet_address.substring(0, 6)}...{wallet.wallet_address.substring(wallet.wallet_address.length - 4)}
+                        {wallet.label ? ` (${wallet.label})` : wallet.nickname ? ` (${wallet.nickname})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {/* User Avatar */}
                 <div className="relative flex items-center">

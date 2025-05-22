@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWalletSelection } from '../../contexts/WalletSelectionContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
@@ -129,13 +130,19 @@ const formatTime = (timestamp: number | string | Date) => {
   }
 };
 
+// Cache object to store trades data between page navigations
+const tradesCache = new Map<string, {
+  trades: ProcessedTrade[],
+  totalCount: number,
+  timestamp: number
+}>();
+
 export default function TradingHistory() {
   const { user, loading } = useAuth();
+  const { selectedWalletId, wallets, setSelectedWalletId, isWalletScanning, markWalletAsScanning, markWalletScanComplete } = useWalletSelection();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [wallets, setWallets] = useState<TrackedWallet[]>([]);
-  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [trades, setTrades] = useState<ProcessedTrade[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
@@ -146,7 +153,6 @@ export default function TradingHistory() {
   const [lastSignature, setLastSignature] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [rawTransactions, setRawTransactions] = useState<any[]>([]);
-  const [initialScanInProgress, setInitialScanInProgress] = useState(false);
   const [errorType, setErrorType] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMoreTrades, setHasMoreTrades] = useState(false);
@@ -158,28 +164,6 @@ export default function TradingHistory() {
     }
   }, [user, loading, router]);
 
-  // Load wallets when component mounts
-  useEffect(() => {
-    const fetchWallets = async () => {
-      if (!user?.id) return;
-      try {
-        const userWallets = await getTrackedWallets(user.id);
-        setWallets(userWallets);
-        
-        // If there's only one wallet, automatically select it
-        if (userWallets.length === 1) {
-          setSelectedWalletId(userWallets[0].id);
-        }
-      } catch (err) {
-        console.error('Error loading wallets:', err);
-        setError('Failed to load wallets. Please try again.');
-      }
-    };
-    
-    if (user)
-      fetchWallets();
-  }, [user]);
-
   // Load data when a wallet is selected or filters change
   useEffect(() => {
     const getTradeHistory = async () => {
@@ -188,52 +172,62 @@ export default function TradingHistory() {
       const selectedWallet = wallets.find(w => w.id === selectedWalletId);
       if (!selectedWallet) return;
       
+      // Check if initial scan is complete first - use explicit comparison to ensure boolean value
+      const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
+      console.log(`Wallet ${selectedWallet.wallet_address} initial_scan_complete:`, isInitialScanComplete);
+      
+      // Only set initial scan in progress if scan is NOT complete AND not already scanning
+      const walletIsCurrentlyScanning = isWalletScanning(selectedWalletId);
+      
+      // Check cache first - use cached data if available and less than 5 minutes old
+      const cacheKey = `${selectedWalletId}_${currentPage}`;
+      const cachedData = tradesCache.get(cacheKey);
+      const now = Date.now();
+      const fiveMinutesAgo = now - 5 * 60 * 1000;
+      
+      // Use cached data if it's recent and wallet is already being scanned or scan is complete
+      if (cachedData && cachedData.timestamp > fiveMinutesAgo && (isInitialScanComplete || walletIsCurrentlyScanning)) {
+        console.log('Using cached trade data');
+        setTrades(cachedData.trades);
+        setTotalTrades(cachedData.totalCount);
+        setTotalPages(Math.ceil(cachedData.totalCount / TRADES_PER_PAGE));
+        setDataLoading(false); // Ensure loading is set to false when using cache
+        return;
+      }
+      
+      // Set loading state only if we need to fetch
       setDataLoading(true);
-      setLoadingMessage("Loading your trading history...");
       setError(null);
       setApiError(null);
       setNextCursor(null); // Reset cursor when changing wallet or filters
       
+      // If initial scan is not complete, mark this wallet as scanning in the context
+      if (!isInitialScanComplete && !walletIsCurrentlyScanning) {
+        markWalletAsScanning(selectedWalletId);
+      }
+      
+      // Set appropriate loading message based on initial scan status
+      if (isInitialScanComplete) {
+        setLoadingMessage("Loading trade history from database...");
+      } else {
+        setLoadingMessage("Performing initial wallet scan. This may take a moment...");
+      }
+      
       try {
-        console.log('Loading trades for wallet:', selectedWallet.wallet_address);
+        console.log(`Loading trades for wallet: ${selectedWallet.wallet_address}, initialScanComplete: ${isInitialScanComplete}`);
         
         // Reset pagination when filters change
         setCurrentPage(1);
         
-        // Check if initial scan is complete
-        setInitialScanInProgress(selectedWallet.initial_scan_complete === false);
-
-        // Show more detailed loading messages to set user expectations
-        setTimeout(() => {
-          if (dataLoading) {
-            setLoadingMessage("Connecting to Solana RPC services...");
-          }
-        }, 1500);
+        // Calculate timestamp for 24 hours ago
+        const oneDayAgo = new Date();
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24);
         
-        setTimeout(() => {
-          if (dataLoading) {
-            setLoadingMessage("Fetching your transaction history...");
-          }
-        }, 3000);
-        
-        setTimeout(() => {
-          if (dataLoading) {
-            setLoadingMessage("Processing transaction data...");
-          }
-        }, 5000);
-        
-        setTimeout(() => {
-          if (dataLoading) {
-            setLoadingMessage("Almost there! Formatting your trades...");
-          }
-        }, 8000);
-
-        // Use tradingHistoryService directly to get trade history
         try {
-          // Calculate timestamp for 24 hours ago
-          const oneDayAgo = new Date();
-          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
-          
+          // Use tradingHistoryService to get trade history
+          // The service will now handle the logic to either:
+          // 1. Pull data directly from Supabase if initial_scan_complete is TRUE
+          // 2. Process data from DRPC/Jupiter and update Supabase if initial_scan_complete is FALSE
           const result = await tradingHistoryService.getTradingHistory(
             user!.id,
             selectedWallet.wallet_address,
@@ -247,20 +241,49 @@ export default function TradingHistory() {
             setTotalTrades(result.totalCount);
             setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
             
-            console.log(`Loaded ${result.trades.length} trades from DRPC`);
+            // Cache the result for future use
+            tradesCache.set(cacheKey, {
+              trades: result.trades,
+              totalCount: result.totalCount,
+              timestamp: now
+            });
+            
+            console.log(`Loaded ${result.trades.length} trades from database`);
           } else {
             console.log('No trades found for this wallet in the last 24 hours');
             setTrades([]);
             setTotalTrades(0);
+            
+            // Cache empty result to prevent unnecessary requests
+            tradesCache.set(cacheKey, {
+              trades: [],
+              totalCount: 0,
+              timestamp: now
+            });
           }
-        } catch (drpcError) {
-          console.error('Error loading trades from DRPC:', drpcError);
+          
+          // If this was an initial scan, mark it as complete in our context
+          if (!isInitialScanComplete) {
+            markWalletScanComplete(selectedWalletId);
+          }
+        } catch (apiError) {
+          console.error('Error loading trades:', apiError);
           setApiError('Unable to load trading history. Please try again later.');
           setErrorType('rpc');
+          
+          // If error during initial scan, still mark it as complete to prevent endless retries
+          if (!isInitialScanComplete) {
+            markWalletScanComplete(selectedWalletId);
+          }
         }
       } catch (err) {
         console.error('Error loading trade history:', err);
         setError('Failed to load trading history. Please try again.');
+        
+        // If error during initial scan, still mark it as complete to prevent endless retries
+        if (!isInitialScanComplete) {
+          markWalletScanComplete(selectedWalletId);
+        }
       } finally {
         setDataLoading(false);
         setLoadingMessage('');
@@ -270,7 +293,7 @@ export default function TradingHistory() {
     if (selectedWalletId) {
       getTradeHistory();
     }
-  }, [selectedWalletId, user?.id]);
+  }, [selectedWalletId, user?.id, wallets, currentPage, markWalletAsScanning, markWalletScanComplete, isWalletScanning]);
 
   // Update the loadMoreTrades function to use tradingHistoryService instead
   const loadMoreTrades = async () => {
@@ -279,8 +302,33 @@ export default function TradingHistory() {
     const selectedWallet = wallets.find(w => w.id === selectedWalletId);
     if (!selectedWallet) return;
     
+    // Check if initial scan is complete - use explicit comparison
+    const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
+    
+    // Check cache first for next page
+    const nextPage = currentPage + 1;
+    const cacheKey = `${selectedWalletId}_${nextPage}`;
+    const cachedData = tradesCache.get(cacheKey);
+    const now = Date.now();
+    const fiveMinutesAgo = now - 5 * 60 * 1000;
+    
+    if (cachedData && cachedData.timestamp > fiveMinutesAgo && isInitialScanComplete) {
+      // Use cached data for next page
+      setTrades(prev => [...prev, ...cachedData.trades]);
+      setTotalTrades(cachedData.totalCount);
+      setCurrentPage(nextPage);
+      setTotalPages(Math.ceil(cachedData.totalCount / TRADES_PER_PAGE));
+      setHasMoreTrades(nextPage < Math.ceil(cachedData.totalCount / TRADES_PER_PAGE));
+      console.log(`Loaded ${cachedData.trades.length} more trades from cache`);
+      return;
+    }
+    
     setLoadingMore(true);
-    setLoadingMessage("Loading more trades...");
+    
+    // Only show loading message if initial scan isn't complete
+    if (!isInitialScanComplete) {
+      setLoadingMessage("Loading more trades...");
+    }
     
     try {
       // Calculate 24 hours ago
@@ -288,7 +336,6 @@ export default function TradingHistory() {
       oneDayAgo.setHours(oneDayAgo.getHours() - 24);
       
       // Load next page
-      const nextPage = currentPage + 1;
       const result = await tradingHistoryService.getTradingHistory(
         user.id,
         selectedWallet.wallet_address,
@@ -305,9 +352,23 @@ export default function TradingHistory() {
         setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
         setHasMoreTrades(nextPage < Math.ceil(result.totalCount / TRADES_PER_PAGE));
         
+        // Cache the result
+        tradesCache.set(cacheKey, {
+          trades: result.trades,
+          totalCount: result.totalCount,
+          timestamp: now
+        });
+        
         console.log(`Loaded ${result.trades.length} more trades from page ${nextPage}`);
       } else {
         setHasMoreTrades(false);
+        
+        // Cache empty result
+        tradesCache.set(cacheKey, {
+          trades: [],
+          totalCount: totalTrades, // Keep the same total count
+          timestamp: now
+        });
       }
     } catch (error) {
       console.error('Error loading more trades:', error);
@@ -353,9 +414,6 @@ export default function TradingHistory() {
   return (
     <DashboardLayout 
       title="Trading History"
-      wallets={wallets}
-      selectedWalletId={selectedWalletId}
-      onWalletChange={setSelectedWalletId}
     >
       <div className="p-4 md:p-8">
         <div className="mb-6">
@@ -401,7 +459,7 @@ export default function TradingHistory() {
             </div>
           )}
           
-          {initialScanInProgress && (
+          {selectedWalletId && isWalletScanning(selectedWalletId) && (
             <div className="bg-[#23232b] border border-blue-500/20 text-blue-200 px-4 py-3 rounded mb-4">
               <p className="font-bold">Initial wallet scan in progress</p>
               <p>This may take up to 2 minutes for the first scan. Subsequent updates will be much faster.</p>

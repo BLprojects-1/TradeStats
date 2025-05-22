@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWalletSelection } from '../../contexts/WalletSelectionContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
-import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
@@ -147,14 +147,13 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
 
 export default function OpenTrades() {
   const { user, loading } = useAuth();
+  const { selectedWalletId, wallets, setSelectedWalletId, isWalletScanning, markWalletAsScanning, markWalletScanComplete } = useWalletSelection();
   const router = useRouter();
   const [walletData, setWalletData] = useState<TokenData[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<string | null>(null);
-  const [wallets, setWallets] = useState<TrackedWallet[]>([]);
-  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
 
   useEffect(() => {
@@ -162,29 +161,6 @@ export default function OpenTrades() {
       router.push('/');
     }
   }, [user, loading, router]);
-
-  // Load wallets when component mounts
-  useEffect(() => {
-    const fetchWallets = async () => {
-      if (!user?.id) return;
-      try {
-        const userWallets = await getTrackedWallets(user.id);
-        setWallets(userWallets);
-        
-        // If there's only one wallet, automatically select it
-        if (userWallets.length === 1) {
-          setSelectedWalletId(userWallets[0].id);
-        }
-      } catch (err) {
-        console.error('Error loading wallets:', err);
-        setError('Failed to load wallets. Please try again.');
-      }
-    };
-    
-    if (user) {
-      fetchWallets();
-    }
-  }, [user]);
 
   // Load data when a wallet is selected
   useEffect(() => {
@@ -199,18 +175,28 @@ export default function OpenTrades() {
       setError(null);
       setApiError(null);
       
-      // Show more detailed loading messages to set user expectations
-      setTimeout(() => {
-        if (dataLoading) {
-          setLoadingMessage("Connecting to Solana RPC services...");
-        }
-      }, 1500);
+      // Check if initial scan is complete
+      const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
+      const walletIsCurrentlyScanning = isWalletScanning(selectedWalletId);
       
-      setTimeout(() => {
-        if (dataLoading) {
-          setLoadingMessage("Fetching wallet data...");
-        }
-      }, 3000);
+      // If initial scan is not complete and wallet is not already being scanned, mark it as scanning
+      if (!isInitialScanComplete && !walletIsCurrentlyScanning) {
+        markWalletAsScanning(selectedWalletId);
+        setLoadingMessage("Performing initial wallet scan. This may take a moment...");
+      } else {
+        // Show more detailed loading messages to set user expectations
+        setTimeout(() => {
+          if (dataLoading) {
+            setLoadingMessage("Connecting to Solana RPC services...");
+          }
+        }, 1500);
+        
+        setTimeout(() => {
+          if (dataLoading) {
+            setLoadingMessage("Fetching wallet data...");
+          }
+        }, 3000);
+      }
       
       try {
         // Use the tradingHistoryService to get all trading history
@@ -225,8 +211,17 @@ export default function OpenTrades() {
         const openPositions = await processTradesToHoldings(result.trades);
         setWalletData(openPositions);
         
+        // If this was an initial scan, mark it as complete in our context
+        if (!isInitialScanComplete) {
+          markWalletScanComplete(selectedWalletId);
+        }
       } catch (err: any) {
         console.error('Error loading wallet data:', err);
+        
+        // If error during initial scan, still mark it as complete to prevent endless retries
+        if (!isInitialScanComplete) {
+          markWalletScanComplete(selectedWalletId);
+        }
         
         // Enhanced error handling with more specific messages
         if (err.message?.includes('Minimum context slot')) {
@@ -255,7 +250,7 @@ export default function OpenTrades() {
           console.log('Rate limit hit on Jupiter API, using rate-limited service which will retry automatically');
           // Our rate-limited service will handle this internally with exponential backoff
         } else {
-        setError('Failed to load wallet data. Please try again.');
+          setError('Failed to load wallet data. Please try again.');
         }
       } finally {
         setDataLoading(false);
@@ -264,7 +259,7 @@ export default function OpenTrades() {
     };
     
     getWalletData();
-  }, [selectedWalletId, wallets, user?.id]);
+  }, [selectedWalletId, wallets, user?.id, dataLoading, isWalletScanning, markWalletAsScanning, markWalletScanComplete]);
 
   const handleRetry = () => {
     if (selectedWalletId) {
@@ -315,9 +310,6 @@ export default function OpenTrades() {
   return (
     <DashboardLayout 
       title="Open Trades"
-      wallets={wallets}
-      selectedWalletId={selectedWalletId}
-      onWalletChange={setSelectedWalletId}
     >
       <div className="mb-6">
         <h1 className="text-2xl font-semibold mb-2 text-white">24h Open Trades</h1>
@@ -339,6 +331,14 @@ export default function OpenTrades() {
       {!selectedWalletId && (
         <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-6">
           Please select a wallet from the dropdown menu to view your open trades.
+        </div>
+      )}
+      
+      {selectedWalletId && isWalletScanning(selectedWalletId) && (
+        <div className="bg-[#23232b] border border-blue-500/20 text-blue-200 px-4 py-3 rounded mb-4">
+          <p className="font-bold">Initial wallet scan in progress</p>
+          <p>This may take up to 2 minutes for the first scan. Subsequent updates will be much faster.</p>
+          <p className="mt-2 text-sm">We're scanning your wallet's transaction history and processing trades. Please wait...</p>
         </div>
       )}
 

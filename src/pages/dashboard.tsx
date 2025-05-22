@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserProfile, hasCompletedOnboarding, getTrackedWallets, TrackedWallet } from '../utils/userProfile';
+import { useWalletSelection } from '../contexts/WalletSelectionContext';
+import { getUserProfile, hasCompletedOnboarding } from '../utils/userProfile';
 import OnboardingForm from '../components/OnboardingForm';
 import WalletList from '../components/WalletList';
 import AddWalletModal from '../components/AddWalletModal';
@@ -9,14 +10,12 @@ import DashboardLayout from '../components/layouts/DashboardLayout';
 
 export default function Dashboard() {
   const { user, loading, refreshSession } = useAuth();
+  const { selectedWalletId, wallets } = useWalletSelection();
   const router = useRouter();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
-  const [wallets, setWallets] = useState<TrackedWallet[]>([]);
-  const [walletsLoading, setWalletsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
 
   useEffect(() => {
     // If not loading and no user, redirect to home page
@@ -39,14 +38,6 @@ export default function Dashboard() {
         // Check if user has completed onboarding
         const completed = await hasCompletedOnboarding(user.id);
         setShowOnboarding(!completed);
-        
-        if (completed) {
-          // Fetch user's wallets
-          setWalletsLoading(true);
-          const userWallets = await getTrackedWallets(user.id);
-          setWallets(userWallets);
-          setWalletsLoading(false);
-        }
       } catch (err) {
         console.error('Error checking onboarding status:', err);
         setError('Failed to check onboarding status. Please refresh the page.');
@@ -65,9 +56,6 @@ export default function Dashboard() {
       try {
         await refreshSession();
         setShowOnboarding(false);
-        const userWallets = await getTrackedWallets(user.id);
-        setWallets(userWallets);
-        setWalletsLoading(false);
       } catch (err) {
         console.error('Error completing onboarding:', err);
         setError('Failed to complete onboarding. Please try again.');
@@ -84,14 +72,8 @@ export default function Dashboard() {
   };
 
   const handleWalletAdded = async () => {
-    if (user) {
-      try {
-        const userWallets = await getTrackedWallets(user.id);
-        setWallets(userWallets);
-      } catch (err) {
-        console.error('Error fetching wallets after add:', err);
-      }
-    }
+    // No need to fetch wallets here, as the context will handle this
+    setShowAddWalletModal(false);
   };
 
   // Show loading state while checking authentication
@@ -114,12 +96,7 @@ export default function Dashboard() {
   }
 
   return (
-    <DashboardLayout
-      title="Dashboard"
-      wallets={wallets}
-      selectedWalletId={selectedWalletId}
-      onWalletChange={setSelectedWalletId}
-    >
+    <DashboardLayout title="Dashboard">
       {error && (
         <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
           {error}
