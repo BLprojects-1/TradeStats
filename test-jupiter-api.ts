@@ -1,4 +1,4 @@
-import { jupiterApiService } from './src/services/jupiterApiService.ts';
+import { jupiterApiService } from './src/services/jupiterApiService';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

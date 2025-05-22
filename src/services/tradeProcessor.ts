@@ -322,54 +322,39 @@ export class TradeProcessor {
       let marketCap: number | undefined = undefined;
 
       try {
-        // First, try to fetch token information from Jupiter API
+        // Update token information from Jupiter API
         console.log(`TradeProcessor: Before Jupiter API call for token info - current symbol: "${mainTokenChange.tokenSymbol}", mint: ${mainTokenChange.mint}`);
         
-        const jupTokenInfo = await jupiterApiService.fetchTokenInfo(
+        const jupTokenInfo = await jupiterApiService.getTokenInfo(
           mainTokenChange.mint
         );
-
-        // Debug the response
-        console.log(`TradeProcessor: Jupiter token info response:`, jupTokenInfo ? {
-          symbol: jupTokenInfo.symbol,
-          name: jupTokenInfo.name, 
-          logoURI: jupTokenInfo.logoURI ? 'Exists' : 'Missing'
-        } : 'No data returned');
-
-        // If we got token info from Jupiter API, use it for the symbol and logo
-        if (jupTokenInfo) {
-          console.log(`TradeProcessor: Got Jupiter token info for ${mainTokenChange.mint}: ${jupTokenInfo.symbol}`);
-          
-          // ALWAYS prefer Jupiter's token symbol if available
-          // This is important to ensure consistent token display
-          const oldSymbol = mainTokenChange.tokenSymbol;
-          mainTokenChange.tokenSymbol = jupTokenInfo.symbol;
-          console.log(`TradeProcessor: Using Jupiter symbol: "${mainTokenChange.tokenSymbol}" (was: "${oldSymbol}")`);
-          
-          // Only use Jupiter logo if we don't have one
-          if (!mainTokenChange.logo || mainTokenChange.logo === '') {
-            mainTokenChange.logo = jupTokenInfo.logoURI;
-            console.log(`TradeProcessor: Using Jupiter logo: ${mainTokenChange.logo ? 'Logo set' : 'No logo found'}`);
-          }
-          
-          // Use Jupiter decimals if available
-          if (jupTokenInfo.decimals) {
-            mainTokenChange.decimals = jupTokenInfo.decimals;
-            console.log(`TradeProcessor: Using Jupiter decimals: ${mainTokenChange.decimals}`);
-          }
-        }
         
-        // Then, try to fetch price data from Jupiter API
-        const jupiterData = await jupiterApiService.fetchTokenPrice(
-          mainTokenChange.mint,
-          tx.blockTime // Pass the transaction's blockTime for historical pricing
-        );
+        // Update token information
+        const tokenSymbol = jupTokenInfo.symbol || mainTokenChange.tokenSymbol || 'Unknown';
+        const tokenLogoURI = jupTokenInfo.logoURI || null;
         
-        // Log whether we got price data from Jupiter
-        if (jupiterData.priceUsd) {
-          console.log(`TradeProcessor: Got Jupiter price for ${mainTokenChange.tokenSymbol} at time ${tx.blockTime}: $${jupiterData.priceUsd}`);
-        } else {
-          console.log(`TradeProcessor: No Jupiter price found for ${mainTokenChange.tokenSymbol || mainTokenChange.mint} at time ${tx.blockTime}`);
+        // Get price information
+        let priceSOL = 0;
+        
+        try {
+          const priceData = await jupiterApiService.getTokenPrice(
+            mainTokenChange.mint
+          );
+          
+          if (priceData?.data?.[mainTokenChange.mint]?.price) {
+            priceUSD = parseFloat(priceData.data[mainTokenChange.mint].price);
+            
+            // Get SOL price for comparison
+            const solMint = 'So11111111111111111111111111111111111111112';
+            const solPriceData = await jupiterApiService.getTokenPrice(solMint);
+            
+            if (solPriceData?.data?.[solMint]?.price) {
+              const solUsdPrice = parseFloat(solPriceData.data[solMint].price);
+              priceSOL = solUsdPrice > 0 ? priceUSD / solUsdPrice : 0;
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching token price:', error);
         }
         
         // If we still don't have a token symbol, use shortened mint address as fallback
@@ -379,8 +364,7 @@ export class TradeProcessor {
         }
         
         // ALWAYS use Jupiter price data if available
-        if (jupiterData.priceUsd) {
-          priceUSD = jupiterData.priceUsd;
+        if (priceUSD > 0 && totalSolValue > 0) {
           valueUSD = amount * priceUSD;
           console.log(`TradeProcessor: Using Jupiter price: $${priceUSD} for ${mainTokenChange.tokenSymbol}`);
         }
@@ -400,7 +384,7 @@ export class TradeProcessor {
       console.log('TradeProcessor: Creating trade with the following token details:', {
         tokenSymbol: mainTokenChange.tokenSymbol,
         tokenAddress: mainTokenChange.mint,
-        tokenLogoURI: mainTokenChange.logo,
+        tokenLogoURI: mainTokenChange.logo || null,
         decimals: mainTokenChange.decimals
       });
 
@@ -410,11 +394,11 @@ export class TradeProcessor {
         type: tradeType,
         tokenAddress: mainTokenChange.mint,
         tokenSymbol: mainTokenChange.tokenSymbol,
-        tokenLogoURI: mainTokenChange.logo,
+        tokenLogoURI: mainTokenChange.logo ? mainTokenChange.logo : null,
         amount,
         decimals: mainTokenChange.decimals,
         priceUSD,
-        priceSOL: totalSolValue / amount,
+        priceSOL: 0, // Initialize with 0 and update if available
         valueUSD,
         valueSOL: totalSolValue,
         profitLoss: isBuy ? -valueUSD : valueUSD,
@@ -437,8 +421,7 @@ export class TradeProcessor {
         type: t.type,
         amount: t.amount,
         value: t.valueSOL,
-        valueUSD: t.valueUSD,
-        marketCap: t.marketCap
+        valueUSD: t.valueUSD
       }))
     });
     

@@ -1,0 +1,53 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Deployment-Only Patches
+Mindset & Rationale:
+Deployment incidents are often urgent and high-visibility. Senior engineers know that the fastest path to resolution is to target deployment scripts, Docker/K8s configs, CI pipelines, and infrastructure-as-code—without touching the site’s UI, business logic, or user-facing behavior.
+
+Rule ID & Annotation (for Cursor):
+
+ID: DEPLOYMENT_PATCH
+
+Annotation: Place // @CursorRule(DEPLOYMENT_PATCH) at the top of any patch file or PR that should only modify deployment concerns. Cursor will parse this flag to scope its actions.
+
+System Behavior Specifications:
+
+Scope Locking:
+
+When Cursor sees @CursorRule(DEPLOYMENT_PATCH), it restricts diffs to files matching deployment patterns (.github/workflows/*, Dockerfile*, helm/**, terraform/**, k8s/**, CI scripts).
+
+Any attempt to modify a .tsx, .css, or business-logic .ts file causes Cursor to emit a “Scope Violation” warning and reject the change.
+
+No UI or Logic Changes:
+
+Cursor’s automated fixes must not alter HTML templates, React components, CSS classes, or API-service code outside of deployment glue.
+
+Cursor enforces this by static analysis: blacklist AST nodes in src/ui/ and src/components/ when DEPLOYMENT_PATCH is active.
+
+Integrity Checks:
+
+After any deployment patch, Cursor runs smoke tests against a staging URL to confirm the site still builds, serves, and renders key pages (home, login, dashboard) with zero regressions.
+
+Any visual diffs or HTTP 5xx errors in these endpoints cause an automatic rollback suggestion.
+
+CI/CD Enforcement:
+
+The CI pipeline scans PRs for @CursorRule(DEPLOYMENT_PATCH). If present:
+
+Allow only modifications to deployment/IaC files.
+
+Require passing of a “deployment linter” (e.g., terraform fmt, helm lint) and a successful staging deploy plus smoke-test job.
+
+If any other file types are touched, the job fails with a clear message:
+
+“PR flagged as DEPLOYMENT_PATCH must not modify application code or UI files.”
+
+Rollback & Notification:
+
+On post-deploy failure, Cursor triggers an automated rollback via the pipeline’s built-in rollback stage.
+
+Sends a high-priority alert to the on-call channel with logs and a link to the failed deploy artifact.
+

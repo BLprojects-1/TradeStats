@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { dexScreenerService } from '../../services/dexScreenerService';
 
 type RegisterPoolResponse = {
   success: boolean;
@@ -7,8 +6,6 @@ type RegisterPoolResponse = {
   data?: {
     mintAddress: string;
     poolAddress: string;
-    priceUsd?: number;
-    marketCap?: number;
   };
 };
 
@@ -41,27 +38,12 @@ export default async function handler(
 
     console.log(`API: Registering pool ${poolAddress} for token ${mintAddress}`);
     
-    // First verify that the pool address is valid by fetching data
-    const pairData = await dexScreenerService.fetchPairData(poolAddress);
-    
-    if (!pairData.priceUsd) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid pool address: No price data found. Verify the pool address is correct.'
-      });
-    }
-    
-    // Register the pool
-    dexScreenerService.registerTokenPool(mintAddress, poolAddress);
-    
-    // Return success with the fetched data
+    // Return success with the provided data
     return res.status(200).json({
       success: true,
       data: {
         mintAddress,
-        poolAddress,
-        priceUsd: pairData.priceUsd,
-        marketCap: pairData.marketCap || undefined
+        poolAddress
       }
     });
   } catch (error) {

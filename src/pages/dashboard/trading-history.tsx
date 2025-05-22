@@ -529,7 +529,7 @@ export default function TradingHistory() {
           <div className="bg-[#1a1a1a] rounded-lg p-6">
             <h3 className="text-sm font-medium text-gray-400 mb-2">Total Volume</h3>
             <p className="text-2xl font-semibold text-white">
-              ${trades.reduce((sum, trade) => sum + (trade.valueUSD || trade.value * 70), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              ${trades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
           </div>
           
@@ -537,7 +537,7 @@ export default function TradingHistory() {
             <h3 className="text-sm font-medium text-gray-400 mb-2">Net P/L</h3>
             <p className="text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => {
-                const value = trade.valueUSD || trade.value * 70;
+                const value = trade.valueUSD || 0;
                 return sum + (trade.type === 'BUY' ? -value : value);
               }, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
