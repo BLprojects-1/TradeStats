@@ -19,6 +19,7 @@ export interface TokenData {
   totalValue: number;
   currentPrice?: number;
   profitLoss?: number;
+  lastTransactionTimestamp: number;
 }
 
 // Helper function to process trades into token holdings
@@ -27,10 +28,11 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
   const tokenMap = new Map<string, {
     tokenSymbol: string,
     tokenLogoURI: string | null,
-    buys: number,
-    sells: number,
+    buys: { amount: number, timestamp: number, valueUSD: number }[],
+    sells: { amount: number, timestamp: number, valueUSD: number }[],
     buyValue: number,
-    sellValue: number
+    sellValue: number,
+    latestTimestamp: number // Track the most recent transaction timestamp
   }>();
   
   // Process each trade
@@ -44,30 +46,47 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
       tokenData = {
         tokenSymbol: trade.tokenSymbol,
         tokenLogoURI: trade.tokenLogoURI,
-        buys: 0,
-        sells: 0,
+        buys: [],
+        sells: [],
         buyValue: 0,
-        sellValue: 0
+        sellValue: 0,
+        latestTimestamp: 0
       };
       tokenMap.set(trade.tokenAddress, tokenData);
     }
     
+    // Update latest timestamp if this trade is more recent
+    if (trade.timestamp > tokenData.latestTimestamp) {
+      tokenData.latestTimestamp = trade.timestamp;
+    }
+    
     // Add to buys or sells
     if (trade.type === 'BUY') {
-      tokenData.buys += trade.amount;
+      tokenData.buys.push({
+        amount: trade.amount,
+        timestamp: trade.timestamp,
+        valueUSD: trade.valueUSD
+      });
       tokenData.buyValue += trade.valueUSD;
     } else if (trade.type === 'SELL') {
-      tokenData.sells += trade.amount;
+      tokenData.sells.push({
+        amount: trade.amount,
+        timestamp: trade.timestamp,
+        valueUSD: trade.valueUSD
+      });
       tokenData.sellValue += trade.valueUSD;
     }
   }
   
   // Calculate remaining tokens and fetch current prices
   const holdings: TokenData[] = [];
-  const pricePromises: Promise<void>[] = [];
+  
+  // Create all token data objects first before fetching prices
+  const tokensToFetch: {tokenData: TokenData, tokenAddress: string, timestamp: number}[] = [];
   
   for (const [tokenAddress, data] of tokenMap.entries()) {
-    const remaining = data.buys - data.sells;
+    const remaining = data.buys.reduce((sum, buy) => sum + buy.amount, 0) - 
+                     data.sells.reduce((sum, sell) => sum + sell.amount, 0);
     
     // Only include tokens with a positive remaining balance
     if (remaining <= 0) continue;
@@ -76,31 +95,51 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
       tokenAddress,
       tokenSymbol: data.tokenSymbol,
       tokenLogoURI: data.tokenLogoURI || undefined,
-      totalBought: data.buys,
-      totalSold: data.sells,
+      totalBought: data.buys.reduce((sum, buy) => sum + buy.amount, 0),
+      totalSold: data.sells.reduce((sum, sell) => sum + sell.amount, 0),
       remaining,
       totalValue: 0, // Will be calculated after getting price
+      lastTransactionTimestamp: data.latestTimestamp
     };
     
-    // Fetch current price
-    const pricePromise = jupiterApiService.getTokenPriceInUSD(tokenAddress)
-      .then(price => {
-        tokenData.currentPrice = price;
-        tokenData.totalValue = remaining * price;
-        tokenData.profitLoss = tokenData.totalValue - (data.buyValue - data.sellValue);
-      })
-      .catch(err => {
-        console.error(`Error fetching price for ${tokenAddress}:`, err);
-        tokenData.currentPrice = 0;
-        tokenData.totalValue = 0;
-      });
-    
-    pricePromises.push(pricePromise);
     holdings.push(tokenData);
+    tokensToFetch.push({
+      tokenData, 
+      tokenAddress, 
+      timestamp: data.latestTimestamp
+    });
   }
   
-  // Wait for all price fetches to complete
-  await Promise.all(pricePromises);
+  // Now fetch prices in small batches to avoid rate limiting
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < tokensToFetch.length; i += BATCH_SIZE) {
+    const batch = tokensToFetch.slice(i, i + BATCH_SIZE);
+    
+    // Process each batch with a small delay between batches if needed
+    const batchPromises = batch.map(({tokenData, tokenAddress, timestamp}) => {
+      return jupiterApiService.getTokenPriceInUSD(tokenAddress, timestamp)
+        .then(price => {
+          tokenData.currentPrice = price;
+          tokenData.totalValue = tokenData.remaining * price;
+          const buyValue = tokenMap.get(tokenAddress)?.buyValue || 0;
+          const sellValue = tokenMap.get(tokenAddress)?.sellValue || 0;
+          tokenData.profitLoss = tokenData.totalValue - (buyValue - sellValue);
+        })
+        .catch(err => {
+          console.error(`Error fetching price for ${tokenAddress}:`, err);
+          tokenData.currentPrice = 0;
+          tokenData.totalValue = 0;
+        });
+    });
+    
+    // Wait for the current batch to complete
+    await Promise.all(batchPromises);
+    
+    // Add a small delay between batches if we have more to process
+    if (i + BATCH_SIZE < tokensToFetch.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
   
   // Sort by total value (highest first)
   return holdings.sort((a, b) => b.totalValue - a.totalValue);
@@ -211,6 +250,10 @@ export default function OpenTrades() {
         } else if (err.message?.includes('timeout') || err.message?.includes('ECONNABORTED')) {
           setApiError('Request timeout. The Solana network may be experiencing high traffic or the public RPC endpoints we use may be rate-limiting our requests.');
           setErrorType('timeout');
+        } else if (err.message?.includes('429') || err.message?.includes('Too Many Requests')) {
+          // Handle rate limiting specifically for Jupiter API
+          console.log('Rate limit hit on Jupiter API, using rate-limited service which will retry automatically');
+          // Our rate-limited service will handle this internally with exponential backoff
         } else {
         setError('Failed to load wallet data. Please try again.');
         }
@@ -276,6 +319,11 @@ export default function OpenTrades() {
       selectedWalletId={selectedWalletId}
       onWalletChange={setSelectedWalletId}
     >
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold mb-2 text-white">24h Open Trades</h1>
+        <p className="text-gray-500">View your active positions from trades in the last 24 hours</p>
+      </div>
+
       {error && (
         <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
           {error}
@@ -296,7 +344,7 @@ export default function OpenTrades() {
 
       <div className="space-y-6">
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Active Positions</h2>
+          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Active Positions (24h)</h2>
           
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-800">
@@ -361,23 +409,23 @@ export default function OpenTrades() {
         </div>
 
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Position Summary</h2>
+          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">24h Position Summary</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Total Open Positions</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Open Positions</h3>
               <p className="text-2xl font-semibold text-white">{walletData.length}</p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Total Value</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Total Value</h3>
               <p className="text-2xl font-semibold text-white">
                 ${walletData.reduce((sum, token) => sum + (token.totalValue || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Unrealized P/L</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Unrealized P/L</h3>
               <p className="text-2xl font-semibold text-white">
                 ${walletData.reduce((sum, token) => sum + (token.profitLoss || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>

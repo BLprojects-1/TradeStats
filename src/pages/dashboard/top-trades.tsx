@@ -240,6 +240,10 @@ export default function TopTrades() {
         } else if (err.message?.includes('timeout') || err.message?.includes('ECONNABORTED')) {
           setApiError('Request timeout. The Solana network may be experiencing high traffic.');
           setErrorType('timeout');
+        } else if (err.message?.includes('429') || err.message?.includes('Too Many Requests')) {
+          // Handle rate limiting specifically for Jupiter API
+          console.log('Rate limit hit on Jupiter API, using rate-limited service which will retry automatically');
+          // Our rate-limited service will handle this internally with exponential backoff
         } else {
           setError('Failed to load trade data. Please try again.');
         }
@@ -327,34 +331,32 @@ export default function TopTrades() {
       selectedWalletId={selectedWalletId}
       onWalletChange={setSelectedWalletId}
     >
-      {error && (
-        <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
-          {error}
-        </div>
-      )}
-
-      {apiError && <ApiErrorBanner 
-        message={apiError} 
-        onRetry={handleRetry} 
-        errorType={errorType as 'rpc' | 'auth' | 'timeout' | 'general'} 
-      />}
-
-      {!selectedWalletId && (
-        <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-6">
-          Please select a wallet from the dropdown menu to view your top trades.
-        </div>
-      )}
-
-      {dataLoading && (
-        <div className="flex flex-col items-center justify-center my-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3"></div>
-          <div className="text-indigo-300">{loadingMessage || 'Loading trades...'}</div>
-        </div>
-      )}
-
       <div className="space-y-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold mb-2 text-white">24h Top Trades</h1>
+          <p className="text-gray-500">View your best performing trades in the last 24 hours</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
+
+        {apiError && <ApiErrorBanner 
+          message={apiError} 
+          onRetry={handleRetry} 
+          errorType={errorType as 'rpc' | 'auth' | 'timeout' | 'general'} 
+        />}
+
+        {!selectedWalletId && (
+          <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-6">
+            Please select a wallet from the dropdown menu to view your top trades.
+          </div>
+        )}
+
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Best Performing Trades</h2>
+          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Best Performing Trades (24h)</h2>
           
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-800">
@@ -409,7 +411,7 @@ export default function TopTrades() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-            <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Best Trade</h2>
+            <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Best Trade (24h)</h2>
             {bestTrade ? (
               <div className="bg-[#252525] p-4 rounded-lg">
                 <div className="flex items-center mb-4">
@@ -440,7 +442,7 @@ export default function TopTrades() {
           </div>
 
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-            <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Worst Trade</h2>
+            <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Worst Trade (24h)</h2>
             {worstTrade ? (
               <div className="bg-[#252525] p-4 rounded-lg">
                 <div className="flex items-center mb-4">
@@ -472,30 +474,30 @@ export default function TopTrades() {
         </div>
 
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">Performance Metrics</h2>
+          <h2 className="text-2xl font-semibold text-indigo-200 mb-6">24h Performance Metrics</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Win Rate</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Win Rate</h3>
               <p className="text-2xl font-semibold text-white">{winRate}%</p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Average Win</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Average Win</h3>
               <p className="text-2xl font-semibold text-green-400">
                 ${avgWin.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Average Loss</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Average Loss</h3>
               <p className="text-2xl font-semibold text-red-400">
                 ${avgLoss.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Profit Factor</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">24h Profit Factor</h3>
               <p className="text-2xl font-semibold text-white">{profitFactor}</p>
             </div>
           </div>

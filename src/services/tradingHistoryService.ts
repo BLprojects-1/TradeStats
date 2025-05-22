@@ -360,13 +360,19 @@ export class TradingHistoryService {
   }
 
   /**
-   * Get trading history for a wallet, using cache and fetching new trades if needed
+   * Get trading history for a wallet
+   * @param userId The user ID
+   * @param walletAddress The wallet address
+   * @param limit The maximum number of results to return
+   * @param page The page number (starting from 1)
+   * @param minTimestamp Optional timestamp to filter trades (milliseconds since epoch)
    */
   async getTradingHistory(
     userId: string,
     walletAddress: string,
-    limit: number = 20,
-    page: number = 1
+    limit: number = 50,
+    page: number = 1,
+    minTimestamp?: number
   ): Promise<{ trades: ProcessedTrade[], totalCount: number }> {
     try {
       // Calculate offset
@@ -527,12 +533,24 @@ export class TradingHistoryService {
       }
 
       // Fetch trades from database with pagination
-      const { data: trades, error, count } = await supabase
+      let query = supabase
         .from('trading_history')
         .select('*', { count: 'exact' })
-        .eq('wallet_id', walletId)
+        .eq('wallet_id', walletId);
+        
+      // Apply timestamp filter if provided
+      if (minTimestamp) {
+        const minTimestampIso = new Date(minTimestamp).toISOString();
+        console.log(`Filtering trades after timestamp: ${minTimestampIso}`);
+        query = query.gte('timestamp', minTimestampIso);
+      }
+      
+      // Apply sorting and pagination
+      query = query
         .order('timestamp', { ascending: false })
         .range(offset, offset + limit - 1);
+
+      const { data: trades, error, count } = await query;
 
       if (error) throw error;
       if (!trades) return { trades: [], totalCount: 0 };

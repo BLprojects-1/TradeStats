@@ -6,6 +6,7 @@ import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
 import { ProcessedTrade } from '../../services/tradeProcessor';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
+import { jupiterApiService } from '../../services/jupiterApiService';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 
 const TRADES_PER_PAGE = 20; // Increase from 10 to 20 for more trades per page
@@ -138,7 +139,6 @@ export default function TradingHistory() {
   const [trades, setTrades] = useState<ProcessedTrade[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
-  const [timeFilter, setTimeFilter] = useState('all');
   const [tokenFilter, setTokenFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTrades, setTotalTrades] = useState(0);
@@ -148,6 +148,9 @@ export default function TradingHistory() {
   const [rawTransactions, setRawTransactions] = useState<any[]>([]);
   const [initialScanInProgress, setInitialScanInProgress] = useState(false);
   const [errorType, setErrorType] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMoreTrades, setHasMoreTrades] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -188,6 +191,8 @@ export default function TradingHistory() {
       setDataLoading(true);
       setLoadingMessage("Loading your trading history...");
       setError(null);
+      setApiError(null);
+      setNextCursor(null); // Reset cursor when changing wallet or filters
       
       try {
         console.log('Loading trades for wallet:', selectedWallet.wallet_address);
@@ -223,82 +228,93 @@ export default function TradingHistory() {
           }
         }, 8000);
 
-        // Load first page of trades
-        await loadPage(1, selectedWallet.wallet_address);
+        // Use tradingHistoryService directly to get trade history
+        try {
+          // Calculate timestamp for 24 hours ago
+          const oneDayAgo = new Date();
+          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+          
+          const result = await tradingHistoryService.getTradingHistory(
+            user!.id,
+            selectedWallet.wallet_address,
+            TRADES_PER_PAGE,
+            1,
+            oneDayAgo.getTime() // Pass the 24 hour timestamp to filter trades
+          );
+          
+          if (result && result.trades.length > 0) {
+            setTrades(result.trades);
+            setTotalTrades(result.totalCount);
+            setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
+            
+            console.log(`Loaded ${result.trades.length} trades from DRPC`);
+          } else {
+            console.log('No trades found for this wallet in the last 24 hours');
+            setTrades([]);
+            setTotalTrades(0);
+          }
+        } catch (drpcError) {
+          console.error('Error loading trades from DRPC:', drpcError);
+          setApiError('Unable to load trading history. Please try again later.');
+          setErrorType('rpc');
+        }
       } catch (err) {
         console.error('Error loading trade history:', err);
         setError('Failed to load trading history. Please try again.');
       } finally {
         setDataLoading(false);
+        setLoadingMessage('');
       }
     };
     
     if (selectedWalletId) {
       getTradeHistory();
     }
-  }, [selectedWalletId, timeFilter, tokenFilter, user?.id]);
+  }, [selectedWalletId, user?.id]);
 
-  const loadPage = async (page: number, walletAddress: string) => {
+  // Update the loadMoreTrades function to use tradingHistoryService instead
+  const loadMoreTrades = async () => {
+    if (!selectedWalletId || !user?.id || loadingMore) return;
+    
+    const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+    if (!selectedWallet) return;
+    
+    setLoadingMore(true);
+    setLoadingMessage("Loading more trades...");
+    
     try {
-      setDataLoading(true);
-      setLoadingMessage(`Loading page ${page} of transactions...`);
-      setApiError(null);
-      setErrorType(null);
+      // Calculate 24 hours ago
+      const oneDayAgo = new Date();
+      oneDayAgo.setHours(oneDayAgo.getHours() - 24);
       
-      // Calculate offset
-      const offset = (page - 1) * TRADES_PER_PAGE;
-      
-      console.log('Loading page', page, 'with offset', offset);
-
+      // Load next page
+      const nextPage = currentPage + 1;
       const result = await tradingHistoryService.getTradingHistory(
-        user!.id,
-        walletAddress,
+        user.id,
+        selectedWallet.wallet_address,
         TRADES_PER_PAGE,
-        page
+        nextPage,
+        oneDayAgo.getTime() // Filter by last 24 hours
       );
-
-      if (result.trades.length === 0 && page === 1) {
-        // No trades found for first page
-        console.log('No trades found for this wallet');
-      } else {
-        console.log(`Loaded ${result.trades.length} trades`);
-      }
-
-      setTrades(result.trades);
-      setTotalTrades(result.totalCount);
-      setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
-      setCurrentPage(page);
-    } catch (err: any) {
-      console.error('Error loading page:', err);
       
-      // Enhanced error handling with more specific messages based on our testing results
-      if (err.message?.includes('TRANSACTION_FETCH_ERROR')) {
-        setApiError('Unable to connect to Solana network to fetch your transaction data. We are using public RPC endpoints which have lower reliability. Please try again in a few moments.');
-        setErrorType('rpc');
-      } else if (err.message?.includes('Service Unavailable') || err.message?.includes('503')) {
-        setApiError('The Solana RPC service is currently unavailable. We are using public endpoints with limited capacity. Please try again later.');
-        setErrorType('rpc');
-      } else if (err.message?.includes('NOT_FOUND')) {
-        // This is a legitimate response for transactions that don't exist or were pruned
-        console.log('Some transactions were not found in the ledger. This is normal for older transactions.');
-        // Don't show an error banner for this case
-      } else if (err.message?.includes('API key') || err.message?.includes('403') || err.message?.includes('401')) {
-        setApiError('Authentication issue with Solana RPC providers. We are using public endpoints which may occasionally limit access. Please try again later.');
-        setErrorType('auth');
-      } else if (err.message?.includes('DRPC API') || err.message?.includes('RPC')) {
-        setApiError('We are experiencing issues connecting to the Solana network. Please try again later.');
-        setErrorType('rpc');
-      } else if (err.message?.includes('Jupiter') || err.message?.includes('price')) {
-        setApiError('We are experiencing issues fetching token prices. Some price data may be unavailable.');
-        setErrorType('general');
-      } else if (err.message?.includes('timeout') || err.message?.includes('ECONNABORTED')) {
-        setApiError('Request timeout. The Solana network may be experiencing high traffic or the public RPC endpoints we use may be rate-limiting our requests.');
-        setErrorType('timeout');
+      if (result && result.trades.length > 0) {
+        // Append new trades to existing ones
+        setTrades(prev => [...prev, ...result.trades]);
+        setTotalTrades(result.totalCount);
+        setCurrentPage(nextPage);
+        setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
+        setHasMoreTrades(nextPage < Math.ceil(result.totalCount / TRADES_PER_PAGE));
+        
+        console.log(`Loaded ${result.trades.length} more trades from page ${nextPage}`);
       } else {
-        setError('Failed to load trading history. Please try again.');
+        setHasMoreTrades(false);
       }
+    } catch (error) {
+      console.error('Error loading more trades:', error);
+      setApiError('Failed to load more trades. Please try again.');
+      setErrorType('general');
     } finally {
-      setDataLoading(false);
+      setLoadingMore(false);
       setLoadingMessage('');
     }
   };
@@ -309,7 +325,7 @@ export default function TradingHistory() {
     const selectedWallet = wallets.find(w => w.id === selectedWalletId);
     if (!selectedWallet) return;
     
-    await loadPage(newPage, selectedWallet.wallet_address);
+    await loadMoreTrades();
   };
 
   const handleRetry = () => {
@@ -317,7 +333,7 @@ export default function TradingHistory() {
       const selectedWallet = wallets.find(w => w.id === selectedWalletId);
       if (selectedWallet) {
         setApiError(null);
-        loadPage(currentPage, selectedWallet.wallet_address);
+        loadMoreTrades();
       }
     }
   };
@@ -343,8 +359,8 @@ export default function TradingHistory() {
     >
       <div className="p-4 md:p-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2 text-white">Trading History</h1>
-          <p className="text-gray-500">View your Solana trading history across DEXs</p>
+          <h1 className="text-2xl font-semibold mb-2 text-white">24h Trading History</h1>
+          <p className="text-gray-500">View your recent Solana trading activity (last 24 hours)</p>
         </div>
 
         {error && (
@@ -395,7 +411,8 @@ export default function TradingHistory() {
 
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center">
-              <h2 className="text-xl font-semibold text-indigo-200">Trade History</h2>
+              <h2 className="text-xl font-semibold text-indigo-200">Recent Trades</h2>
+              <span className="ml-2 text-sm text-indigo-400">(Last 24 hours)</span>
               {dataLoading && (
                 <div className="ml-4 flex items-center text-indigo-400 text-sm">
                   <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -407,17 +424,6 @@ export default function TradingHistory() {
               )}
             </div>
             <div className="flex gap-4">
-              <select 
-                className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                disabled={dataLoading}
-              >
-                <option value="all">All Time</option>
-                <option value="30d">Last 30 Days</option>
-                <option value="7d">Last 7 Days</option>
-                <option value="24h">Last 24 Hours</option>
-              </select>
               <select 
                 className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
                 value={tokenFilter}
@@ -518,23 +524,48 @@ export default function TradingHistory() {
               </tbody>
             </table>
           </div>
+          
+          {/* Add load more button */}
+          {hasMoreTrades && (
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={loadMoreTrades}
+                disabled={loadingMore}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingMore ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Loading...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Load More</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-[#1a1a1a] rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">Total Trades</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-2">24h Trades</h3>
             <p className="text-2xl font-semibold text-white">{trades.length}</p>
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">Total Volume</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-2">24h Volume</h3>
             <p className="text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg p-6">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">Net P/L</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-2">24h P/L</h3>
             <p className="text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => {
                 const value = trade.valueUSD || 0;
