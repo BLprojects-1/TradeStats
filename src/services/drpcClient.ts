@@ -119,35 +119,409 @@ interface RpcTransactionResponse {
   };
 }
 
+interface HeliusTransactionResponse {
+  signature: string;
+  slot: number;
+  err: any;
+  blockTime: number;
+  timestamp: number;
+  fee: number;
+  success: boolean;
+  innerInstructions: any[];
+  logMessages: string[];
+  postBalances: number[];
+  postTokenBalances: TokenBalance[];
+  preBalances: number[];
+  preTokenBalances: TokenBalance[];
+  transaction: {
+    message: {
+      accountKeys: Array<{
+        pubkey: string;
+        signer: boolean;
+        writable: boolean;
+      }>;
+      instructions: any[];
+      recentBlockhash: string;
+    };
+    signatures: string[];
+  };
+}
+
+interface HeliusSignatureResponse {
+  signature: string;
+  slot: number;
+  err: any;
+  blockTime: number;
+}
+
+interface ApiError {
+  code: string;
+  message: string;
+  endpoint: string;
+  params: Record<string, any>;
+  timestamp: number;
+  status?: number;
+}
+
+interface ApiMetadata {
+  lastAttempt: number;
+  consecutiveFailures: number;
+  errors: ApiError[];
+}
+
+interface RateLimitConfig {
+  maxRequestsPerSecond: number;
+  maxConcurrentRequests: number;
+}
+
+interface RequestHeaders {
+  'Content-Type': string;
+  'Authorization'?: string;
+  'Alchemy-Subscription'?: string;
+  'ankr-chain-id'?: string;
+}
+
+interface RpcResponse {
+  jsonrpc: string;
+  id: number;
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
 class DrpcClient {
-  // Use public Solana endpoint from dRPC
-  private readonly drpcEndpoint = 'https://solana.drpc.org';
+  // Primary and fallback endpoints with load balancing
+  private readonly endpoints = {
+    // Use DRPC with the API key in the URL as per documentation
+    primary: 'https://lb.drpc.org/ogrpc?network=solana&dkey=AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF',
+    fallbacks: []  // Empty as we don't want fallbacks
+  };
   
-  // Use fallback Helius endpoint as backup
-  private readonly heliusApiKey = '5e3b23ae-8354-4476-ba0b-de37820a8d57';
-  private readonly heliusEndpoint = `https://api.helius.xyz/v0/addresses`;
+  // API keys stored separately - keeping this for potential future use
+  private readonly API_KEYS = {
+    DRPC: process.env.NEXT_PUBLIC_DRPC_API_KEY || 'AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF',
+  };
+  
+  // Metadata tracking per endpoint
+  private apiMetadata: Map<string, ApiMetadata> = new Map();
+  
+  // Maximum consecutive failures before considering an endpoint degraded
+  private readonly MAX_CONSECUTIVE_FAILURES = 3;
+  
+  // Cooldown period for degraded endpoints (2 minutes)
+  private readonly ENDPOINT_COOLDOWN_MS = 2 * 60 * 1000;
 
-  // Maximum retries for failed requests
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 1000; // ms
+  // Timeout for requests (15 seconds)
+  private readonly REQUEST_TIMEOUT_MS = 15000;
 
-  // Helper method to add retry logic to axios requests
-  private async retryableRequest<T>(requestFn: () => Promise<T>): Promise<T> {
-    let lastError: Error | null = null;
+  // Rate limiting parameters per endpoint
+  private readonly RATE_LIMIT: { [key: string]: RateLimitConfig } = {
+    'https://lb.drpc.org/ogrpc?network=solana&dkey=AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF': { 
+      maxRequestsPerSecond: 10, 
+      maxConcurrentRequests: 5 
+    }
+  };
+
+  private activeRequests: { [key: string]: number } = {};
+  private requestQueue: { [key: string]: Array<() => Promise<void>> } = {};
+  private lastRequestTime: { [key: string]: number } = {};
+
+  constructor() {
+    // Initialize tracking objects for the primary endpoint
+    const endpoint = this.endpoints.primary;
+    this.activeRequests[endpoint] = 0;
+    this.requestQueue[endpoint] = [];
+    this.lastRequestTime[endpoint] = 0;
     
-    for (let attempt = 0; attempt < this.MAX_RETRIES; attempt++) {
+    // Initialize metadata for the endpoint
+    this.apiMetadata.set(endpoint, {
+      lastAttempt: 0,
+      consecutiveFailures: 0,
+      errors: []
+    });
+
+    // Log endpoint configuration
+    console.log('DrpcClient initialized with endpoint:', {
+      primary: this.endpoints.primary,
+      // Add diagnostic info
+      rateLimit: this.getEndpointLimits(this.endpoints.primary)
+    });
+    
+    // Check the status of the endpoint at initialization
+    this.checkEndpointStatus();
+  }
+  
+  // Update the method to check the status of the endpoint
+  private async checkEndpointStatus() {
+    const checkEndpoint = async (endpoint: string) => {
       try {
-        return await requestFn();
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        console.warn(`Request failed (attempt ${attempt + 1}/${this.MAX_RETRIES}):`, error);
+        const payload = {
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'getHealth',
+          params: []
+        };
         
-        // Wait before retry with exponential backoff
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * Math.pow(2, attempt)));
+        await this.makeRequest(endpoint, payload);
+        console.log(`Endpoint ${endpoint} is healthy`);
+        return true;
+      } catch (error) {
+        console.warn(`Endpoint ${endpoint} failed health check:`, error);
+        return false;
+      }
+    };
+    
+    // Check primary endpoint
+    const endpoint = this.endpoints.primary;
+    const isHealthy = await checkEndpoint(endpoint);
+    
+    // Log the result
+    console.log('Endpoint health check result:', {
+      endpoint,
+      isHealthy
+    });
+  }
+
+  private getEndpointLimits(endpoint: string) {
+    return this.RATE_LIMIT[endpoint] || { maxRequestsPerSecond: 2, maxConcurrentRequests: 1 };
+  }
+
+  private async executeRequest<T>(
+    endpoint: string,
+    requestFn: () => Promise<T>
+  ): Promise<T> {
+    const limits = this.getEndpointLimits(endpoint);
+    
+    // Check rate limiting
+    const now = Date.now();
+    const timeSinceLastRequest = now - (this.lastRequestTime[endpoint] || 0);
+    const minRequestInterval = 1000 / limits.maxRequestsPerSecond;
+
+    if (timeSinceLastRequest < minRequestInterval) {
+      await new Promise(resolve => setTimeout(resolve, minRequestInterval - timeSinceLastRequest));
+    }
+
+    // Check concurrent requests limit
+    if ((this.activeRequests[endpoint] || 0) >= limits.maxConcurrentRequests) {
+      return new Promise((resolve, reject) => {
+        if (!this.requestQueue[endpoint]) {
+          this.requestQueue[endpoint] = [];
+        }
+        this.requestQueue[endpoint].push(async () => {
+          try {
+            const result = await this.executeRequest(endpoint, requestFn);
+            resolve(result);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+    }
+
+    this.activeRequests[endpoint] = (this.activeRequests[endpoint] || 0) + 1;
+    this.lastRequestTime[endpoint] = Date.now();
+
+    try {
+      const result = await Promise.race([
+        requestFn(),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), this.REQUEST_TIMEOUT_MS)
+        )
+      ]);
+      return result;
+    } finally {
+      this.activeRequests[endpoint]--;
+      if (this.requestQueue[endpoint]?.length > 0) {
+        const nextRequest = this.requestQueue[endpoint].shift();
+        if (nextRequest) nextRequest();
+      }
+    }
+  }
+
+  private getCurrentEndpoint(): string {
+    // We're only using the primary endpoint now
+    return this.endpoints.primary;
+  }
+
+  private isEndpointDegraded(metadata: ApiMetadata): boolean {
+    if (metadata.consecutiveFailures < this.MAX_CONSECUTIVE_FAILURES) {
+      return false;
+    }
+    
+    // Check if cooldown period has passed
+    const cooldownExpired = Date.now() - metadata.lastAttempt > this.ENDPOINT_COOLDOWN_MS;
+    return !cooldownExpired;
+  }
+
+  private recordApiError(endpoint: string, error: any, params: Record<string, any>) {
+    const metadata = this.apiMetadata.get(endpoint) || {
+      lastAttempt: 0,
+      consecutiveFailures: 0,
+      errors: []
+    };
+
+    const apiError: ApiError = {
+      code: error.response?.status ? `HTTP_${error.response.status}` : 'UNKNOWN',
+      message: error.message || 'Unknown error',
+      endpoint,
+      params,
+      timestamp: Date.now(),
+      status: error.response?.status
+    };
+
+    metadata.lastAttempt = Date.now();
+    metadata.consecutiveFailures++;
+    metadata.errors.push(apiError);
+
+    // Keep only last 10 errors
+    if (metadata.errors.length > 10) {
+      metadata.errors = metadata.errors.slice(-10);
+    }
+
+    this.apiMetadata.set(endpoint, metadata);
+
+    // Log the error with full context
+    console.error('API Error:', {
+      error: apiError,
+      consecutiveFailures: metadata.consecutiveFailures,
+      isEndpointDegraded: this.isEndpointDegraded(metadata)
+    });
+
+    return apiError;
+  }
+
+  private clearErrorState(endpoint: string) {
+    const metadata = this.apiMetadata.get(endpoint);
+    if (metadata) {
+      metadata.consecutiveFailures = 0;
+      this.apiMetadata.set(endpoint, metadata);
+    }
+  }
+
+  private async makeRequest(endpoint: string, payload: any): Promise<any> {
+    const url = endpoint;
+    
+    // Ensure payload follows the JSON-RPC 2.0 standard
+    if (!payload.jsonrpc) {
+      payload.jsonrpc = '2.0';
+    }
+    
+    if (!payload.id) {
+      payload.id = Date.now();
+    }
+    
+    const config = {
+      timeout: this.REQUEST_TIMEOUT_MS,
+      headers: {
+        'Content-Type': 'application/json'
+      } as RequestHeaders
+    };
+
+    return this.executeRequest(url, async () => {
+      try {
+        const response = await axios.post<RpcResponse>(url, payload, config);
+        
+        // Check for RPC-specific error responses
+        if (response.data?.error) {
+          throw new Error(`RPC Error: ${response.data.error.message || 'Unknown RPC error'}`);
+        }
+        
+        return response.data;
+      } catch (error: any) {
+        // Enhanced error handling with specific error types
+        if (error.code === 'ECONNABORTED') {
+          throw new Error(`Request timeout for endpoint ${endpoint}`);
+        }
+        if (error.response?.status === 429) {
+          throw new Error(`Rate limit exceeded for endpoint ${endpoint}`);
+        }
+        if (error.response?.status === 403) {
+          throw new Error(`Access forbidden for endpoint ${endpoint}. Try another RPC provider.`);
+        }
+        if (error.response?.status === 401) {
+          throw new Error(`API key missing or invalid for endpoint ${endpoint}`);
+        }
+        if (error.response?.status === 400) {
+          const message = error.response?.data?.error?.message || error.response?.data?.message || 'Malformed request';
+          throw new Error(`Bad request for endpoint ${endpoint} - ${message}`);
+        }
+        if (error.response?.status === 503) {
+          throw new Error(`Service unavailable for endpoint ${endpoint} - The service may be experiencing issues`);
+        }
+        if (error.response?.status === 502) {
+          throw new Error(`Bad gateway for endpoint ${endpoint} - The service may be down`);
+        }
+        if (error.response?.status >= 500) {
+          throw new Error(`Server error (${error.response.status}) for endpoint ${endpoint}`);
+        }
+        if (error.response?.status >= 400) {
+          const errorMessage = error.response.data?.error?.message || error.message;
+          throw new Error(`Client error (${error.response.status}) for endpoint ${endpoint}: ${errorMessage}`);
+        }
+        
+        // For network or unknown errors
+        throw new Error(`Request failed for endpoint ${endpoint}: ${error.message}`);
+      }
+    });
+  }
+
+  // Helper method to add retry logic to requests
+  private async retryableRequest<T>(
+    requestFn: (endpoint: string) => Promise<T>,
+    context: string,
+    params: Record<string, any>
+  ): Promise<T> {
+    let lastError: Error | null = null;
+    let delay = 1000; // Start with 1 second delay
+    let attemptedEndpoints = new Set<string>();
+    
+    // Try the endpoint up to 10 times with exponential backoff
+    for (let attempt = 0; attempt < 10; attempt++) {
+      let currentEndpoint = this.endpoints.primary;
+      attemptedEndpoints.add(currentEndpoint);
+      
+      try {
+        const result = await requestFn(currentEndpoint);
+        this.clearErrorState(currentEndpoint);
+        return result;
+      } catch (error: any) {
+        lastError = error;
+        
+        // Record the error for this endpoint
+        const apiError = this.recordApiError(currentEndpoint, error, params);
+        
+        // Handle specific error cases
+        if (error.response?.status === 404 || error.response?.status === 204) {
+          throw new Error(`NOT_FOUND: Resource not available at ${context}`);
+        }
+
+        // For authentication errors (401/403), try with exponential backoff
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.log(`Authentication error with ${currentEndpoint}, retrying after delay`);
+        }
+
+        // For rate limit errors, add longer delay
+        if (error.response?.status === 429) {
+          delay = Math.min(delay * 2, 10000); // Max 10 second delay
+        } else {
+          // For other errors, use exponential backoff with jitter
+          delay = Math.min(delay * (1.5 + Math.random() * 0.5), 5000); // Max 5 second delay
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
-    throw lastError || new Error('Request failed after maximum retries');
+    // If we've tried multiple times and all failed, that's likely a critical issue
+    console.error('DRPC endpoint failed after multiple attempts:', {
+      attemptedEndpoints: Array.from(attemptedEndpoints),
+      lastError
+    });
+    
+    // Return a more user-friendly error message
+    throw new Error(`TRANSACTION_FETCH_ERROR: Unable to connect to Solana network after multiple attempts. Please try again later.`);
   }
 
   async getTransactions(
@@ -160,66 +534,60 @@ class DrpcClient {
     lastSignature: string | null;
   }> {
     try {
-      console.log('DrpcClient: Fetching transactions for', address, {
-        limit,
-        beforeSignature: beforeSignature || 'none',
-        afterTimestamp: afterTimestamp?.toISOString() || 'none'
-      });
-
       // First, get signatures for address
-      let signaturesResponse: RpcSignaturesResponse;
-      try {
-        signaturesResponse = await this.retryableRequest(async () => {
-          const response = await axios.post(this.drpcEndpoint, {
+      const signaturesResponse = await this.retryableRequest(
+        async (endpoint) => {
+          const payload = {
             jsonrpc: '2.0',
             id: 1,
             method: 'getSignaturesForAddress',
             params: [
               address,
               {
-                limit: limit,
+                limit,
                 before: beforeSignature
               }
             ]
-          });
-          return response.data as RpcSignaturesResponse;
-        });
-      } catch (error) {
-        console.error("Failed to get signatures:", error);
-        throw new Error(`Could not fetch transaction signatures: ${error}`);
-      }
+          };
+          return this.makeRequest(endpoint, payload);
+        },
+        'getSignaturesForAddress',
+        { address, limit, beforeSignature }
+      );
 
       if (signaturesResponse.error) {
-        throw new Error(`dRPC API error: ${signaturesResponse.error.message}`);
+        throw new Error(`API_ERROR: ${signaturesResponse.error.message}`);
       }
 
       const signatures = signaturesResponse.result || [];
-      console.log('DrpcClient: Found', signatures.length, 'signatures');
-
       if (signatures.length === 0) {
-        return {
-          transactions: [],
-          lastSignature: null
-        };
+        return { transactions: [], lastSignature: null };
       }
 
-      // Process transactions based on signatures
-      const processedTxs = await Promise.all(
-        signatures
-          .filter((sig) => {
-            // Filter by timestamp if afterTimestamp is provided
-            if (afterTimestamp && sig.blockTime * 1000 <= afterTimestamp.getTime()) {
-              return false;
-            }
-            return true;
-          })
-          .map(async (sig) => {
+      // With public RPCs, we need to process transactions one at a time to avoid rate limits
+      const processedTxs: (Transaction | null)[] = [];
+      let lastSignature = null;
+      
+      // Process up to 5 transactions at a time (batch size)
+      const batchSize = 5;
+      
+      for (let i = 0; i < signatures.length; i += batchSize) {
+        const batch = signatures.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        const batchResults = await Promise.all(
+          batch.map(async (sig: { signature: string; blockTime: number }) => {
             try {
-              // Get full transaction for each signature
-              let txResponse: RpcTransactionResponse;
-              try {
-                txResponse = await this.retryableRequest(async () => {
-                  const response = await axios.post(this.drpcEndpoint, {
+              // Filter by timestamp if specified
+            if (afterTimestamp && sig.blockTime * 1000 <= afterTimestamp.getTime()) {
+                return null;
+              }
+              
+              lastSignature = sig.signature;
+              
+              const txResponse = await this.retryableRequest(
+                async (endpoint) => {
+                  const payload = {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'getTransaction',
@@ -230,16 +598,18 @@ class DrpcClient {
                         maxSupportedTransactionVersion: 0
                       }
                     ]
-                  });
-                  return response.data as RpcTransactionResponse;
-                });
-              } catch (error) {
-                console.error(`Failed to get transaction ${sig.signature}:`, error);
-                return null;
-              }
+                  };
+                  return this.makeRequest(endpoint, payload);
+                },
+                'getTransaction',
+                { signature: sig.signature }
+              );
 
               if (txResponse.error) {
-                console.error('DrpcClient: Error fetching transaction:', sig.signature, txResponse.error);
+                console.error('Transaction fetch error:', {
+                  signature: sig.signature,
+                  error: txResponse.error
+                });
                 return null;
               }
 
@@ -248,59 +618,57 @@ class DrpcClient {
                 return null;
               }
 
-              // Process token balance changes
-              const tokenBalanceChanges = this.processTokenBalanceChanges(txData.meta);
-
-              // Determine transaction status
-              const status = txData.meta?.status ? 
-                ('Ok' in txData.meta.status ? 'success' : 'failed') : 
-                'unknown';
-
-              // Create a processed transaction object
-              const transaction: Transaction = {
+              // Create transaction object
+              return {
                 blockTime: txData.blockTime,
                 slot: txData.slot,
                 signature: sig.signature,
+                meta: txData.meta,
                 preBalances: txData.meta?.preBalances || [],
                 postBalances: txData.meta?.postBalances || [],
-                meta: {
-                  err: txData.meta?.err,
-                  fee: txData.meta?.fee || 0,
-                  preBalances: txData.meta?.preBalances || [],
-                  postBalances: txData.meta?.postBalances || [],
-                  preTokenBalances: txData.meta?.preTokenBalances || [],
-                  postTokenBalances: txData.meta?.postTokenBalances || [],
-                  logMessages: txData.meta?.logMessages || []
-                },
-                tokenBalanceChanges: tokenBalanceChanges,
-                status: status,
+                tokenBalanceChanges: this.processTokenBalanceChanges(txData.meta),
+                status: txData.meta?.status ? 
+                  ('Ok' in txData.meta.status ? 'success' : 'failed') : 
+                  'unknown',
                 fee: txData.meta?.fee || 0,
                 logMessages: txData.meta?.logMessages || [],
                 type: this.determineTransactionType(txData),
-                timestamp: txData.blockTime * 1000 // Convert to milliseconds
-              };
-              
-              return transaction;
+                timestamp: txData.blockTime * 1000
+              } as Transaction;
             } catch (error) {
-              console.error('DrpcClient: Error processing transaction:', sig.signature, error);
+              console.error('Error processing transaction:', {
+                signature: sig.signature,
+                error
+              });
               return null;
             }
           })
       );
 
-      // Filter out null transactions (errors)
-      const validTransactions = processedTxs.filter((tx): tx is Transaction => tx !== null);
-      
-      console.log('DrpcClient: Processed', validTransactions.length, 'valid transactions');
+        // Add valid transactions to the result
+        processedTxs.push(...batchResults);
+        
+        // Add a small delay between batches to avoid rate limiting
+        if (i + batchSize < signatures.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      // Filter out null values and limit to requested count
+      const validTransactions = processedTxs
+        .filter((tx): tx is Transaction => tx !== null)
+        .slice(0, limit);
       
       return {
         transactions: validTransactions,
-        lastSignature: signatures.length > 0 ? 
-          signatures[signatures.length - 1].signature : null
+        lastSignature
       };
     } catch (error) {
-      console.error('DrpcClient: Error fetching transactions:', error);
-      throw new Error('Failed to fetch transactions');
+      // Ensure errors are properly propagated with context
+      if (error instanceof Error) {
+        throw new Error(`TRANSACTION_FETCH_ERROR: ${error.message}`);
+      }
+      throw error;
     }
   }
 

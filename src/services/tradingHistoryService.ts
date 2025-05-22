@@ -22,6 +22,7 @@ import { ProcessedTrade } from './tradeProcessor';
 import { drpcClient, Transaction } from './drpcClient';
 import { v4 as uuidv4 } from 'uuid';
 import { jupiterApiService } from './jupiterApiService';
+import { TokenInfoService } from './tokenInfoService';
 
 export interface CachedTrade extends ProcessedTrade {
   wallet_id: string;
@@ -137,22 +138,20 @@ export class TradingHistoryService {
 
       // Map database columns to ProcessedTrade interface
       const trades = (data || []).map(trade => ({
-        id: `${trade.signature}-${trade.token_address}`,
         signature: trade.signature,
         timestamp: new Date(trade.timestamp).getTime(),
-        blockTime: trade.block_time,
-        type: trade.type,
-        tokenSymbol: trade.token_symbol,
+        type: trade.type as 'BUY' | 'SELL' | 'UNKNOWN',
         tokenAddress: trade.token_address,
-        tokenLogoURI: trade.token_logo_uri,
-        decimals: trade.decimals,
+        tokenSymbol: trade.token_symbol || 'Unknown',
+        tokenLogoURI: trade.token_logo_uri || null,
         amount: trade.amount,
-        price: trade.price_sol,
-        priceUSD: trade.price_usd,
-        value: trade.value_sol,
-        valueUSD: trade.value_usd,
-        profitLoss: trade.profit_loss,
-        marketCap: trade.market_cap,
+        decimals: trade.decimals || 9,
+        priceUSD: trade.price_usd || 0,
+        priceSOL: trade.price_sol || 0,
+        valueUSD: trade.value_usd || 0,
+        valueSOL: trade.value_sol || 0,
+        profitLoss: trade.profit_loss || 0,
+        blockTime: trade.block_time,
         wallet_id: trade.wallet_id,
         created_at: trade.created_at,
         updated_at: trade.updated_at
@@ -205,19 +204,18 @@ export class TradingHistoryService {
           wallet_id: walletId,
           signature: trade.signature,
           timestamp: new Date(trade.timestamp).toISOString(),
-          block_time: trade.blockTime,
+          block_time: trade.blockTime || Math.floor(trade.timestamp / 1000),
           type: trade.type || 'UNKNOWN',
           token_symbol: trade.tokenSymbol || 'Unknown',
           token_address: trade.tokenAddress || '',
-          token_logo_uri: trade.tokenLogoURI || '',
+          token_logo_uri: trade.tokenLogoURI || null,
           decimals: trade.decimals || 0,
           amount: trade.amount || 0,
-          price_sol: trade.price || 0,
+          price_sol: trade.priceSOL || 0,
           price_usd: trade.priceUSD || 0,
-          value_sol: trade.value || 0,
+          value_sol: trade.valueSOL || 0,
           value_usd: trade.valueUSD || 0,
-          profit_loss: trade.profitLoss || 0,
-          market_cap: trade.marketCap || 0
+          profit_loss: trade.profitLoss || 0
         };
 
         console.log('Processing trade for caching:', {
@@ -275,31 +273,29 @@ export class TradingHistoryService {
 
       // Set default values
       let tokenInfo = null;
-      let priceData = {
-        priceUsd: 0,
-        priceSol: 0,
-        timestamp: tx.blockTime
-      };
+      let priceUSD = 0;
+      let priceSOL = 0;
       
       try {
-        // Try to get token info
-        tokenInfo = await jupiterApiService.fetchTokenInfo(tokenChange.tokenAddress);
+        // Get token info using new API method
+        tokenInfo = await jupiterApiService.getTokenInfo(tokenChange.tokenAddress);
       } catch (error) {
-        console.error('Failed to fetch token info, using fallback values:', error);
+        console.error('Failed to fetch token info:', error);
       }
       
       try {
-        // Try to get price data
-        priceData = await jupiterApiService.fetchTokenPrice(tokenChange.tokenAddress, tx.blockTime);
+        // Get price data using new API methods
+        [priceUSD, priceSOL] = await Promise.all([
+          jupiterApiService.getTokenPriceInUSD(tokenChange.tokenAddress),
+          jupiterApiService.getTokenPriceInSOL(tokenChange.tokenAddress)
+        ]);
       } catch (error) {
-        console.error('Failed to fetch price data, using fallback values:', error);
+        console.error('Failed to fetch price data:', error);
       }
       
       // Calculate trade values
       const amount = Math.abs(tokenChange.uiAmount);
-      const priceUSD = priceData.priceUsd || 0;
       const valueUSD = amount * priceUSD;
-      const priceSOL = priceData.priceSol || 0;
       const valueSOL = amount * priceSOL;
 
       // Determine trade type based on SOL balance change
@@ -315,22 +311,20 @@ export class TradingHistoryService {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       return {
-        id: `${tx.signature}-${tokenChange.tokenAddress}`,
         signature: tx.signature,
         timestamp: tx.blockTime * 1000,
-        blockTime: tx.blockTime,
         type,
         tokenSymbol: tokenInfo?.symbol || tokenChange.tokenTicker || 'Unknown',
         tokenAddress: tokenChange.tokenAddress,
-        tokenLogoURI: tokenInfo?.logoURI || tokenChange.logo || '',
+        tokenLogoURI: tokenInfo?.logoURI || tokenChange.logo || null,
         decimals: tokenChange.decimals,
         amount,
-        price: priceSOL,
         priceUSD,
-        value: valueSOL,
+        priceSOL,
         valueUSD,
+        valueSOL: valueSOL,
         profitLoss,
-        marketCap: tokenInfo?.marketCap
+        blockTime: tx.blockTime
       };
     } catch (error) {
       console.error('Error processing transaction:', error);
@@ -344,161 +338,94 @@ export class TradingHistoryService {
   async getTradingHistory(
     userId: string,
     walletAddress: string,
-    limit: number = 100,
+    limit: number = 20,
     page: number = 1
-  ): Promise<{
-    trades: ProcessedTrade[];
-    totalCount: number;
-  }> {
+  ): Promise<{ trades: ProcessedTrade[], totalCount: number }> {
     try {
-      console.log('Getting trading history for wallet:', walletAddress);
+      // Calculate offset
+      const offset = (page - 1) * limit;
 
-      // First ensure the wallet exists and get its scan status
-      const { walletId, initialScanComplete, lastUpdated } = await this.ensureWalletExists(userId, walletAddress);
-      
-      let transactions: Transaction[] = [];
-      const BATCH_SIZE = 50;
-      let lastSignature: string | undefined;
-      let hasMore = true;
-      let retryCount = 0;
-      const MAX_RETRIES = 3;
-
-      // If initial scan is not complete, fetch all historical transactions
-      if (!initialScanComplete) {
-        console.log('Initial scan not complete. Fetching all historical transactions...');
-        
-        while (hasMore && retryCount < MAX_RETRIES) {
-          try {
-            const response = await drpcClient.getTransactions(walletAddress, BATCH_SIZE, lastSignature);
-            
-            if (!response.transactions || response.transactions.length === 0) {
-              hasMore = false;
-              break;
-            }
-
-            transactions = [...transactions, ...response.transactions];
-            lastSignature = response.lastSignature || undefined;
-
-            if (response.transactions.length < BATCH_SIZE) {
-              hasMore = false;
-            }
-
-            retryCount = 0;
-          } catch (error) {
-            console.error('Error fetching transaction batch:', error);
-            retryCount++;
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-          }
-        }
-
-        // Mark initial scan as complete
-        await supabase
+      // First get the wallet_id
+      const { data: wallet, error: walletError } = await supabase
           .from('wallets')
-          .update({ initial_scan_complete: true })
-          .eq('id', walletId);
-      } 
-      // If initial scan is complete, only fetch new transactions
-      else if (lastUpdated) {
-        console.log('Fetching new transactions since:', lastUpdated);
-        
-        while (hasMore && retryCount < MAX_RETRIES) {
-          try {
-            const response = await drpcClient.getTransactions(
-              walletAddress, 
-              BATCH_SIZE, 
-              lastSignature,
-              lastUpdated
-            );
-            
-            if (!response.transactions || response.transactions.length === 0) {
-              hasMore = false;
-              break;
-            }
+        .select('id')
+        .eq('user_id', userId)
+        .eq('wallet_address', walletAddress)
+        .single();
 
-            transactions = [...transactions, ...response.transactions];
-            lastSignature = response.lastSignature || undefined;
-
-            if (response.transactions.length < BATCH_SIZE) {
-              hasMore = false;
-            }
-
-            retryCount = 0;
-          } catch (error) {
-            console.error('Error fetching new transactions:', error);
-            retryCount++;
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+      if (walletError) {
+        console.error('Error fetching wallet:', walletError);
+        throw walletError;
           }
-        }
+
+      if (!wallet) {
+        return { trades: [], totalCount: 0 };
       }
 
-      // Process transactions in batches
-      const processedTrades: ProcessedTrade[] = [];
-      const SUB_BATCH_SIZE = 5;
-
-      for (let i = 0; i < transactions.length; i += SUB_BATCH_SIZE) {
-        const batch = transactions.slice(i, i + SUB_BATCH_SIZE);
-        
-        for (const tx of batch) {
-          const trade = await this.processTransaction(tx, walletId);
-          if (trade) {
-            processedTrades.push(trade);
-          }
-        }
-        
-        // Add delay between batches
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      // Store trades in Supabase
-      if (processedTrades.length > 0) {
-        const tradesToInsert = processedTrades.map(trade => ({
-          wallet_id: walletId,
-          signature: trade.signature,
-          timestamp: new Date(trade.timestamp).toISOString(),
-          block_time: trade.blockTime,
-          type: trade.type,
-          token_symbol: trade.tokenSymbol,
-          token_address: trade.tokenAddress,
-          token_logo_uri: trade.tokenLogoURI,
-          decimals: trade.decimals,
-          amount: trade.amount,
-          price_sol: trade.price,
-          price_usd: trade.priceUSD,
-          value_sol: trade.value,
-          value_usd: trade.valueUSD,
-          profit_loss: trade.profitLoss,
-          market_cap: trade.marketCap
-        }));
-
-        const { error } = await supabase
-          .from('trading_history')
-          .upsert(tradesToInsert, {
-            onConflict: 'wallet_id,signature'
-          });
-
-        if (error) {
-          console.error('Error storing trades:', error);
-        }
-      }
-
-      // Get paginated results from database
-      const { data: trades, error: fetchError, count } = await supabase
+      // Then fetch trades using wallet_id
+      const { data: trades, error, count } = await supabase
         .from('trading_history')
         .select('*', { count: 'exact' })
-        .eq('wallet_id', walletId)
+        .eq('wallet_id', wallet.id)
         .order('timestamp', { ascending: false })
-        .range((page - 1) * limit, page * limit - 1);
+        .range(offset, offset + limit - 1);
 
-      if (fetchError) {
-        throw fetchError;
+      if (error) throw error;
+      if (!trades) return { trades: [], totalCount: 0 };
+
+      // Update token information for trades that need it
+      const tradesNeedingUpdate = trades.filter(trade => 
+        !trade.token_symbol || 
+        !trade.price_usd || 
+        !trade.value_usd
+      );
+
+      if (tradesNeedingUpdate.length > 0) {
+        console.log(`Updating token info for ${tradesNeedingUpdate.length} trades`);
+        await TokenInfoService.updateBatchTransactionTokenInfo(tradesNeedingUpdate);
+        
+        // Fetch updated trades
+        const { data: updatedTrades, error: refetchError } = await supabase
+          .from('trading_history')
+          .select('*')
+          .in('signature', tradesNeedingUpdate.map(t => t.signature));
+
+        if (refetchError) throw refetchError;
+        if (updatedTrades) {
+          // Replace old trades with updated ones
+          updatedTrades.forEach(updatedTrade => {
+            const index = trades.findIndex(t => t.signature === updatedTrade.signature);
+            if (index !== -1) {
+              trades[index] = updatedTrade;
+            }
+          });
+        }
       }
 
+      // Map to ProcessedTrade format
+      const processedTrades: ProcessedTrade[] = trades.map(trade => ({
+        signature: trade.signature,
+        timestamp: new Date(trade.timestamp).getTime(),
+        type: trade.type as 'BUY' | 'SELL' | 'UNKNOWN',
+        tokenAddress: trade.token_address,
+        tokenSymbol: trade.token_symbol || 'Unknown',
+        tokenLogoURI: trade.token_logo_uri || null,
+        amount: trade.amount,
+        decimals: trade.decimals || 9,
+        priceUSD: trade.price_usd || 0,
+        priceSOL: trade.price_sol || 0,
+        valueUSD: trade.value_usd || 0,
+        valueSOL: trade.value_sol || 0,
+        profitLoss: trade.profit_loss || 0,
+        blockTime: trade.block_time
+      }));
+
       return {
-        trades: trades || [],
+        trades: processedTrades,
         totalCount: count || 0
       };
     } catch (error) {
-      console.error('Error in getTradingHistory:', error);
+      console.error('Error fetching trading history:', error);
       throw error;
     }
   }

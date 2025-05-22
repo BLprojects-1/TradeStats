@@ -147,6 +147,7 @@ export default function TradingHistory() {
   const [showDebug, setShowDebug] = useState(false);
   const [rawTransactions, setRawTransactions] = useState<any[]>([]);
   const [initialScanInProgress, setInitialScanInProgress] = useState(false);
+  const [errorType, setErrorType] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -197,6 +198,31 @@ export default function TradingHistory() {
         // Check if initial scan is complete
         setInitialScanInProgress(selectedWallet.initial_scan_complete === false);
 
+        // Show more detailed loading messages to set user expectations
+        setTimeout(() => {
+          if (dataLoading) {
+            setLoadingMessage("Connecting to Solana RPC services...");
+          }
+        }, 1500);
+        
+        setTimeout(() => {
+          if (dataLoading) {
+            setLoadingMessage("Fetching your transaction history...");
+          }
+        }, 3000);
+        
+        setTimeout(() => {
+          if (dataLoading) {
+            setLoadingMessage("Processing transaction data...");
+          }
+        }, 5000);
+        
+        setTimeout(() => {
+          if (dataLoading) {
+            setLoadingMessage("Almost there! Formatting your trades...");
+          }
+        }, 8000);
+
         // Load first page of trades
         await loadPage(1, selectedWallet.wallet_address);
       } catch (err) {
@@ -217,6 +243,7 @@ export default function TradingHistory() {
       setDataLoading(true);
       setLoadingMessage(`Loading page ${page} of transactions...`);
       setApiError(null);
+      setErrorType(null);
       
       // Calculate offset
       const offset = (page - 1) * TRADES_PER_PAGE;
@@ -244,11 +271,29 @@ export default function TradingHistory() {
     } catch (err: any) {
       console.error('Error loading page:', err);
       
-      // Check for specific API errors
-      if (err.message?.includes('DRPC API') || err.message?.includes('RPC')) {
+      // Enhanced error handling with more specific messages based on our testing results
+      if (err.message?.includes('TRANSACTION_FETCH_ERROR')) {
+        setApiError('Unable to connect to Solana network to fetch your transaction data. We are using public RPC endpoints which have lower reliability. Please try again in a few moments.');
+        setErrorType('rpc');
+      } else if (err.message?.includes('Service Unavailable') || err.message?.includes('503')) {
+        setApiError('The Solana RPC service is currently unavailable. We are using public endpoints with limited capacity. Please try again later.');
+        setErrorType('rpc');
+      } else if (err.message?.includes('NOT_FOUND')) {
+        // This is a legitimate response for transactions that don't exist or were pruned
+        console.log('Some transactions were not found in the ledger. This is normal for older transactions.');
+        // Don't show an error banner for this case
+      } else if (err.message?.includes('API key') || err.message?.includes('403') || err.message?.includes('401')) {
+        setApiError('Authentication issue with Solana RPC providers. We are using public endpoints which may occasionally limit access. Please try again later.');
+        setErrorType('auth');
+      } else if (err.message?.includes('DRPC API') || err.message?.includes('RPC')) {
         setApiError('We are experiencing issues connecting to the Solana network. Please try again later.');
+        setErrorType('rpc');
       } else if (err.message?.includes('Jupiter') || err.message?.includes('price')) {
         setApiError('We are experiencing issues fetching token prices. Some price data may be unavailable.');
+        setErrorType('general');
+      } else if (err.message?.includes('timeout') || err.message?.includes('ECONNABORTED')) {
+        setApiError('Request timeout. The Solana network may be experiencing high traffic or the public RPC endpoints we use may be rate-limiting our requests.');
+        setErrorType('timeout');
       } else {
         setError('Failed to load trading history. Please try again.');
       }
@@ -298,26 +343,30 @@ export default function TradingHistory() {
     >
       <div className="p-4 md:p-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-2">Trading History</h1>
-          <p className="text-slate-500">View your Solana trading history across DEXs</p>
+          <h1 className="text-2xl font-semibold mb-2 text-white">Trading History</h1>
+          <p className="text-gray-500">View your Solana trading history across DEXs</p>
         </div>
 
         {error && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6" role="alert">
             <p>{error}</p>
           </div>
         )}
         
-        {apiError && <ApiErrorBanner message={apiError} onRetry={handleRetry} />}
+        {apiError && <ApiErrorBanner 
+          message={apiError} 
+          onRetry={handleRetry}
+          errorType={errorType as 'rpc' | 'auth' | 'timeout' | 'general'} 
+        />}
 
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-8">
+        <div className="bg-[#1a1a1a] rounded-lg p-6 mb-8">
           <div className="mb-4">
-            <label htmlFor="wallet-select" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="wallet-select" className="block text-sm font-medium text-gray-400 mb-2">
               Select Wallet
             </label>
             <select
               id="wallet-select"
-              className="block w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="block w-full p-2 bg-[#23232b] text-white border border-gray-700 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               value={selectedWalletId || ''}
               onChange={(e) => setSelectedWalletId(e.target.value)}
             >
@@ -329,9 +378,15 @@ export default function TradingHistory() {
               ))}
             </select>
           </div>
+
+          {!selectedWalletId && (
+            <div className="bg-[#23232b] border border-indigo-500/20 text-indigo-200 px-4 py-3 rounded mb-6">
+              Please select a wallet from the dropdown menu to view your trading history.
+            </div>
+          )}
           
           {initialScanInProgress && (
-            <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
+            <div className="bg-[#23232b] border border-blue-500/20 text-blue-200 px-4 py-3 rounded mb-4">
               <p className="font-bold">Initial wallet scan in progress</p>
               <p>This may take up to 2 minutes for the first scan. Subsequent updates will be much faster.</p>
               <p className="mt-2 text-sm">We're scanning your wallet's transaction history and processing trades. Please wait...</p>
@@ -340,7 +395,7 @@ export default function TradingHistory() {
 
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center">
-              <h2 className="text-2xl font-semibold text-indigo-200">Trade History</h2>
+              <h2 className="text-xl font-semibold text-indigo-200">Trade History</h2>
               {dataLoading && (
                 <div className="ml-4 flex items-center text-indigo-400 text-sm">
                   <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -353,7 +408,7 @@ export default function TradingHistory() {
             </div>
             <div className="flex gap-4">
               <select 
-                className="bg-[#252525] text-gray-300 rounded-md px-3 py-2 text-sm"
+                className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
                 value={timeFilter}
                 onChange={(e) => setTimeFilter(e.target.value)}
                 disabled={dataLoading}
@@ -364,15 +419,14 @@ export default function TradingHistory() {
                 <option value="24h">Last 24 Hours</option>
               </select>
               <select 
-                className="bg-[#252525] text-gray-300 rounded-md px-3 py-2 text-sm"
+                className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
                 value={tokenFilter}
                 onChange={(e) => setTokenFilter(e.target.value)}
                 disabled={dataLoading}
               >
                 <option value="all">All Tokens</option>
-                {/* Generate options for each unique token symbol found in trades */}
                 {Array.from(new Set(trades.map(trade => trade.tokenSymbol)))
-                  .filter(symbol => symbol)  // Just filter out empty symbols
+                  .filter(symbol => symbol)
                   .sort()
                   .map(symbol => (
                     <option key={symbol} value={symbol.toLowerCase()}>
@@ -406,7 +460,7 @@ export default function TradingHistory() {
               <tbody className="divide-y divide-gray-800">
                 {dataLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 whitespace-nowrap text-sm text-center text-indigo-300">
+                    <td colSpan={7} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
                       <div className="flex items-center justify-center space-x-2">
                         <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -418,7 +472,7 @@ export default function TradingHistory() {
                   </tr>
                 ) : trades.length > 0 ? (
                   trades.map((trade) => (
-                    <tr key={trade.signature}>
+                    <tr key={trade.signature} className="bg-[#1a1a1a] hover:bg-[#23232b] transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <div className="flex items-center space-x-2">
                           {trade.tokenLogoURI && (
@@ -456,124 +510,32 @@ export default function TradingHistory() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
+                    <td colSpan={7} className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 text-center">
                       {selectedWalletId ? 'No trades found for this wallet' : 'Select a wallet to view trade history'}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-
-            {/* Pagination Controls */}
-            {trades.length > 0 && (
-              <div className="mt-6 flex items-center justify-between">
-                <div className="text-sm text-gray-400">
-                  {dataLoading ? 
-                    "Loading..." : 
-                    `Showing ${trades.length} transaction${trades.length === 1 ? '' : 's'}`
-                  }
-                  {lastSignature && totalPages > currentPage && 
-                    " (More transactions available)"
-                  }
-                </div>
-                
-                <div className="flex items-center space-x-4">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1 || dataLoading}
-                    className="px-3 py-2 rounded-md bg-[#252525] text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#303030] transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  
-                  <div className="flex items-center space-x-2">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      // Show current page and 2 pages before and after
-                      const pageRange = 2;
-                      let pageNum = currentPage - pageRange + i;
-                      
-                      // Adjust if we're at the beginning or end
-                      if (currentPage <= pageRange) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - pageRange) {
-                        pageNum = totalPages - 4 + i;
-                      }
-                      
-                      // Only show valid page numbers
-                      if (pageNum < 1 || pageNum > totalPages) {
-                        return null;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => handlePageChange(pageNum)}
-                          disabled={dataLoading}
-                          className={`px-3 py-1 rounded-md ${
-                            currentPage === pageNum
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
-                          } transition-colors`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    
-                    {/* Show ellipsis if there are more pages */}
-                    {totalPages > 5 && currentPage < totalPages - 2 && (
-                      <span className="text-gray-500">...</span>
-                    )}
-                    
-                    {/* Always show the last page if we have many pages */}
-                    {totalPages > 5 && (
-                      <button
-                        onClick={() => handlePageChange(totalPages)}
-                        disabled={dataLoading || currentPage === totalPages}
-                        className={`px-3 py-1 rounded-md ${
-                          currentPage === totalPages
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
-                        } transition-colors`}
-                      >
-                        {totalPages}
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages || dataLoading}
-                    className="px-3 py-2 rounded-md bg-[#252525] text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#303030] transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-indigo-200 mb-4">Total Trades</h3>
-            <p className="text-3xl font-bold text-white">{trades.length}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-[#1a1a1a] rounded-lg p-6">
+            <h3 className="text-sm font-medium text-gray-400 mb-2">Total Trades</h3>
+            <p className="text-2xl font-semibold text-white">{trades.length}</p>
           </div>
           
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-indigo-200 mb-4">Total Volume</h3>
-            <p className="text-3xl font-bold text-white">
+          <div className="bg-[#1a1a1a] rounded-lg p-6">
+            <h3 className="text-sm font-medium text-gray-400 mb-2">Total Volume</h3>
+            <p className="text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => sum + (trade.valueUSD || trade.value * 70), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
           </div>
           
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-indigo-200 mb-4">Net P/L</h3>
-            <p className="text-3xl font-bold text-white">
+          <div className="bg-[#1a1a1a] rounded-lg p-6">
+            <h3 className="text-sm font-medium text-gray-400 mb-2">Net P/L</h3>
+            <p className="text-2xl font-semibold text-white">
               ${trades.reduce((sum, trade) => {
                 const value = trade.valueUSD || trade.value * 70;
                 return sum + (trade.type === 'BUY' ? -value : value);
@@ -581,21 +543,21 @@ export default function TradingHistory() {
             </p>
           </div>
         </div>
-        
+
         {/* Debug section */}
-        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-6">
+        <div className="bg-[#1a1a1a] rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-indigo-200">Debugging</h3>
             <button 
               onClick={() => setShowDebug(!showDebug)}
-              className="bg-[#252525] text-gray-300 rounded-md px-3 py-2 text-sm hover:bg-[#303030]"
+              className="bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm hover:bg-[#303030] transition-colors border border-gray-700"
             >
               {showDebug ? 'Hide Raw Data' : 'Show Raw Data'}
             </button>
           </div>
           
           {showDebug && (
-            <div className="mt-4 bg-[#0d0d0d] p-4 rounded-md">
+            <div className="mt-4 bg-[#23232b] p-4 rounded-md">
               <h4 className="text-md font-semibold text-indigo-200 mb-2">Raw Transaction Data</h4>
               <div className="space-y-4">
                 {rawTransactions.map((tx, index) => (

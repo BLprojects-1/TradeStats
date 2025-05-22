@@ -54,7 +54,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-gray-100 relative overflow-hidden">
       <Head>
-        <title>Journi | Solana Trading Journal</title>
+        <title>ryvu | Solana Trading Journal</title>
         <meta name="description" content="Track your Solana trades with ease and gain actionable insights." />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -94,7 +94,7 @@ export default function Home() {
               </a>
               <button 
                 onClick={handleCopyCA}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-md shadow-indigo-900/30 text-white text-sm transition-transform hover:scale-110 relative"
+                className="flex items-center space-x-1.5 px-2.5 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-md shadow-indigo-900/30 text-white text-sm transition-transform hover:scale-110 relative"
                 aria-label="Copy Contract Address"
               >
                 <span>CA</span>
@@ -138,7 +138,7 @@ export default function Home() {
                 <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Solana Trades</span>
               </h1>
               <p className="text-xl text-gray-300 leading-relaxed">
-                Journi turns complex blockchain activity into clear, actionable insights so you can focus on strategy, not spreadsheets.
+                Turn complex blockchain activity into clear, actionable insights so you can focus on strategy, not spreadsheets with ryvu.
               </p>
               <div className="pt-4">
                 <button 
@@ -154,7 +154,72 @@ export default function Home() {
               </div>
             </div>
             <div className="relative">
-              <div className="w-full h-[400px] bg-gradient-to-br from-indigo-800/20 via-purple-800/20 to-indigo-900/20 rounded-2xl border border-indigo-500/20 backdrop-blur-sm shadow-2xl shadow-indigo-900/20 overflow-hidden">
+              <div className="w-full h-[400px] bg-gradient-to-br from-indigo-800/20 via-purple-800/20 to-indigo-900/20 rounded-2xl border border-indigo-500/20 backdrop-blur-sm shadow-2xl shadow-indigo-900/20 overflow-hidden relative">
+                {/* Background SVG styling */}
+                <div className="absolute inset-0 z-[5] opacity-20 pointer-events-none">
+                  <svg className="w-full h-full" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#6366F1" />
+                        <stop offset="100%" stopColor="#A855F7" />
+                      </linearGradient>
+                      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="4" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                      </filter>
+                    </defs>
+                    
+                    {/* Abstract wave patterns */}
+                    <path d="M0,150 C100,120 200,180 300,150 C400,120 500,180 600,150 C700,120 800,180 900,150" 
+                      stroke="url(#grad1)" strokeWidth="1" fill="none" opacity="0.4" />
+                    <path d="M0,190 C150,160 250,220 400,190 C550,160 650,220 800,190" 
+                      stroke="url(#grad1)" strokeWidth="1" fill="none" opacity="0.3" />
+                    
+                    {/* Hexagonal grid pattern - subtle blockchain reference */}
+                    <g opacity="0.5">
+                      <path d="M200,100 L215,85 L235,85 L250,100 L235,115 L215,115 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                      <path d="M250,100 L265,85 L285,85 L300,100 L285,115 L265,115 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                      <path d="M300,100 L315,85 L335,85 L350,100 L335,115 L315,115 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                      <path d="M175,130 L190,115 L210,115 L225,130 L210,145 L190,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                      <path d="M225,130 L240,115 L260,115 L275,130 L260,145 L240,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                      <path d="M275,130 L290,115 L310,115 L325,130 L310,145 L290,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                      <path d="M325,130 L340,115 L360,115 L375,130 L360,145 L340,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
+                    </g>
+                    
+                    {/* Simplified price chart line */}
+                    <path d="M100,280 L150,250 L200,290 L250,270 L300,310 L350,260 L400,280 L450,240 L500,260 L550,230 L600,270 L650,240 L700,280" 
+                      stroke="url(#grad1)" strokeWidth="2" fill="none" filter="url(#glow)" />
+                    
+                    {/* Node points with connections */}
+                    <g opacity="0.7">
+                      <circle cx="200" cy="200" r="5" fill="url(#grad1)" />
+                      <circle cx="350" cy="220" r="4" fill="url(#grad1)" />
+                      <circle cx="450" cy="180" r="6" fill="url(#grad1)" />
+                      <circle cx="580" cy="210" r="5" fill="url(#grad1)" />
+                      
+                      <line x1="200" y1="200" x2="350" y2="220" stroke="url(#grad1)" strokeWidth="0.8" />
+                      <line x1="350" y1="220" x2="450" y2="180" stroke="url(#grad1)" strokeWidth="0.8" />
+                      <line x1="450" y1="180" x2="580" y2="210" stroke="url(#grad1)" strokeWidth="0.8" />
+                    </g>
+                  </svg>
+                </div>
+                
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-8">
+                  <h2 className="text-4xl md:text-4xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-6">Your Trades, Your Results.</h2>
+                  <div className="flex items-center justify-center">
+                    <p className="text-xl md:text-2xl text-white font-medium mr-3">Made for</p>
+                    <div className="h-5 md:h-6">
+                      <Image 
+                        src="/SOLANA.png" 
+                        alt="SOLANA" 
+                        width={120} 
+                        height={30} 
+                        className="h-full w-auto"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="absolute top-0 left-0 w-full h-full bg-[url('/dashboard-preview.jpg')] bg-cover bg-center opacity-60 mix-blend-luminosity"></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-transparent to-transparent"></div>
               </div>
@@ -237,7 +302,7 @@ export default function Home() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold mb-4 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
-                How Journi Works
+                How It Works
               </h2>
               <div className="w-24 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full"></div>
             </div>
@@ -300,15 +365,15 @@ export default function Home() {
             
             <div className="space-y-6">
               <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
-                <h3 className="text-xl font-semibold mb-3 text-white">Is Journi really free?</h3>
+                <h3 className="text-xl font-semibold mb-3 text-white">Is ryvu really free?</h3>
                 <p className="text-gray-300">
-                  Yes, Journi is completely free to use. We believe that every trader should have access to tools that help them improve.
+                  Yes, ryvu is completely free to use. We believe that every trader should have access to tools that help them improve.
                 </p>
               </div>
               <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
                 <h3 className="text-xl font-semibold mb-3 text-white">Is my data secure?</h3>
                 <p className="text-gray-300">
-                  Absolutely. Journi only reads public blockchain data. Your private notes are securely stored and only visible to you.
+                  Absolutely. ryvu only reads public blockchain data. Your private notes are securely stored and only visible to you.
                 </p>
               </div>
               <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
@@ -331,7 +396,7 @@ export default function Home() {
                   Ready to Master Your Solana Trading?
                 </h2>
                 <p className="text-xl text-indigo-100 mb-10">
-                  Join Journi today and turn blockchain complexity into clear, actionable insights.
+                  Join ryvu today and turn blockchain complexity into clear, actionable insights.
                 </p>
                 <button 
                   onClick={handleOpenSignUp}

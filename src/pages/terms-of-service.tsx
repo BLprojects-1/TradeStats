@@ -26,6 +26,32 @@ const TermsOfService = () => {
               />
             </Link>
           </div>
+          <div className="flex items-center gap-2">
+            <a 
+              href="https://x.com/Ryvujournal" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110"
+              aria-label="Follow us on X (Twitter)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+            </a>
+            <button 
+              onClick={() => {navigator.clipboard.writeText('Coming Soon')}}
+              className="flex items-center space-x-1.5 px-2.5 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-md shadow-indigo-900/30 text-white text-sm transition-transform hover:scale-110 relative"
+              aria-label="Copy Contract Address"
+              tabIndex={0}
+              onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {navigator.clipboard.writeText('Coming Soon')}}}
+            >
+              <span>CA</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
           <div>
             <Link href="/" className="px-3 sm:px-4 py-1 sm:py-2 text-sm sm:text-base text-indigo-300 hover:text-indigo-200 font-medium transition-colors">
               Back to Home

@@ -1,0 +1,211 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## Cursor Rules for Accurate API Data Retrieval
+
+**Target Audience:** Senior developers and engineering teams responsible for designing and maintaining data-access layers and API integrations.
+
+### 1. Mindset and Philosophy
+
+* **Accuracy over Convenience:** Treat the API as the single source of truth. Never sacrifice data correctness for expedience.
+* **Evidence-Based Discovery:** Assume that missing data implies incompleteness, not failure. Always investigate and confirm rather than fallback.
+* **Proactive Ownership:** Log and surface every unknown case. Continuous improvement is driven by real gaps in knowledge.
+* **Focused Discipline:** Stay laser-focused on the immediate issue. Avoid distractions by irrelevant scripts or modules.
+
+---
+
+### 2. Core Rules
+
+#### 2.1 No Fallbacks
+
+* **Mindset & Rationale:**
+
+  * Data Integrity Above All: Any substitution or approximation can introduce silent errors that erode trust. If an API doesn’t provide the requested information, that absence is meaningful.
+  * Senior-Engineer Approach: Embrace “missing” as feedback. Treat each unreturned field or resource as a prompt for further investigation, not a trigger to patch over gaps.
+
+* **System Behavior Specifications:**
+
+  1. **Definitive State Recording:**
+
+     * On HTTP 204 (No Content) or HTTP 404 (Not Found), record a `NOT_FOUND` status in the system’s metadata store, tagged with the endpoint, request parameters, and timestamp.
+     * Do not mark the record as stale or retryable; it is an accurate reflection of the source.
+
+  2. **No Data Substitution:**
+
+     * Disable any cache-lookups or secondary API calls that might return default or approximate values.
+     * Reject any downstream operations that depend on the missing field. Propagate a clear exception or error object indicating the missing data.
+
+  3. **Immediate Alerting & Logging:**
+
+     * Emit a high-severity log entry and trigger an alert if critical fields (marked in the schema) are missing.
+     * Route alerts to the API-integration team’s monitoring channel for rapid follow-up.
+
+  4. **Visibility to Consumers:**
+
+     * Ensure client libraries and service layers surface `NotFoundError` or `MissingFieldError` exceptions rather than returning nulls or defaults.
+     * Include contextual metadata (endpoint, parameters) in exception payloads for easier debugging.
+
+* **Examples & Edge Cases:**
+
+  * **User Profile Call:** If `/users/{id}` returns 204, throw `MissingResourceError("User profile not found for id")` rather than populating an empty string.
+  * **Feature Flag Endpoint:** If a flag lookup returns 404, log `FlagNotDefined` and let policy-based logic decide, not a default `false`.
+
+* **Automation & Enforcement:**
+
+  * **Static Analysis Checks:** Lint rules to detect null-coalescing operators or default-value constructors on API-response models.
+  * **CI Validation:** Synthetic calls against invalid parameters must verify the service layer throws `NotFound` rather than returning defaults.
+
+#### 2.2 Endpoint Discovery Process
+
+* **Rule:** Automatically attempt to discover the correct endpoint before giving up.
+* **System Behavior:**
+
+  1. **Query Construction:** Build candidate endpoint patterns using known naming conventions, version prefixes, and identifiers.
+  2. **Automated Web Search:** Target official domains (e.g., `site:developer.vendor.com "GET /resource"`).
+  3. **Documentation Matching:** Heuristics match titles, code samples, and changelog entries to identify the intended endpoint.
+
+#### 2.3 Accurate Web Verification
+
+* **Rule:** Confirm every discovered endpoint against an authoritative source.
+* **System Behavior:**
+
+  * Fetch and parse API docs or changelogs.
+  * Validate response schemas, HTTP methods, and path parameters.
+  * Flag discrepancies against local models.
+
+#### 2.4 Strict Error Handling
+
+* **Rule:** Treat non-2xx responses as definitive signals, not retries or fallbacks.
+* **System Behavior:**
+
+  * Classify and log 4xx/5xx with context (endpoint, payload, timestamp).
+  * Expose structured error objects upstream; do not mask HTTP status codes.
+
+#### 2.5 Version Awareness
+
+* **Rule:** Always target a specific API version and maintain compatibility checks.
+* **System Behavior:**
+
+  * Embed version identifiers (`v1`, `v2-beta`) in URLs.
+  * Poll version metadata endpoints; alert on deprecation or changes.
+
+#### 2.6 Documentation First
+
+* **Rule:** Default to official docs as the single source of truth.
+* **System Behavior:**
+
+  * Use Swagger/OpenAPI JSON when available.
+  * Escalate to API maintainers if official docs lack clarity before using unofficial sources.
+
+#### 2.7 Change Tracking & Continuous Improvement
+
+* **Rule:** Record all endpoint discoveries and anomalies.
+* **System Behavior:**
+
+  * Append each new endpoint or error state to a centralized changelog.
+  * Include metadata: discovery date, source URL, summary, and verification status.
+
+#### 2.8 Intelligent Retry Mechanism
+
+* **Mindset & Rationale:** Resilience through graceful degradation, not rigid logic.
+* **System Behavior:**
+
+  1. **Categorize Failures:** Distinguish transient (timeouts, rate limits) vs. permanent (404/400).
+  2. **Adaptive Retries:** Exponential backoff with jitter, capped retries, and logged attempts.
+  3. **Smart Circuit Breaker:** After three transient failures, open a circuit, cooldown, and warn.
+
+#### 2.9 Error Categorization & Adaptive Response
+
+* **Mindset & Rationale:** Patterns reveal deeper issues.
+* **System Behavior:**
+
+  1. **Schema-Based Classification:** Map HTTP errors to domain-specific categories like `AuthenticationError`, `PermissionDenied`, `DataValidationError`.
+  2. **Dynamic Response Strategies:** Return partial data for non-critical errors; fail-fast on critical ones.
+  3. **Contextual Metadata:** Attach user ID, correlation IDs, and parameters for post-mortem.
+
+#### 2.10 Context-Aware Backoff & Throttling
+
+* **Mindset & Rationale:** Use rate limits to optimize, not throttle blindly.
+* **System Behavior:**
+
+  1. **Rate Limit Awareness:** Parse `Retry-After` headers and respect directives.
+  2. **Endpoint-Level Throttling:** Separate token buckets per endpoint group.
+  3. **Dynamic Throttle Adjustments:** Reduce request rate if error rates spike.
+
+#### 2.11 Collaborative Triage Mode
+
+* **Mindset & Rationale:** Complex APIs demand team collaboration.
+* **System Behavior:**
+
+  1. **Dashboard Hooks:** Push error and retry metrics in real time.
+  2. **Feedback Loop to Docs:** Auto-create draft GitHub issues when anomalies exceed thresholds.
+  3. **Automated Runbook Suggestions:** Surface troubleshooting steps via chatops based on error categories.
+
+#### 2.12 Task Focus Enforcement
+
+* **Mindset & Rationale:** Avoid context switching; solving one problem at a time leads to clarity.
+* **System Behavior:**
+
+  1. **Scope Locking:** When addressing an API error, lock analysis to relevant modules and scripts.
+  2. **Distraction Alerts:** If code references outside the current scope appear, log a low-severity notice and ignore by default.
+  3. **Review Guardrails:** CI checks to ensure PRs related to a bug fix only touch files directly implicated.
+
+#### 2.13 No Unrelated Code Changes
+
+* **Mindset & Rationale:** Minimize risk by changing only what’s necessary.
+* **System Behavior:**
+
+  1. **Diff Analysis:** Automated checks reject commits that introduce unrelated diffs.
+  2. **Commit Policies:** Enforce `--no-verify` false to block accidental broad refactors during hotfixes.
+  3. **Reviewer Checklist:** Include a step to confirm only relevant lines are modified.
+
+#### 2.14 Comprehensive Codebase Scanning
+
+* **Mindset & Rationale:** An issue may lurk anywhere; exhaustive scanning prevents blind spots.
+* **System Behavior:**
+
+  1. **Global Search on Error Trigger:** On any API failure, trigger a codebase-wide search for references to the failing endpoint, schema, or error code.
+  2. **Impact Matrix Generation:** Produce a report of all files/functions touching the fault domain for manual review.
+  3. **Automated Suggestions:** Highlight candidates in the dev console for cursor-driven inspection.
+
+---
+
+### 3. Implementation Considerations
+
+* **Automated Tools:** Integrate with CI pipelines to run discovery, validation, and scope-lock checks.
+* **Monitoring & Alerts:** Configure dashboards for missing-data patterns, circuit status, and code-change warnings.
+* **Review Cadence:** Schedule quarterly reviews of changelogs, scope fences, and scanning heuristics.
+
+
+Mindset & Rationale:
+Cleaner code is more reliable code. By treating linter warnings and errors as first-class bugs, we uphold consistency, readability, and prevent trivial issues from obscuring real problems.
+
+Rule:
+All linter errors and warnings must be resolved before merging any change.
+
+System Behavior Specifications:
+
+Pre-Commit Hook Enforcement:
+
+Install a Git pre-commit hook that runs the linter (ESLint, TSLint, etc.) and blocks commits if any errors or warnings remain.
+
+CI Gatekeeper:
+
+The CI pipeline must run the full lint suite with --max-warnings=0. Any lint failures or warnings cause the build to fail.
+
+Cursor Integration:
+
+When Cursor suggests or applies code fixes, it should automatically include any relevant lint rule fixes (formatting, naming, unreachable code, etc.) in the same change.
+
+Automated PR Comments:
+
+If a PR contains new lint errors (even in untouched files), the system should post a comment listing the violations so they can be addressed immediately.
+
+
+
+
+### 4. Summary
+
+By embedding these rules and senior-developer mindsets into Cursor, your integration layer will remain robust, focused, and maintainable—always surfacing true issues, never hiding them behind fallbacks or distractions.

@@ -1,6 +1,7 @@
 import React, { ReactNode, useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -57,10 +58,10 @@ const DashboardLayout = ({
 
   const navigationItems = [
     { name: 'Dashboard', href: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-    { name: 'Account', href: '/dashboard/account', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
     { name: 'Open Trades', href: '/dashboard/open-trades', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     { name: 'Top Trades', href: '/dashboard/top-trades', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
     { name: 'Trading History', href: '/dashboard/trading-history', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { name: 'Account', href: '/dashboard/account', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
   ];
 
   const toggleSidebar = () => {
@@ -87,7 +88,7 @@ const DashboardLayout = ({
   return (
     <div className="flex flex-col h-screen bg-black">
       <Head>
-        <title>{title} | Journi</title>
+        <title>{title} | ryvu</title>
         <meta name="description" content={description} />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -102,12 +103,14 @@ const DashboardLayout = ({
           {/* Logo/Platform Name and Toggle */}
           <div className="flex items-center justify-between p-4 border-b border-gray-800">
             <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-lg select-none" aria-label="Journi logo" tabIndex={0}>
-                J
-              </div>
-              {!isSidebarCollapsed && (
-                <span className="text-xl font-bold text-white tracking-wide select-none">Journi</span>
-              )}
+              <Image 
+                src="/logo.png" 
+                alt="Ryvu Logo" 
+                width={isSidebarCollapsed ? 32 : 120} 
+                height={32}
+                className="h-7 w-auto"
+                priority
+              />
             </div>
             <button
               onClick={toggleSidebar}

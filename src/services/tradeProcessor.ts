@@ -2,22 +2,20 @@ import { Transaction, TokenBalanceChange } from './drpcClient';
 import { jupiterApiService } from './jupiterApiService';
 
 export interface ProcessedTrade {
-  id: string;            // Unique ID for each trade (to prevent React key issues)
   signature: string;
   timestamp: number;
-  blockTime: number;
-  type: string;
-  tokenSymbol: string;
+  type: 'BUY' | 'SELL' | 'UNKNOWN';
   tokenAddress: string;
-  tokenLogoURI?: string;
-  decimals: number;    // Add token decimals for formatting
+  tokenSymbol: string;
+  tokenLogoURI: string | null;
   amount: number;
-  price: number;
-  priceUSD?: number;
-  value: number;
-  valueUSD?: number;
+  decimals: number;
+  priceUSD: number;
+  priceSOL: number;
+  valueUSD: number;
+  valueSOL: number;
   profitLoss: number;
-  marketCap?: number;  // Market cap for the token
+  blockTime?: number;  // Optional for backward compatibility
 }
 
 // Approximate SOL to USD conversion - in a real app you'd use an API for this
@@ -407,28 +405,26 @@ export class TradeProcessor {
       });
 
       trades.push({
-        id: `${tx.signature}-${mainTokenChange.mint}`,
         signature: tx.signature,
         timestamp: tx.timestamp || tx.blockTime * 1000,
-        blockTime: tx.blockTime,
         type: tradeType,
-        tokenSymbol: mainTokenChange.tokenSymbol,
         tokenAddress: mainTokenChange.mint,
+        tokenSymbol: mainTokenChange.tokenSymbol,
         tokenLogoURI: mainTokenChange.logo,
-        decimals: mainTokenChange.decimals,
         amount,
-        price: totalSolValue / amount, // Price in SOL
+        decimals: mainTokenChange.decimals,
         priceUSD,
-        value: totalSolValue,
+        priceSOL: totalSolValue / amount,
         valueUSD,
-        profitLoss: isBuy ? -valueUSD : valueUSD, // Negative for buys, positive for sells
-        marketCap: finalMarketCap
+        valueSOL: totalSolValue,
+        profitLoss: isBuy ? -valueUSD : valueUSD,
+        blockTime: tx.blockTime
       });
       
       // Verify the trade object immediately after creation
       const createdTrade = trades[trades.length - 1];
       console.log('TradeProcessor: Verified created trade:', {
-        id: createdTrade.id,
+        signature: createdTrade.signature,
         tokenSymbol: `"${createdTrade.tokenSymbol}"`,
         hasTokenLogo: !!createdTrade.tokenLogoURI
       });
@@ -440,7 +436,7 @@ export class TradeProcessor {
       trades: trades.map(t => ({
         type: t.type,
         amount: t.amount,
-        value: t.value,
+        value: t.valueSOL,
         valueUSD: t.valueUSD,
         marketCap: t.marketCap
       }))

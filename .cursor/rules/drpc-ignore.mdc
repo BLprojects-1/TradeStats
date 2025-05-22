@@ -1,0 +1,37 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Mindset & Rationale:
+The DRPC (Distributed Remote Procedure Call) connection module is a critical, battle-tested foundation for cross-service communication. Senior engineers recognize that stability here outweighs exploratory changes—any modification risks systemic outages.
+
+Rule:
+Functions and files related to the DRPC connection must be treated as immutable “protected code regions” unless a critical bug or a major feature explicitly requires modification.
+
+System Behavior Specifications:
+
+Immutable Annotations:
+
+Decorate core DRPC classes, connection-setup functions, and retry/circuit-breaker logic with @Protected (or a consistent comment flag).
+
+Cursor’s automatic refactoring or code-fix routines must skip any block marked with this flag.
+
+CI Enforcement:
+
+Introduce a Git diff check: any PR touching src/drpc/** or files named *DRPCConnection* fails the build unless the PR description contains the tag #DRPC-Reviewed.
+
+If that tag is present, require at least two approvers with the “senior” role before merging.
+
+Change Alerts & Approvals:
+
+Upon detecting changes in protected regions, emit a high-severity notification in the team’s Slack channel and tag on-call API-ops engineers.
+
+Block merging until sign-off from two senior-engineer reviewers is recorded.
+
+Post-Deploy Health Checks:
+
+After deploys that include DRPC-layer changes, automatically run end-to-end connectivity tests and measure latency against an SLO baseline.
+
+Fail the deployment if DRPC round-trip times exceed thresholds or if any RPC calls error out.
+

@@ -5,6 +5,7 @@ import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { fetchTopTrades, fetchTradingHistory, TradeData } from '../../utils/heliusData';
 import { getTrackedWallets, TrackedWallet } from '../../utils/userProfile';
 import LoadingToast from '../../components/LoadingToast';
+import ApiErrorBanner from '../../components/ApiErrorBanner';
 
 export default function TopTrades() {
   const { user, loading } = useAuth();
@@ -13,6 +14,8 @@ export default function TopTrades() {
   const [tradingHistory, setTradingHistory] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<string | null>(null);
   const [wallets, setWallets] = useState<TrackedWallet[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
@@ -55,8 +58,28 @@ export default function TopTrades() {
       if (!selectedWallet) return;
       
       setDataLoading(true);
-      setLoadingMessage("We're experiencing high traffic, loading your top trades now...");
+      setLoadingMessage("Loading your top trades...");
       setError(null);
+      setApiError(null);
+      
+      // Show more detailed loading messages to set user expectations
+      setTimeout(() => {
+        if (dataLoading) {
+          setLoadingMessage("Connecting to Solana RPC services...");
+        }
+      }, 1500);
+      
+      setTimeout(() => {
+        if (dataLoading) {
+          setLoadingMessage("Analyzing trade performance...");
+        }
+      }, 3000);
+      
+      setTimeout(() => {
+        if (dataLoading) {
+          setLoadingMessage("Calculating profit and loss...");
+        }
+      }, 5000);
       
       try {
         // Fetch top trades and trading history in parallel
@@ -67,9 +90,29 @@ export default function TopTrades() {
         
         setTopTrades(tradesData);
         setTradingHistory(historyData);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error loading trade data:', err);
+        
+        // Enhanced error handling with more specific messages
+        if (err.message?.includes('TRANSACTION_FETCH_ERROR') || err.message?.includes('getTransaction')) {
+          setApiError('Unable to fetch transaction data. Our systems are working to resolve this issue.');
+          setErrorType('rpc');
+        } else if (err.message?.includes('Service Unavailable') || err.message?.includes('503')) {
+          setApiError('The Solana RPC service is currently unavailable. Please try again in a few moments.');
+          setErrorType('rpc');
+        } else if (err.message?.includes('NOT_FOUND')) {
+          // This is a legitimate response for transactions that don't exist or were pruned
+          console.log('Some transactions were not found in the ledger. This is normal for older transactions.');
+          // Don't show an error banner for this case
+        } else if (err.message?.includes('API key') || err.message?.includes('403') || err.message?.includes('401')) {
+          setApiError('Authentication issue with Solana RPC providers. Our team has been notified.');
+          setErrorType('auth');
+        } else if (err.message?.includes('timeout') || err.message?.includes('ECONNABORTED')) {
+          setApiError('Request timeout. The Solana network may be experiencing high traffic.');
+          setErrorType('timeout');
+        } else {
         setError('Failed to load trade data. Please try again.');
+        }
       } finally {
         setDataLoading(false);
         setLoadingMessage('');
@@ -100,6 +143,35 @@ export default function TopTrades() {
     : 0;
   const profitFactor = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : '0.00';
 
+  const handleRetry = () => {
+    if (selectedWalletId) {
+      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+      if (selectedWallet) {
+        setApiError(null);
+        const getTradeData = async () => {
+          try {
+            setDataLoading(true);
+            setLoadingMessage("Retrying...");
+            
+            const [tradesData, historyData] = await Promise.all([
+              fetchTopTrades(selectedWallet.wallet_address),
+              fetchTradingHistory(selectedWallet.wallet_address)
+            ]);
+            
+            setTopTrades(tradesData);
+            setTradingHistory(historyData);
+          } catch (err) {
+            console.error('Error retrying trade data fetch:', err);
+          } finally {
+            setDataLoading(false);
+            setLoadingMessage('');
+          }
+        };
+        getTradeData();
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -125,6 +197,12 @@ export default function TopTrades() {
         </div>
       )}
 
+      {apiError && <ApiErrorBanner 
+        message={apiError} 
+        onRetry={handleRetry} 
+        errorType={errorType as 'rpc' | 'auth' | 'timeout' | 'general'} 
+      />}
+
       {!selectedWalletId && (
         <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-6">
           Please select a wallet from the dropdown menu to view your top trades.
@@ -132,8 +210,9 @@ export default function TopTrades() {
       )}
 
       {dataLoading && (
-        <div className="flex justify-center my-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+        <div className="flex flex-col items-center justify-center my-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3"></div>
+          <div className="text-indigo-300">{loadingMessage || 'Loading trades...'}</div>
         </div>
       )}
 
