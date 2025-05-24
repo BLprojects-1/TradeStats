@@ -275,31 +275,26 @@ export default function Dashboard() {
         setPerformanceLoading(true);
         setError(null);
         
-        if (wallets.length === 0) {
-          // Show sample data when no wallets are connected
-          const sampleData = PerformanceService.generateSampleData();
-          setPerformanceData(sampleData);
-        } else {
-          // Load real performance data
-          const data = await PerformanceService.getPerformanceData(user.id);
-          setPerformanceData(data);
+        if (!selectedWalletId) {
+          setPerformanceData(null);
+          return;
         }
+        
+        // Load real performance data
+        const data = await PerformanceService.getPerformanceData(user.id, selectedWalletId);
+        setPerformanceData(data);
       } catch (err) {
         console.error('Error loading performance data:', err);
         setError('Failed to load performance data. Please refresh the page.');
-        
-        // Fallback to sample data on error
-        const sampleData = PerformanceService.generateSampleData();
-        setPerformanceData(sampleData);
       } finally {
         setPerformanceLoading(false);
       }
     };
 
     loadPerformanceData();
-  }, [user, wallets, showOnboarding]);
+  }, [user, selectedWalletId, showOnboarding]);
 
-  // Load open trades data - matches exactly with open-trades.tsx logic
+  // Load open trades data when wallet is selected
   useEffect(() => {
     const loadOpenTradesData = async () => {
       if (!selectedWalletId || !user?.id || showOnboarding) {
@@ -358,17 +353,15 @@ export default function Dashboard() {
       setPerformanceLoading(true);
       setError(null);
       
-      if (wallets.length === 0) {
-        const sampleData = PerformanceService.generateSampleData();
-        setPerformanceData(sampleData);
-        setRefreshMessage("You're up to date!");
-        setShowNotification(true);
-      } else {
-        const data = await PerformanceService.getPerformanceData(user.id);
-        setPerformanceData(data);
-        setRefreshMessage("You're up to date!");
-        setShowNotification(true);
+      if (!selectedWalletId) {
+        setPerformanceData(null);
+        return;
       }
+      
+      const data = await PerformanceService.getPerformanceData(user.id, selectedWalletId);
+      setPerformanceData(data);
+      setRefreshMessage("You're up to date!");
+      setShowNotification(true);
       
       // Clear message after 5 seconds
       setTimeout(() => {
@@ -578,7 +571,7 @@ export default function Dashboard() {
                   ) : (
                     <tr>
                       <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
-                        {wallets.length === 0 ? 'Connect wallets to see open positions' : 'No open trades found for this wallet'}
+                        {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No open trades found for this wallet'}
                       </td>
                     </tr>
                   )}
@@ -633,10 +626,10 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="text-sm text-gray-300 text-center py-4">
-                  {wallets.length === 0 ? 'Connect wallets to see open positions' : 'No open trades found for this wallet'}
+                  {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No open trades found for this wallet'}
                 </div>
-                             )}
-             </div>
+              )}
+            </div>
 
              {/* Summary section */}
              <div className="mt-6 pt-6 border-t border-gray-800">
@@ -694,6 +687,14 @@ export default function Dashboard() {
               <div className="text-center py-8">
                 <div className="text-indigo-400">Loading performance data...</div>
               </div>
+            ) : wallets.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400">No wallets connected</div>
+              </div>
+            ) : !selectedWalletId ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400">Select a wallet to see your performance metrics</div>
+              </div>
             ) : performanceData ? (
               <div className="space-y-6">
                 {/* Performance Chart */}
@@ -701,18 +702,10 @@ export default function Dashboard() {
                 
                 {/* Performance Statistics */}
                 <PerformanceStats metrics={performanceData.metrics} />
-                
-                {wallets.length === 0 && (
-                  <div className="text-center mt-4 p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg">
-                    <p className="text-amber-200 text-sm">
-                      📊 This is sample data. Connect your wallets to see real performance metrics.
-                    </p>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="text-center py-8">
-                <p className="text-gray-400">Unable to load performance data.</p>
+                <p className="text-gray-400">Unable to load performance data</p>
               </div>
             )}
           </div>

@@ -24,47 +24,18 @@ export interface PerformanceData {
 
 export class PerformanceService {
   /**
-   * Get performance data for the last 24 hours for all wallets belonging to a user
+   * Get performance data for the last 24 hours for a specific wallet
    */
-  static async getPerformanceData(userId: string): Promise<PerformanceData> {
+  static async getPerformanceData(userId: string, walletId: string): Promise<PerformanceData> {
     try {
       const twentyFourHoursAgo = new Date();
       twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
 
-      // Get all wallets for the user
-      const { data: wallets, error: walletsError } = await supabase
-        .from('wallets')
-        .select('id')
-        .eq('user_id', userId);
-
-      if (walletsError) {
-        console.error('Error fetching user wallets:', walletsError);
-        throw walletsError;
-      }
-
-      if (!wallets || wallets.length === 0) {
-        return {
-          dataPoints: [],
-          metrics: {
-            totalPnL: 0,
-            totalTrades: 0,
-            tokensTraded: 0,
-            winRate: 0,
-            bestTrade: 0,
-            worstTrade: 0,
-            totalVolume: 0,
-            averageTradeSize: 0
-          }
-        };
-      }
-
-      const walletIds = wallets.map(w => w.id);
-
-      // Get all trades from the last 24 hours for user's wallets
+      // Get trades from the last 24 hours for the specified wallet
       const { data: trades, error: tradesError } = await supabase
         .from('trading_history')
         .select('*')
-        .in('wallet_id', walletIds)
+        .eq('wallet_id', walletId)
         .gte('timestamp', twentyFourHoursAgo.toISOString())
         .order('timestamp', { ascending: true });
 

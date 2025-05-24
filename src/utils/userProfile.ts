@@ -44,7 +44,40 @@ export const createUserProfile = async (userId: string, displayName: string): Pr
       throw new Error('User ID validation failed. The provided ID does not match the authenticated user.');
     }
     
-    // If user exists, proceed with profile creation
+    // Check if a profile already exists
+    const existingProfile = await getUserProfile(userId);
+    if (existingProfile) {
+      console.log('Profile already exists, cleaning up old data...');
+      
+      // Delete any existing tracked wallets
+      const { error: walletsError } = await supabase
+        .from('tracked_wallets')
+        .delete()
+        .eq('user_id', userId);
+        
+      if (walletsError) {
+        console.error('Error cleaning up old wallets:', walletsError);
+        throw walletsError;
+      }
+      
+      // Update the existing profile
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('user_profiles')
+        .update({ display_name: displayName, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+        .select('*')
+        .single();
+        
+      if (updateError) {
+        console.error('Error updating existing profile:', updateError);
+        throw updateError;
+      }
+      
+      console.log('Profile updated successfully:', updatedProfile);
+      return updatedProfile;
+    }
+    
+    // If no existing profile, create a new one
     const { data, error } = await supabase
       .from('user_profiles')
       .insert([
@@ -225,9 +258,15 @@ export const removeTrackedWallet = async (walletId: string): Promise<boolean> =>
 export const hasCompletedOnboarding = async (userId: string): Promise<boolean> => {
   try {
     console.log('Checking if user has completed onboarding:', userId);
+    
+    // Only check for user profile
     const profile = await getUserProfile(userId);
     const result = !!profile;
-    console.log('Onboarding status:', result ? 'Completed' : 'Not completed');
+    
+    console.log('Onboarding status:', result ? 'Completed' : 'Not completed', {
+      hasProfile: !!profile
+    });
+    
     return result;
   } catch (error) {
     console.error('Error in hasCompletedOnboarding:', error);
@@ -236,14 +275,43 @@ export const hasCompletedOnboarding = async (userId: string): Promise<boolean> =
 };
 
 export const deleteUserAccount = async (userId: string): Promise<void> => {
-  // Delete from user_profiles table
-  await supabase.from('user_profiles').delete().eq('id', userId);
-  // Delete from Supabase Auth (admin privilege required)
-  // If you don't have admin, you can only delete your own user via supabase.auth.signOut()
-  if (supabase.auth.admin && typeof supabase.auth.admin.deleteUser === 'function') {
-    await supabase.auth.admin.deleteUser(userId);
-  } else {
-    // fallback: sign out (user will need to be deleted manually from Auth dashboard)
-    await supabase.auth.signOut();
+  try {
+    console.log('Deleting user account:', userId);
+    
+    // Delete tracked wallets first
+    const { error: walletsError } = await supabase
+      .from('tracked_wallets')
+      .delete()
+      .eq('user_id', userId);
+      
+    if (walletsError) {
+      console.error('Error deleting tracked wallets:', walletsError);
+      throw walletsError;
+    }
+    
+    // Delete user profile
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('id', userId);
+      
+    if (profileError) {
+      console.error('Error deleting user profile:', profileError);
+      throw profileError;
+    }
+    
+    // Delete from Supabase Auth (admin privilege required)
+    // If you don't have admin, you can only delete your own user via supabase.auth.signOut()
+    if (supabase.auth.admin && typeof supabase.auth.admin.deleteUser === 'function') {
+      await supabase.auth.admin.deleteUser(userId);
+    } else {
+      // fallback: sign out (user will need to be deleted manually from Auth dashboard)
+      await supabase.auth.signOut();
+    }
+    
+    console.log('User account deleted successfully');
+  } catch (error) {
+    console.error('Error in deleteUserAccount:', error);
+    throw error;
   }
 }; 

@@ -47,25 +47,24 @@ export function WalletSelectionProvider({ children }: WalletSelectionProviderPro
       }
 
       try {
+        console.log('Loading wallets for user:', user.id);
         const userWallets = await getTrackedWallets(user.id);
+        console.log('Loaded wallets:', userWallets);
         setWallets(userWallets);
         
-        // Auto-select first wallet if none selected
-        if (!selectedWalletId && userWallets.length > 0) {
-          setSelectedWalletId(userWallets[0].id);
-        }
-        
-        // Clear selected wallet if it no longer exists
+        // Only maintain current selection if the wallet still exists
         if (selectedWalletId && !userWallets.find(w => w.id === selectedWalletId)) {
-          setSelectedWalletId(userWallets.length > 0 ? userWallets[0].id : null);
+          setSelectedWalletId(null);
         }
       } catch (error) {
         console.error('Error loading wallets:', error);
+        setWallets([]);
+        setSelectedWalletId(null);
       }
     };
 
     loadWallets();
-  }, [user?.id]);
+  }, [user?.id, selectedWalletId]);
 
   // Functions to track which wallets are being scanned
   const markWalletAsScanning = (walletId: string) => {
