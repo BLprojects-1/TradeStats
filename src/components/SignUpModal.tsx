@@ -106,27 +106,76 @@ const SignUpModal = ({ onClose, onSwitchToSignIn }: SignUpModalProps) => {
       setError(null);
       setVerifyingEmail(true);
       
-      // Check if user is confirmed by trying to get the session
-      const { data, error } = await supabase.auth.getSession();
+      console.log('Starting email verification check...');
       
-      console.log('Verification check results:', data);
+      // First, get the current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (error) {
-        console.error('Session check error:', error);
-        throw error;
+      console.log('Current session state:', { session, error: sessionError });
+      
+      if (sessionError) {
+        console.error('Session check error:', sessionError);
+        throw sessionError;
       }
       
-      if (data.session) {
-        // User is confirmed and logged in
-        console.log('Email verified and user logged in!', data.session);
-        onClose();
-      } else {
-        // User is not confirmed yet
-        setError('Email not yet confirmed. Please check your inbox and spam folder, or request a new confirmation email below.');
+      // If no session, try to refresh it
+      if (!session) {
+        console.log('No session found, attempting to refresh auth state...');
+        const { data: { user }, error: refreshError } = await supabase.auth.refreshSession();
+        
+        console.log('Auth refresh result:', { user, error: refreshError });
+        
+        if (refreshError) {
+          console.error('Auth refresh error:', refreshError);
+          throw refreshError;
+        }
+        
+        // If still no user after refresh, email is not confirmed
+        if (!user) {
+          throw new Error('Email not yet confirmed. Please check your inbox and click the confirmation link.');
+        }
       }
+      
+      // Get the latest user data
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      console.log('Current user state:', { user, error: userError });
+      
+      if (userError) {
+        console.error('User data fetch error:', userError);
+        throw userError;
+      }
+      
+      if (!user) {
+        throw new Error('Unable to verify email confirmation status. Please try again.');
+      }
+      
+      // Check if email is confirmed
+      if (!user.email_confirmed_at) {
+        throw new Error('Email not yet confirmed. Please check your inbox and click the confirmation link.');
+      }
+      
+      console.log('Email verification successful!', {
+        email: user.email,
+        confirmed_at: user.email_confirmed_at
+      });
+      
+      // If we get here, email is confirmed
+      onClose();
     } catch (error) {
-      console.error('Error verifying email:', error);
-      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
+      console.error('Error in handleVerifyEmail:', error);
+      
+      if (error instanceof Error) {
+        if (error.message.includes('not confirmed')) {
+          setError('Email not yet confirmed. Please check your inbox and spam folder, or request a new confirmation email below.');
+        } else if (error.message.includes('expired')) {
+          setError('Your session has expired. Please request a new confirmation email.');
+        } else {
+          setError(error.message);
+        }
+      } else {
+        setError('An unexpected error occurred while verifying your email.');
+      }
     } finally {
       setVerifyingEmail(false);
     }
