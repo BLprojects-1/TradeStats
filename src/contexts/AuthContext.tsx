@@ -104,9 +104,50 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signOut = async () => {
     try {
       console.log('Signing out user');
-      await supabase.auth.signOut();
+      
+      // Sign out with scope: 'local' to clear all local session data
+      await supabase.auth.signOut({
+        scope: 'local'
+      });
+      
+      // Clear all Supabase-related items from localStorage
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // Clear session storage as well
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+      
+      // Clear local state
+      setSession(null);
+      setUser(null);
+      
+      // Force a complete page reload and redirect
+      window.location.href = '/';
+      window.location.reload();
     } catch (error) {
       console.error('Error signing out:', error);
+      // Even if there's an error, try to clear everything
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+      setSession(null);
+      setUser(null);
+      window.location.href = '/';
+      window.location.reload();
     }
   };
 

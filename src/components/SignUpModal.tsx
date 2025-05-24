@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { getSiteUrl } from '../utils/siteConfig';
 
 interface SignUpModalProps {
   onClose: () => void;
@@ -53,8 +54,8 @@ const SignUpModal = ({ onClose, onSwitchToSignIn }: SignUpModalProps) => {
         email,
         password,
         options: {
-          // Use the callback route for email confirmations
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          // Use the getSiteUrl function for email redirects
+          emailRedirectTo: `${getSiteUrl()}/auth/callback`,
           // Make sure email confirmation is required (this is default in Supabase but making it explicit)
           data: {
             email_confirmed: false
@@ -137,15 +138,28 @@ const SignUpModal = ({ onClose, onSwitchToSignIn }: SignUpModalProps) => {
       setResendSuccess(false);
       setResendingEmail(true);
       
-      console.log('Attempting to resend confirmation email to:', email);
+      // Debug log the current state
+      console.log('Starting resend process with:', {
+        email,
+        redirectUrl: `${getSiteUrl()}/auth/callback`,
+        currentUrl: window.location.href
+      });
       
-      // Use the auth.resend API with signup type
+      // Explicitly construct the payload with correct types
       const { data, error } = await supabase.auth.resend({
-        type: 'signup',
+        type: 'signup' as const,  // Explicitly type as 'signup'
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          emailRedirectTo: `${getSiteUrl()}/auth/callback`
         }
+      });
+      
+      // Debug log the complete response
+      console.log('Complete Resend API Response:', {
+        data,
+        error,
+        status: error ? 'error' : 'success',
+        timestamp: new Date().toISOString()
       });
       
       if (error) {
@@ -153,25 +167,43 @@ const SignUpModal = ({ onClose, onSwitchToSignIn }: SignUpModalProps) => {
         throw error;
       }
       
-      console.log('Resend confirmation email response:', data);
+      // Check if the response indicates success
+      if (!data) {
+        console.warn('No data received from resend operation');
+        throw new Error('Failed to resend confirmation email - no response data');
+      }
+      
+      console.log('Resend successful:', {
+        timestamp: new Date().toISOString(),
+        email,
+        data
+      });
+      
       setResendSuccess(true);
       setResendCount(prevCount => prevCount + 1);
       
+      // Show success message for 5 seconds
       setTimeout(() => {
         setResendSuccess(false);
       }, 5000);
     } catch (error) {
-      console.error('Error resending confirmation email:', error);
+      console.error('Error in handleResendEmail:', error);
       
-      // Handle specific resend error cases
+      // Enhanced error handling with specific messages
       if (error instanceof Error) {
         if (error.message.includes('rate limit')) {
-          setError('Too many requests. Please wait before trying again.');
+          setError('Please wait a few minutes before requesting another email.');
+        } else if (error.message.includes('not found')) {
+          setError('This email address is not found in our system. Please sign up first.');
+        } else if (error.message.includes('already confirmed')) {
+          setError('This email is already confirmed. Please try signing in.');
+        } else if (error.message.includes('invalid email')) {
+          setError('Please provide a valid email address.');
         } else {
-          setError(error.message);
+          setError(`Failed to resend: ${error.message}`);
         }
       } else {
-        setError('Failed to resend confirmation email. Please try again later.');
+        setError('An unexpected error occurred while resending the confirmation email.');
       }
     } finally {
       setResendingEmail(false);

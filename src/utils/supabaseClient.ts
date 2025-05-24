@@ -14,8 +14,8 @@ console.log('Initializing Supabase client with URL:', supabaseUrl);
 // Create a single supabase client for interacting with your database
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
+    persistSession: false,
+    autoRefreshToken: false,
     detectSessionInUrl: true,
     flowType: 'pkce',
     debug: true, // Enable debug logs for authentication

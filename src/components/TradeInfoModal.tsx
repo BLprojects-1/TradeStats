@@ -338,7 +338,7 @@ export default function TradeInfoModal({
 
               {/* Add Swing Plan section before the trade list */}
               <div className="bg-[#252525] rounded-lg p-4 mb-4">
-                <h3 className="text-lg font-semibold text-indigo-200 mb-2">Swing Plan</h3>
+                <h3 className="text-lg font-semibold text-indigo-200 mb-2">Trade Notes</h3>
                 <textarea
                   value={swingPlan}
                   onChange={handleSwingPlanChange}

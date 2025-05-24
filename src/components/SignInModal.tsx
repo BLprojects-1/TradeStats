@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { getSiteUrl } from '../utils/siteConfig';
 
 interface SignInModalProps {
   onClose: () => void;
@@ -87,7 +88,7 @@ const SignInModal = ({ onClose }: SignInModalProps) => {
       console.log('Sending password reset email to:', email);
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${getSiteUrl()}/auth/callback`,
       });
       
       if (error) {
