@@ -16,6 +16,9 @@ interface WalletSelectionContextType {
   setWalletCache: (walletId: string, trades: ProcessedTrade[]) => void;
   clearWalletCache: (walletId: string) => void;
   isCacheValid: (walletId: string, maxAgeMinutes?: number) => boolean;
+  // Wallet loading functionality
+  reloadWallets: () => Promise<void>;
+  isLoading: boolean;
 }
 
 const WalletSelectionContext = createContext<WalletSelectionContextType | undefined>(undefined);
@@ -35,6 +38,33 @@ export function WalletSelectionProvider({ children }: WalletSelectionProviderPro
   const [wallets, setWallets] = useState<TrackedWallet[]>([]);
   const [scanningWallets, setScanningWallets] = useState<Set<string>>(new Set());
   const [walletCaches, setWalletCaches] = useState<Map<string, WalletCache>>(new Map());
+  const [isLoading, setIsLoading] = useState(false);
+
+  const reloadWallets = async () => {
+    if (!user?.id || isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      console.log('Reloading wallets for user:', user.id);
+      const userWallets = await getTrackedWallets(user.id);
+      console.log('Reloaded wallets:', userWallets);
+      setWallets(userWallets);
+      
+      // If there are wallets but no selection, select the first one
+      if (userWallets.length > 0 && !selectedWalletId) {
+        console.log('Auto-selecting first wallet:', userWallets[0].id);
+        setSelectedWalletId(userWallets[0].id);
+      } else if (selectedWalletId && !userWallets.find(w => w.id === selectedWalletId)) {
+        // If current selection is invalid, clear it
+        setSelectedWalletId(null);
+      }
+    } catch (error) {
+      console.error('Error reloading wallets:', error);
+      // Don't clear wallets on reload error to maintain existing state
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Load wallets when user changes
   useEffect(() => {
@@ -46,25 +76,32 @@ export function WalletSelectionProvider({ children }: WalletSelectionProviderPro
         return;
       }
 
+      setIsLoading(true);
       try {
         console.log('Loading wallets for user:', user.id);
         const userWallets = await getTrackedWallets(user.id);
         console.log('Loaded wallets:', userWallets);
         setWallets(userWallets);
         
-        // Only maintain current selection if the wallet still exists
-        if (selectedWalletId && !userWallets.find(w => w.id === selectedWalletId)) {
+        // If there are wallets but no selection, select the first one
+        if (userWallets.length > 0 && !selectedWalletId) {
+          console.log('Auto-selecting first wallet:', userWallets[0].id);
+          setSelectedWalletId(userWallets[0].id);
+        } else if (selectedWalletId && !userWallets.find(w => w.id === selectedWalletId)) {
+          // If current selection is invalid, clear it
           setSelectedWalletId(null);
         }
       } catch (error) {
         console.error('Error loading wallets:', error);
         setWallets([]);
         setSelectedWalletId(null);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     loadWallets();
-  }, [user?.id, selectedWalletId]);
+  }, [user?.id]); // Remove selectedWalletId from dependencies to prevent circular updates
 
   // Functions to track which wallets are being scanned
   const markWalletAsScanning = (walletId: string) => {
@@ -147,7 +184,9 @@ export function WalletSelectionProvider({ children }: WalletSelectionProviderPro
     getWalletCache,
     setWalletCache,
     clearWalletCache,
-    isCacheValid
+    isCacheValid,
+    reloadWallets,
+    isLoading
   };
 
   return (

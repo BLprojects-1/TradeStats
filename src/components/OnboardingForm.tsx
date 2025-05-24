@@ -4,6 +4,7 @@ import { getAuthDebugInfo } from '../utils/debugSupabase';
 import { supabase } from '../utils/supabaseClient';
 import Head from 'next/head';
 import Footer from '../components/Footer';
+import { useWalletSelection } from '../contexts/WalletSelectionContext';
 
 interface WalletInput {
   address: string;
@@ -31,6 +32,7 @@ interface AuthDebugInfo {
 }
 
 const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
+  const { reloadWallets } = useWalletSelection();
   const [displayName, setDisplayName] = useState('');
   const [wallets, setWallets] = useState<WalletInput[]>([{ address: '', label: 'My Wallet' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,7 +133,10 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
       
       setDebugInfo(prevDebug => `${prevDebug || ''}\nAdded ${results.length} wallets successfully`);
       
-      // 3. Notify parent component that onboarding is complete
+      // 3. Reload wallets in the context
+      await reloadWallets();
+      
+      // 4. Notify parent component that onboarding is complete
       onComplete();
     } catch (err) {
       console.error('Onboarding error:', err);

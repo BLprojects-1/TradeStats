@@ -73,16 +73,16 @@ const processTradesToHoldings = async (trades: ProcessedTrade[], userId?: string
       tokenData.buys.push({
         amount: trade.amount,
         timestamp: trade.timestamp,
-        valueUSD: trade.valueUSD
+        valueUSD: trade.valueUSD || 0
       });
-      tokenData.buyValue += trade.valueUSD;
+      tokenData.buyValue += trade.valueUSD || 0;
     } else if (trade.type === 'SELL') {
       tokenData.sells.push({
         amount: trade.amount,
         timestamp: trade.timestamp,
-        valueUSD: trade.valueUSD
+        valueUSD: trade.valueUSD || 0
       });
-      tokenData.sellValue += trade.valueUSD;
+      tokenData.sellValue += trade.valueUSD || 0;
     }
   }
   
@@ -95,76 +95,34 @@ const processTradesToHoldings = async (trades: ProcessedTrade[], userId?: string
     const totalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
     const remaining = totalBought - totalSold;
     
+    // Only include tokens with a positive remaining balance
     if (remaining <= 0) continue;
-
-    // Check for 2.5% discrepancy - if found, trigger additional all-time scrape
-    if (userId && walletAddress) {
-      const netPosition = Math.abs(totalBought - totalSold);
-      const maxAmount = Math.max(totalBought, totalSold);
-      const discrepancyPercent = maxAmount > 0 ? (netPosition / maxAmount) * 100 : 0;
-      
-      if (discrepancyPercent > 2.5) {
-        console.log(`Discrepancy detected for ${data.tokenSymbol}: ${discrepancyPercent.toFixed(2)}% - triggering all-time scrape`);
-        try {
-          // Get all-time trades for this specific token to ensure accuracy
-          const allTimeResult = await tradingHistoryService.getAllTokenTrades(
-            userId,
-            walletAddress,
-            tokenAddress
-          );
-          
-          // Recalculate with all-time data
-          const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
-          const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
-          
-          if (allTimeBuys.length > 0 || allTimeSells.length > 0) {
-            // Update with more accurate all-time data
-            data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
-            data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
-            data.buyValue = data.buys.reduce((sum, buy) => sum + buy.valueUSD, 0);
-            data.sellValue = data.sells.reduce((sum, sell) => sum + sell.valueUSD, 0);
-          }
-        } catch (error) {
-          console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
-          // Continue with original data if all-time fetch fails
-        }
-      }
-    }
-
-    // Recalculate with potentially updated data
-    const finalTotalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
-    const finalTotalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
-    const finalRemaining = finalTotalBought - finalTotalSold;
-    
-    // Only include tokens with a positive remaining balance after recalculation
-    if (finalRemaining <= 0) continue;
     
     const tokenData: TokenData = {
       tokenAddress,
       tokenSymbol: data.tokenSymbol,
       tokenLogoURI: data.tokenLogoURI || undefined,
-      totalBought: finalTotalBought,
-      totalSold: finalTotalSold,
-      remaining: finalRemaining,
-      totalValue: 0,
+      totalBought,
+      totalSold,
+      remaining,
+      totalValue: 0, // Will be updated with current price
       lastTransactionTimestamp: data.latestTimestamp
     };
     
     holdings.push(tokenData);
     tokensToFetch.push({
-      tokenData, 
-      tokenAddress, 
+      tokenData,
+      tokenAddress,
       timestamp: data.latestTimestamp
     });
   }
   
-  // Fetch prices in small batches
+  // Fetch current prices in small batches
   const BATCH_SIZE = 5;
   for (let i = 0; i < tokensToFetch.length; i += BATCH_SIZE) {
     const batch = tokensToFetch.slice(i, i + BATCH_SIZE);
     
-    const batchPromises = batch.map(({tokenData, tokenAddress, timestamp}) => {
-      // For open positions, use current real-time prices (no timestamp) to calculate current value and P/L
+    const batchPromises = batch.map(({tokenData, tokenAddress}) => {
       return jupiterApiService.getTokenPriceInUSD(tokenAddress)
         .then(price => {
           tokenData.currentPrice = price;
@@ -192,9 +150,13 @@ const processTradesToHoldings = async (trades: ProcessedTrade[], userId?: string
 
 export default function Dashboard() {
   const { user, loading, refreshSession } = useAuth();
-  const { selectedWalletId, wallets, isWalletScanning, markWalletAsScanning, markWalletScanComplete } = useWalletSelection();
+  const { selectedWalletId, wallets, isWalletScanning, markWalletAsScanning, markWalletScanComplete, getWalletCache, setWalletCache, isCacheValid, reloadWallets } = useWalletSelection();
   const router = useRouter();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showLoadingNotification, setShowLoadingNotification] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
+  const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
+  const walletsRef = useRef(wallets);
 
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -266,79 +228,140 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  // Load performance data when user is available and has wallets
+  // Keep wallets ref updated
   useEffect(() => {
-    const loadPerformanceData = async () => {
-      if (!user?.id || showOnboarding) return;
+    walletsRef.current = wallets;
+  }, [wallets]);
+
+  // Load data when a wallet is selected
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      if (!selectedWalletId || !user?.id || showOnboarding) {
+        setOpenTrades([]);
+        setPerformanceData(null);
+        return;
+      }
+      
+      const selectedWallet = walletsRef.current.find(w => w.id === selectedWalletId);
+      if (!selectedWallet) {
+        setOpenTrades([]);
+        setPerformanceData(null);
+        return;
+      }
+
+      // Check if we have cached data first
+      const cachedData = getWalletCache(selectedWalletId);
+      if (cachedData && isCacheValid(selectedWalletId)) {
+        console.log('Using cached data for dashboard');
+        const processedTrades = await processTradesToHoldings(cachedData, user.id, selectedWallet.wallet_address);
+        setOpenTrades(processedTrades);
+        return;
+      }
+      
+      setOpenTradesLoading(true);
+      setPerformanceLoading(true);
+      setLoadingMessage("Loading your trading data...");
+      setShowLoadingNotification(true);
+      setError(null);
+      
+      // Check if initial scan is complete
+      const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
+      console.log(`Wallet ${selectedWallet.wallet_address} initial_scan_complete:`, isInitialScanComplete);
+      
+      const walletIsCurrentlyScanning = isWalletScanning(selectedWalletId);
+      const hasBeenScanned = scannedWallets.has(selectedWalletId);
+      let weInitiatedScan = false;
+      
+      if (!isInitialScanComplete && !walletIsCurrentlyScanning && !hasBeenScanned) {
+        markWalletAsScanning(selectedWalletId);
+        setScannedWallets(prev => new Set(prev).add(selectedWalletId));
+        weInitiatedScan = true;
+        setLoadingMessage("Initial wallet scan in progress. This may take up to 2 minutes for the first scan.");
+      } else if (isInitialScanComplete) {
+        setLoadingMessage("Loading trade data from database...");
+      } else {
+        setLoadingMessage("Wallet scan in progress...");
+      }
       
       try {
-        setPerformanceLoading(true);
-        setError(null);
+        console.log(`Loading data for wallet: ${selectedWallet.wallet_address}`);
         
-        if (!selectedWalletId) {
-          setPerformanceData(null);
-          return;
+        // Calculate timestamp for 24 hours ago
+        const oneDayAgo = new Date();
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+        
+        // Load both trading history and performance data
+        const [tradeResult, performanceResult] = await Promise.all([
+          tradingHistoryService.getTradingHistory(
+            user.id,
+            selectedWallet.wallet_address,
+            500,
+            1,
+            oneDayAgo.getTime()
+          ),
+          PerformanceService.getPerformanceData(user.id, selectedWalletId)
+        ]);
+        
+        if (tradeResult && tradeResult.trades.length > 0) {
+          const openPositions = await processTradesToHoldings(tradeResult.trades, user.id, selectedWallet.wallet_address);
+          setOpenTrades(openPositions);
+          setWalletCache(selectedWalletId, tradeResult.trades);
+        } else {
+          setOpenTrades([]);
         }
         
-        // Load real performance data
-        const data = await PerformanceService.getPerformanceData(user.id, selectedWalletId);
-        setPerformanceData(data);
+        setPerformanceData(performanceResult);
+        
+        // Update loading state
+        setLoadingMessage('Data loaded successfully!');
+        setTimeout(() => {
+          setShowLoadingNotification(false);
+          setLoadingMessage(null);
+        }, 3000);
+        
+        // Handle scan completion
+        if (!isInitialScanComplete && weInitiatedScan) {
+          markWalletScanComplete(selectedWalletId);
+          setScannedWallets(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(selectedWalletId);
+            return newSet;
+          });
+        }
       } catch (err) {
-        console.error('Error loading performance data:', err);
-        setError('Failed to load performance data. Please refresh the page.');
+        console.error('Error loading dashboard data:', err);
+        setError('Failed to load trading data. Please try again.');
+        setOpenTrades([]);
+        setPerformanceData(null);
+        
+        if (!isInitialScanComplete && weInitiatedScan) {
+          markWalletScanComplete(selectedWalletId);
+          setScannedWallets(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(selectedWalletId);
+            return newSet;
+          });
+        }
       } finally {
+        setOpenTradesLoading(false);
         setPerformanceLoading(false);
       }
     };
 
-    loadPerformanceData();
-  }, [user, selectedWalletId, showOnboarding]);
-
-  // Load open trades data when wallet is selected
-  useEffect(() => {
-    const loadOpenTradesData = async () => {
-      if (!selectedWalletId || !user?.id || showOnboarding) {
-        setOpenTrades([]);
-        return;
-      }
-      
-      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
-      if (!selectedWallet) {
-        setOpenTrades([]);
-        return;
-      }
-      
-      try {
-        setOpenTradesLoading(true);
-        
-        // Use the tradingHistoryService to get all trading history
-        const result = await tradingHistoryService.getTradingHistory(
-          user.id,
-          selectedWallet.wallet_address,
-          500, // Get a larger number of trades for better analysis
-          1
-        );
-        
-        // Process the trades to find open positions
-        const openPositions = await processTradesToHoldings(result.trades, user?.id, selectedWallet.wallet_address);
-        setOpenTrades(openPositions);
-      } catch (err) {
-        console.error('Error loading open trades data:', err);
-        // Don't show error for open trades, just log it and clear data
-        setOpenTrades([]);
-      } finally {
-        setOpenTradesLoading(false);
-      }
-    };
-
-    loadOpenTradesData();
-  }, [selectedWalletId, user?.id, showOnboarding, wallets]);
+    loadDashboardData();
+  }, [selectedWalletId, user?.id, showOnboarding]);
 
   const handleOnboardingComplete = async () => {
     if (user) {
       try {
         await refreshSession();
         setShowOnboarding(false);
+        
+        // Force a reload of wallets and wait for it to complete
+        await reloadWallets();
+        
+        // The wallet selection will happen automatically in the WalletSelectionContext
+        // since we've updated it to auto-select the first wallet when wallets are loaded
       } catch (err) {
         console.error('Error completing onboarding:', err);
         setError('Failed to complete onboarding. Please try again.');
@@ -571,7 +594,7 @@ export default function Dashboard() {
                   ) : (
                     <tr>
                       <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
-                        {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No open trades found for this wallet'}
+                        {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No trades found for this wallet'}
                       </td>
                     </tr>
                   )}
@@ -626,35 +649,37 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="text-sm text-gray-300 text-center py-4">
-                  {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No open trades found for this wallet'}
+                  {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No trades found for this wallet'}
                 </div>
               )}
             </div>
 
-             {/* Summary section */}
-             <div className="mt-6 pt-6 border-t border-gray-800">
-               <h3 className="text-lg font-semibold text-indigo-200 mb-4">24h Position Summary</h3>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6">
-                 <div className="bg-[#252525] p-4 rounded-lg">
-                   <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Open Positions</h4>
-                   <p className="text-xl sm:text-2xl font-semibold text-white">{openTrades.length}</p>
-                 </div>
-                 
-                 <div className="bg-[#252525] p-4 rounded-lg">
-                   <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Total Value</h4>
-                   <p className="text-xl sm:text-2xl font-semibold text-white">
-                     {formatSmallPrice(openTrades.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
-                   </p>
-                 </div>
-                 
-                 <div className="bg-[#252525] p-4 rounded-lg">
-                   <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Unrealized P/L</h4>
-                   <p className="text-xl sm:text-2xl font-semibold text-white">
-                     {formatSmallPrice(openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
-                   </p>
-                 </div>
-               </div>
-             </div>
+            {/* Summary section - only show if there are trades */}
+            {openTrades.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-gray-800">
+                <h3 className="text-lg font-semibold text-indigo-200 mb-4">24h Position Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6">
+                  <div className="bg-[#252525] p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Open Positions</h4>
+                    <p className="text-xl sm:text-2xl font-semibold text-white">{openTrades.length}</p>
+                  </div>
+                  
+                  <div className="bg-[#252525] p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Total Value</h4>
+                    <p className="text-xl sm:text-2xl font-semibold text-white">
+                      {formatSmallPrice(openTrades.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-[#252525] p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Unrealized P/L</h4>
+                    <p className="text-xl sm:text-2xl font-semibold text-white">
+                      {formatSmallPrice(openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
@@ -714,6 +739,16 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Loading notification */}
+      <NotificationToast
+        message={loadingMessage || ''}
+        isVisible={showLoadingNotification}
+        type={loadingMessage?.includes('Failed') ? 'error' : 'info'}
+        autoDismissMs={3000}
+        onDismiss={() => setShowLoadingNotification(false)}
+      />
+
+      {/* Existing refresh notification */}
       <NotificationToast
         message={refreshMessage || ''}
         isVisible={showNotification}
