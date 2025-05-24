@@ -160,7 +160,27 @@ export class TradingHistoryService {
         updated_at: trade.updated_at
       }));
 
-      return trades;
+      // ✅ REFRESH HISTORICAL PRICES FOR CACHED TRADES!
+      if (data && data.length > 0) {
+        console.log('🔄 getCachedTradingHistory: Refreshing historical prices for cached trades...');
+        const tradesWithFreshPrices = await this.refreshHistoricalPrices(data);
+        
+        // Convert to CachedTrade format (add metadata)
+        const cachedTrades: CachedTrade[] = tradesWithFreshPrices.map(trade => {
+          const originalTrade = data.find(d => d.signature === trade.signature);
+          return {
+            ...trade,
+            wallet_id: originalTrade?.wallet_id || '',
+            created_at: originalTrade?.created_at || '',
+            updated_at: originalTrade?.updated_at || ''
+          };
+        });
+        
+        console.log(`✅ getCachedTradingHistory: Historical price refresh complete for ${cachedTrades.length} trades.`);
+        return cachedTrades;
+      }
+      
+      return [];
     } catch (error) {
       console.error('Error in getCachedTradingHistory:', error);
       throw error;
@@ -319,6 +339,16 @@ export class TradingHistoryService {
           jupiterApiService.getTokenPriceInUSD(tokenChange.tokenAddress),
           jupiterApiService.getTokenPriceInSOL(tokenChange.tokenAddress)
         ]);
+
+        // ✅ NOW PASSING TIMESTAMP FOR HISTORICAL PRICES!
+        const tradeTimestamp = tx.blockTime * 1000; // Convert to milliseconds
+        console.log(`TradingHistoryService: Fetching historical price for ${tokenChange.tokenAddress} at timestamp ${tradeTimestamp}`);
+        
+        // Get historical price data using new API methods with timestamp
+        [priceUSD, priceSOL] = await Promise.all([
+          jupiterApiService.getTokenPriceInUSD(tokenChange.tokenAddress, tradeTimestamp),
+          jupiterApiService.getTokenPriceInSOL(tokenChange.tokenAddress, tradeTimestamp)
+        ]);
       } catch (error) {
         console.error('Failed to fetch price data:', error);
       }
@@ -403,21 +433,68 @@ export class TradingHistoryService {
         console.log(`Fetching transactions from last 24 hours: ${twentyFourHoursAgo.toISOString()}`);
         
         try {
-          // Get transactions from DRPC for the last 24 hours only
-          const transactions = await drpcClient.getTransactionsByWallet(
-            walletAddress,
-            { 
-              from: twentyFourHoursAgo,
-              limit: 50 // Limit to 50 transactions to avoid endless scraping
-            }
-          );
+          // Get ALL transactions from DRPC for the last 24 hours - use pagination to ensure we get everything
+          console.log('🔄 Starting comprehensive initial scan...');
           
-          console.log(`Retrieved ${transactions.length} transactions for initial scan`);
+          let allTransactions: Transaction[] = [];
+          let hasMoreTransactions = true;
+          let beforeSignature: string | undefined = undefined;
+          const batchSize = 100; // Fetch in batches of 100
+          let totalFetched = 0;
+          let batchCount = 0;
+          
+          while (hasMoreTransactions && totalFetched < 1000) { // Safety limit of 1000 transactions
+            batchCount++;
+            console.log(`📥 Fetching batch ${batchCount}, beforeSignature: ${beforeSignature ? `${beforeSignature.substring(0, 8)}...` : 'none'}`);
+            
+            const result = await drpcClient.getTransactionsByWallet(
+              walletAddress,
+              { 
+                from: twentyFourHoursAgo,
+                limit: batchSize,
+                before: beforeSignature
+              }
+            );
+            
+            if (!result.transactions || result.transactions.length === 0) {
+              console.log('✅ No more transactions found - scan complete');
+              hasMoreTransactions = false;
+              break;
+            }
+            
+            // Filter out duplicates by signature (in case of overlapping data)
+            const newTransactions = result.transactions.filter(tx => 
+              !allTransactions.some(existing => existing.signature === tx.signature)
+            );
+            
+            allTransactions.push(...newTransactions);
+            totalFetched += result.transactions.length;
+            
+            // Update cursor for next batch
+            beforeSignature = result.lastSignature || undefined;
+            
+            console.log(`📊 Batch complete: ${result.transactions.length} fetched, ${newTransactions.length} new, ${allTransactions.length} total unique`);
+            
+            // If we got fewer than requested or no lastSignature, we've reached the end
+            if (result.transactions.length < batchSize || !result.lastSignature) {
+              console.log('✅ Reached end of available transactions');
+              hasMoreTransactions = false;
+            }
+            
+            // Add delay to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          
+          if (totalFetched >= 1000) {
+            console.log('⚠️ Hit safety limit of 1000 transactions fetched');
+          }
+          
+          console.log(`🎯 Initial scan complete: Retrieved ${allTransactions.length} unique transactions for processing`);
           
           // Process transactions into trades
           const processedTrades: ProcessedTrade[] = [];
           
-          for (const tx of transactions) {
+          for (const tx of allTransactions) {
             const trade = await this.processTransaction(tx, walletId);
             if (trade) {
               processedTrades.push(trade);
@@ -553,8 +630,14 @@ export class TradingHistoryService {
         tags: trade.tags || ''
       }));
 
+      // ✅ REFRESH HISTORICAL PRICES USING STORED TIMESTAMPS!
+      console.log('🔄 Refreshing historical prices for all cached trades using stored timestamps...');
+      const tradesWithFreshPrices = await this.refreshHistoricalPrices(trades);
+      
+      console.log(`✅ Historical price refresh complete. Returning ${tradesWithFreshPrices.length} trades with accurate historical pricing.`);
+
       return {
-        trades: processedTrades,
+        trades: tradesWithFreshPrices,
         totalCount: count || 0
       };
     } catch (error) {
@@ -597,7 +680,7 @@ export class TradingHistoryService {
       
       try {
         // Get transactions from DRPC since the last update, but limited to 24 hours
-        const transactions = await drpcClient.getTransactionsByWallet(
+        const result = await drpcClient.getTransactionsByWallet(
           walletAddress,
           { 
             from: fromDate,
@@ -605,12 +688,12 @@ export class TradingHistoryService {
           }
         );
         
-        console.log(`Retrieved ${transactions.length} transactions since last update`);
+        console.log(`Retrieved ${result.transactions.length} transactions since last update`);
         
         // Process transactions into trades
         const processedTrades: ProcessedTrade[] = [];
         
-        for (const tx of transactions) {
+        for (const tx of result.transactions) {
           const trade = await this.processTransaction(tx, walletId);
           if (trade) {
             processedTrades.push(trade);
@@ -793,6 +876,99 @@ export class TradingHistoryService {
       console.error('Error in getStarredTrades:', error);
       throw error;
     }
+  }
+
+  /**
+   * Refresh historical prices for cached trades using their stored timestamps
+   * This ensures we get accurate historical prices instead of relying on cached values
+   */
+  async refreshHistoricalPrices(trades: any[]): Promise<ProcessedTrade[]> {
+    console.log(`Refreshing historical prices for ${trades.length} trades using stored timestamps`);
+    
+    const updatedTrades: ProcessedTrade[] = [];
+    
+    // Process in small batches to avoid rate limiting
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < trades.length; i += BATCH_SIZE) {
+      const batch = trades.slice(i, i + BATCH_SIZE);
+      
+      const batchPromises = batch.map(async (trade) => {
+        try {
+          // Extract the stored timestamp from the database
+          const storedTimestamp = new Date(trade.timestamp).getTime();
+          console.log(`Fetching historical price for ${trade.token_address} at stored timestamp: ${new Date(storedTimestamp).toISOString()}`);
+          
+          // Fetch fresh historical prices using the stored timestamp
+          const [freshPriceUSD, freshPriceSOL] = await Promise.all([
+            jupiterApiService.getTokenPriceInUSD(trade.token_address, storedTimestamp),
+            jupiterApiService.getTokenPriceInSOL(trade.token_address, storedTimestamp)
+          ]);
+          
+          // Calculate updated values
+          const amount = trade.amount;
+          const freshValueUSD = amount * freshPriceUSD;
+          const freshValueSOL = amount * freshPriceSOL;
+          const freshProfitLoss = trade.type === 'BUY' ? -freshValueUSD : freshValueUSD;
+          
+          console.log(`Historical price update for ${trade.token_symbol}: was $${trade.price_usd}, now $${freshPriceUSD}`);
+          
+          // Create updated trade object
+          return {
+            signature: trade.signature,
+            timestamp: storedTimestamp,
+            type: trade.type as 'BUY' | 'SELL' | 'UNKNOWN',
+            tokenAddress: trade.token_address,
+            tokenSymbol: trade.token_symbol || 'Unknown',
+            tokenLogoURI: trade.token_logo_uri || null,
+            amount: trade.amount,
+            decimals: trade.decimals || 9,
+            priceUSD: freshPriceUSD,  // ✅ Fresh historical price
+            priceSOL: freshPriceSOL,  // ✅ Fresh historical price
+            valueUSD: freshValueUSD,  // ✅ Recalculated with fresh price
+            valueSOL: freshValueSOL,  // ✅ Recalculated with fresh price
+            profitLoss: freshProfitLoss,  // ✅ Recalculated with fresh price
+            blockTime: trade.block_time,
+            starred: trade.starred || false,
+            notes: trade.notes || '',
+            tags: trade.tags || ''
+          };
+        } catch (error) {
+          console.error(`Error refreshing price for trade ${trade.signature}:`, error);
+          
+          // Fallback to cached data if fresh lookup fails
+          return {
+            signature: trade.signature,
+            timestamp: new Date(trade.timestamp).getTime(),
+            type: trade.type as 'BUY' | 'SELL' | 'UNKNOWN',
+            tokenAddress: trade.token_address,
+            tokenSymbol: trade.token_symbol || 'Unknown',
+            tokenLogoURI: trade.token_logo_uri || null,
+            amount: trade.amount,
+            decimals: trade.decimals || 9,
+            priceUSD: trade.price_usd || 0,  // Fallback to cached
+            priceSOL: trade.price_sol || 0,  // Fallback to cached
+            valueUSD: trade.value_usd || 0,  // Fallback to cached
+            valueSOL: trade.value_sol || 0,  // Fallback to cached
+            profitLoss: trade.profit_loss || 0,  // Fallback to cached
+            blockTime: trade.block_time,
+            starred: trade.starred || false,
+            notes: trade.notes || '',
+            tags: trade.tags || ''
+          };
+        }
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      updatedTrades.push(...batchResults);
+      
+      // Add delay between batches to prevent rate limiting
+      if (i + BATCH_SIZE < trades.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    console.log(`Completed historical price refresh for ${updatedTrades.length} trades`);
+    return updatedTrades;
   }
 }
 

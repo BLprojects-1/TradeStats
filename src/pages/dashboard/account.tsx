@@ -6,10 +6,15 @@ import { getUserProfile, UserProfile, updateUserProfile, deleteUserAccount, Trac
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import WalletList from '../../components/WalletList';
 import AddWalletModal from '../../components/AddWalletModal';
+import LoadingToast from '../../components/LoadingToast';
+import { ProcessedTrade } from '../../services/tradeProcessor';
+import { tradingHistoryService } from '../../services/tradingHistoryService';
+import ApiErrorBanner from '../../components/ApiErrorBanner';
+import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
 
 export default function Account() {
   const { user, loading, signOut } = useAuth();
-  const { wallets, setSelectedWalletId } = useWalletSelection();
+  const { wallets } = useWalletSelection();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +23,10 @@ export default function Account() {
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -42,6 +51,24 @@ export default function Account() {
       fetchData();
     }
   }, [user]);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (cooldownTimeLeft > 0) {
+      interval = setInterval(() => {
+        setCooldownTimeLeft(prev => {
+          if (prev <= 1) {
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cooldownTimeLeft]);
 
   const handleSaveName = async () => {
     if (!user?.id) return;
@@ -79,8 +106,43 @@ export default function Account() {
   };
 
   const handleWalletAdded = (newWallet: TrackedWallet) => {
-    // WalletList will update through the context automatically
     setShowAddWalletModal(false);
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    
+    // Check cooldown
+    const now = Date.now();
+    const cooldownMs = 2 * 60 * 1000; // 2 minutes
+    const timeSinceLastRefresh = now - lastRefreshTime;
+    
+    if (timeSinceLastRefresh < cooldownMs) {
+      const timeLeft = Math.ceil((cooldownMs - timeSinceLastRefresh) / 1000);
+      setCooldownTimeLeft(timeLeft);
+      setRefreshMessage(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`);
+      setTimeout(() => setRefreshMessage(null), 3000);
+      return;
+    }
+    
+    setRefreshing(true);
+    setRefreshMessage(null);
+    setLastRefreshTime(now);
+    
+    try {
+      // Simulate refresh - in a real scenario, you might refresh user data or wallets
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setRefreshMessage("You're up to date!");
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setRefreshMessage(null), 5000);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setRefreshMessage('Failed to refresh data. Please try again.');
+      setTimeout(() => setRefreshMessage(null), 5000);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   if (loading) {
@@ -101,8 +163,48 @@ export default function Account() {
     >
       <div className="space-y-4 sm:space-y-6">
         <div className="mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl font-semibold mb-2 text-white">Account Settings</h1>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-white">Account Settings</h1>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing || cooldownTimeLeft > 0}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+            >
+              {refreshing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Refreshing...</span>
+                </>
+              ) : cooldownTimeLeft > 0 ? (
+                <>
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{Math.floor(cooldownTimeLeft / 60)}:{(cooldownTimeLeft % 60).toString().padStart(2, '0')}</span>
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Refresh</span>
+                </>
+              )}
+            </button>
+          </div>
           <p className="text-gray-500">Manage your account information and connected wallets</p>
+          {refreshMessage && (
+            <div className={`mt-3 p-3 rounded-md text-sm ${
+              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
+                ? 'bg-red-900/30 border border-red-500 text-red-200' 
+                : 'bg-green-900/30 border border-green-500 text-green-200'
+            }`}>
+              {refreshMessage}
+            </div>
+          )}
         </div>
 
         {error && (

@@ -42,8 +42,7 @@ const DashboardLayout = ({
   const { 
     wallets: contextWallets, 
     selectedWalletId: contextSelectedWalletId,
-    setSelectedWalletId: contextSetSelectedWalletId,
-    loading: walletsLoading
+    setSelectedWalletId: contextSetSelectedWalletId
   } = useWalletSelection();
 
   // Use context values, falling back to props for backward compatibility
@@ -83,7 +82,7 @@ const DashboardLayout = ({
       if (selectedWallet) {
         const walletDisplay = selectedWallet.label || selectedWallet.nickname || 
           `${selectedWallet.wallet_address.substring(0, 6)}...${selectedWallet.wallet_address.substring(selectedWallet.wallet_address.length - 4)}`;
-        setNotificationMessage(`Wallet changed to: ${walletDisplay}`);
+        setNotificationMessage(`Loading saved wallets for: ${walletDisplay}`);
         setNotificationVisible(true);
         
         // Auto-hide after 3 seconds
@@ -383,7 +382,6 @@ const DashboardLayout = ({
                         onClick={handleWalletDropdownClick}
                         onKeyDown={handleWalletDropdownKeyDown}
                         className="flex items-center justify-between w-full bg-[#1d1d23] border border-gray-700 hover:border-indigo-400 rounded-lg px-3 py-2.5 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 hover:shadow-lg hover:shadow-indigo-500/10"
-                        disabled={walletsLoading}
                         aria-label="Select wallet"
                         tabIndex={0}
                       >
@@ -521,7 +519,6 @@ const DashboardLayout = ({
                     onClick={handleWalletDropdownClick}
                     onKeyDown={handleWalletDropdownKeyDown}
                     className="flex items-center justify-between w-full bg-[#1d1d23] border border-gray-700 hover:border-indigo-400 rounded-lg px-3 py-2.5 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 hover:shadow-lg hover:shadow-indigo-500/10"
-                    disabled={walletsLoading}
                     aria-label="Select wallet"
                     tabIndex={0}
                   >

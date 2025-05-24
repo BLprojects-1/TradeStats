@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { TokenInfoResponse, TokenPriceResponse } from './jupiterApiService';
 import { supabase } from '../lib/supabaseClient';
+import { onChainPriceService } from './onChainPriceService';
 
 // Simple in-memory cache implementation
 interface CacheEntry<T> {
@@ -242,6 +243,115 @@ export class JupiterRateLimitedService {
     // Skip Supabase price lookup - prices are fetched fresh from Jupiter API and cached in memory
     // Historical prices are stored in trading_history table when trades are processed
     
+    // If timestamp is provided (historical price), try on-chain service first
+    if (timestamp) {
+      try {
+        console.log(`Attempting on-chain historical price lookup for ${tokenAddress} at timestamp ${timestamp}`);
+        
+        // Pass the timestamp directly to the on-chain service
+        // It will handle the timestamp-to-slot conversion internally
+        const onChainPrice = await onChainPriceService.getHistoricalPrice(tokenAddress, timestamp);
+        
+        // Format response to match Jupiter API structure
+        const response: TokenPriceResponse = {
+          data: {
+            [tokenAddress]: {
+              id: tokenAddress,
+              type: 'token',
+              price: onChainPrice.toString(),
+              extraInfo: {
+                lastSwappedPrice: {
+                  lastJupiterSellAt: null,
+                  lastJupiterSellPrice: null,
+                  lastJupiterBuyAt: null,
+                  lastJupiterBuyPrice: null,
+                },
+                quotedPrice: {
+                  buyPrice: onChainPrice.toString(),
+                  buyAt: Date.now(),
+                  sellPrice: onChainPrice.toString(),
+                  sellAt: Date.now(),
+                },
+                confidenceLevel: 'high' as const,
+                depth: {
+                  buyPriceImpactRatio: {
+                    depth: {},
+                    timestamp: Date.now(),
+                  },
+                  sellPriceImpactRatio: {
+                    depth: {},
+                    timestamp: Date.now(),
+                  },
+                },
+              },
+            }
+          },
+          timeTaken: 0
+        };
+        
+        // Update cache
+        this.cache.tokenPrice.set(cacheKey, {
+          data: response,
+          timestamp: Date.now()
+        });
+        
+        console.log(`Successfully fetched on-chain historical price for ${tokenAddress}: $${onChainPrice}`);
+        return response;
+      } catch (error) {
+        console.warn(`❌ On-chain historical price lookup failed for ${tokenAddress}:`, error instanceof Error ? error.message : String(error));
+        console.log(`🔄 Falling back to Jupiter API current price for ${tokenAddress}...`);
+        
+        // Fallback to Jupiter API with current price (not historical)
+        try {
+          const response = await this.getTokenPrice(tokenAddress); // No timestamp = current price
+          const priceData = response.data[tokenAddress];
+          const currentPrice = parseFloat(priceData.price);
+          console.log(`✅ Jupiter API fallback price for ${tokenAddress}: $${currentPrice}`);
+          return response;
+        } catch (fallbackError) {
+          console.error(`❌ Jupiter API fallback also failed for ${tokenAddress}:`, fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+          
+          // Last resort: return 0 (will be handled gracefully by caller)
+          console.warn(`⚠️ Returning 0 price for ${tokenAddress} - all price lookups failed`);
+          return {
+            data: {
+              [tokenAddress]: {
+                id: tokenAddress,
+                type: 'token',
+                price: '0',
+                extraInfo: {
+                  lastSwappedPrice: {
+                    lastJupiterSellAt: null,
+                    lastJupiterSellPrice: null,
+                    lastJupiterBuyAt: null,
+                    lastJupiterBuyPrice: null,
+                  },
+                  quotedPrice: {
+                    buyPrice: '0',
+                    buyAt: Date.now(),
+                    sellPrice: '0',
+                    sellAt: Date.now(),
+                  },
+                  confidenceLevel: 'high' as const,
+                  depth: {
+                    buyPriceImpactRatio: {
+                      depth: {},
+                      timestamp: Date.now(),
+                    },
+                    sellPriceImpactRatio: {
+                      depth: {},
+                      timestamp: Date.now(),
+                    },
+                  },
+                },
+              }
+            },
+            timeTaken: 0
+          };
+        }
+      }
+    }
+    
     // Not in cache or Supabase, fetch from API with rate limiting
     const fetchTask = async () => {
       // Simplify the request to only get the price, not extra info
@@ -283,9 +393,43 @@ export class JupiterRateLimitedService {
    * @param timestamp Optional timestamp for historical price lookup
    */
   async getTokenPriceInUSD(tokenAddress: string, timestamp?: string | Date | number): Promise<number> {
-    const response = await this.getTokenPrice(tokenAddress, timestamp);
-    const priceData = response.data[tokenAddress];
-    return parseFloat(priceData.price);
+    // If timestamp is provided, try on-chain service first (for historical prices)
+    if (timestamp) {
+      try {
+        console.log(`Attempting historical price lookup for ${tokenAddress} at timestamp ${timestamp}`);
+        const onChainPrice = await onChainPriceService.getHistoricalPrice(tokenAddress, timestamp);
+        console.log(`✅ On-chain historical price for ${tokenAddress}: $${onChainPrice}`);
+        return onChainPrice;
+      } catch (error) {
+        console.warn(`❌ On-chain historical price lookup failed for ${tokenAddress}:`, error instanceof Error ? error.message : String(error));
+        console.log(`🔄 Falling back to Jupiter API current price for ${tokenAddress}...`);
+        
+        // Fallback to Jupiter API with current price (not historical)
+        try {
+          const response = await this.getTokenPrice(tokenAddress); // No timestamp = current price
+          const priceData = response.data[tokenAddress];
+          const currentPrice = parseFloat(priceData.price);
+          console.log(`✅ Jupiter API fallback price for ${tokenAddress}: $${currentPrice}`);
+          return currentPrice;
+        } catch (fallbackError) {
+          console.error(`❌ Jupiter API fallback also failed for ${tokenAddress}:`, fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+          
+          // Last resort: return 0 (will be handled gracefully by caller)
+          console.warn(`⚠️ Returning 0 price for ${tokenAddress} - all price lookups failed`);
+          return 0;
+        }
+      }
+    }
+    
+    // For current prices (no timestamp), use Jupiter API directly
+    try {
+      const response = await this.getTokenPrice(tokenAddress, timestamp);
+      const priceData = response.data[tokenAddress];
+      return parseFloat(priceData.price);
+    } catch (error) {
+      console.error(`❌ Current price lookup failed for ${tokenAddress}:`, error instanceof Error ? error.message : String(error));
+      return 0;
+    }
   }
 
   /**

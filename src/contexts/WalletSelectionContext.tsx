@@ -1,102 +1,71 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getTrackedWallets, TrackedWallet } from '../utils/userProfile';
 import { useAuth } from './AuthContext';
+import { ProcessedTrade } from '../services/tradeProcessor';
 
 interface WalletSelectionContextType {
   selectedWalletId: string | null;
+  setSelectedWalletId: (walletId: string | null) => void;
   wallets: TrackedWallet[];
-  setSelectedWalletId: (id: string | null) => void;
-  loading: boolean;
-  error: string | null;
-  scanningWallets: Set<string>; // Track which wallets are currently being scanned
+  setWallets: (wallets: TrackedWallet[]) => void;
+  isWalletScanning: (walletId: string) => boolean;
   markWalletAsScanning: (walletId: string) => void;
   markWalletScanComplete: (walletId: string) => void;
-  isWalletScanning: (walletId: string) => boolean;
-  refreshWallets: () => Promise<void>; // Add a method to refresh wallet data
+  // Cache functionality
+  getWalletCache: (walletId: string) => ProcessedTrade[] | null;
+  setWalletCache: (walletId: string, trades: ProcessedTrade[]) => void;
+  clearWalletCache: (walletId: string) => void;
+  isCacheValid: (walletId: string, maxAgeMinutes?: number) => boolean;
 }
 
 const WalletSelectionContext = createContext<WalletSelectionContextType | undefined>(undefined);
 
-export const useWalletSelection = (): WalletSelectionContextType => {
-  const context = useContext(WalletSelectionContext);
-  if (!context) {
-    throw new Error('useWalletSelection must be used within a WalletSelectionProvider');
-  }
-  return context;
-};
+interface WalletCache {
+  trades: ProcessedTrade[];
+  timestamp: number;
+}
 
-export const WalletSelectionProvider = ({ children }: { children: ReactNode }) => {
+interface WalletSelectionProviderProps {
+  children: ReactNode;
+}
+
+export function WalletSelectionProvider({ children }: WalletSelectionProviderProps) {
   const { user } = useAuth();
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [wallets, setWallets] = useState<TrackedWallet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [scanningWallets, setScanningWallets] = useState<Set<string>>(new Set());
-
-  // Load the selected wallet ID from localStorage on initial mount
-  useEffect(() => {
-    const savedWalletId = localStorage.getItem('selectedWalletId');
-    if (savedWalletId) {
-      setSelectedWalletId(savedWalletId);
-    }
-  }, []);
-
-  // Save the selected wallet ID to localStorage whenever it changes
-  useEffect(() => {
-    if (selectedWalletId) {
-      localStorage.setItem('selectedWalletId', selectedWalletId);
-    }
-  }, [selectedWalletId]);
-
-  // Function to fetch wallets - can be called to refresh data
-  const fetchWallets = async () => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const userWallets = await getTrackedWallets(user.id);
-      setWallets(userWallets);
-      
-      // If there's no selected wallet but we have wallets, select the first one
-      if (!selectedWalletId && userWallets.length > 0) {
-        // Check if we have a saved wallet ID that matches one of the loaded wallets
-        const savedWalletId = localStorage.getItem('selectedWalletId');
-        const validSavedWallet = savedWalletId && userWallets.some(w => w.id === savedWalletId);
-        
-        if (validSavedWallet) {
-          setSelectedWalletId(savedWalletId);
-        } else if (userWallets.length === 1) {
-          // If only one wallet, select it automatically
-          setSelectedWalletId(userWallets[0].id);
-          localStorage.setItem('selectedWalletId', userWallets[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Error loading wallets:', err);
-      setError('Failed to load wallets. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [walletCaches, setWalletCaches] = useState<Map<string, WalletCache>>(new Map());
 
   // Load wallets when user changes
   useEffect(() => {
-    fetchWallets();
-  }, [user]);
+    const loadWallets = async () => {
+      if (!user?.id) {
+        setWallets([]);
+        setSelectedWalletId(null);
+        setWalletCaches(new Map()); // Clear caches when user changes
+        return;
+      }
 
-  const handleSetSelectedWalletId = (id: string | null) => {
-    setSelectedWalletId(id);
-    if (id) {
-      localStorage.setItem('selectedWalletId', id);
-    } else {
-      localStorage.removeItem('selectedWalletId');
-    }
-  };
+      try {
+        const userWallets = await getTrackedWallets(user.id);
+        setWallets(userWallets);
+        
+        // Auto-select first wallet if none selected
+        if (!selectedWalletId && userWallets.length > 0) {
+          setSelectedWalletId(userWallets[0].id);
+        }
+        
+        // Clear selected wallet if it no longer exists
+        if (selectedWalletId && !userWallets.find(w => w.id === selectedWalletId)) {
+          setSelectedWalletId(userWallets.length > 0 ? userWallets[0].id : null);
+        }
+      } catch (error) {
+        console.error('Error loading wallets:', error);
+      }
+    };
+
+    loadWallets();
+  }, [user?.id]);
 
   // Functions to track which wallets are being scanned
   const markWalletAsScanning = (walletId: string) => {
@@ -114,30 +83,85 @@ export const WalletSelectionProvider = ({ children }: { children: ReactNode }) =
       return newSet;
     });
     
-    // Refresh wallet data to get updated initial_scan_complete status
-    fetchWallets();
+    // Update wallet status in wallets array
+    setWallets(prev => prev.map(wallet => 
+      wallet.id === walletId 
+        ? { ...wallet, initial_scan_complete: true }
+        : wallet
+    ));
   };
 
-  const isWalletScanning = (walletId: string) => {
+  const isWalletScanning = (walletId: string): boolean => {
     return scanningWallets.has(walletId);
   };
 
+  // Cache functionality
+  const getWalletCache = (walletId: string): ProcessedTrade[] | null => {
+    const cache = walletCaches.get(walletId);
+    if (!cache) return null;
+    
+    // Check if cache is still valid (default 5 minutes)
+    const maxAge = 5 * 60 * 1000; // 5 minutes in milliseconds
+    if (Date.now() - cache.timestamp > maxAge) {
+      walletCaches.delete(walletId);
+      return null;
+    }
+    
+    return cache.trades;
+  };
+
+  const setWalletCache = (walletId: string, trades: ProcessedTrade[]) => {
+    setWalletCaches(prev => {
+      const newMap = new Map(prev);
+      newMap.set(walletId, {
+        trades,
+        timestamp: Date.now()
+      });
+      return newMap;
+    });
+  };
+
+  const clearWalletCache = (walletId: string) => {
+    setWalletCaches(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(walletId);
+      return newMap;
+    });
+  };
+
+  const isCacheValid = (walletId: string, maxAgeMinutes: number = 5): boolean => {
+    const cache = walletCaches.get(walletId);
+    if (!cache) return false;
+    
+    const maxAge = maxAgeMinutes * 60 * 1000;
+    return Date.now() - cache.timestamp <= maxAge;
+  };
+
+  const value: WalletSelectionContextType = {
+    selectedWalletId,
+    setSelectedWalletId,
+    wallets,
+    setWallets,
+    isWalletScanning,
+    markWalletAsScanning,
+    markWalletScanComplete,
+    getWalletCache,
+    setWalletCache,
+    clearWalletCache,
+    isCacheValid
+  };
+
   return (
-    <WalletSelectionContext.Provider 
-      value={{
-        selectedWalletId,
-        wallets,
-        setSelectedWalletId: handleSetSelectedWalletId,
-        loading,
-        error,
-        scanningWallets,
-        markWalletAsScanning,
-        markWalletScanComplete,
-        isWalletScanning,
-        refreshWallets: fetchWallets
-      }}
-    >
+    <WalletSelectionContext.Provider value={value}>
       {children}
     </WalletSelectionContext.Provider>
   );
-}; 
+}
+
+export function useWalletSelection() {
+  const context = useContext(WalletSelectionContext);
+  if (context === undefined) {
+    throw new Error('useWalletSelection must be used within a WalletSelectionProvider');
+  }
+  return context;
+} 

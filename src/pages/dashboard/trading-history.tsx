@@ -9,126 +9,10 @@ import { ProcessedTrade } from '../../services/tradeProcessor';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { jupiterApiService } from '../../services/jupiterApiService';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
+import { formatTokenAmount, formatMarketCap, formatSmallPrice, formatDate, formatTime } from '../../utils/formatters';
+import NotificationToast from '../../components/NotificationToast';
 
-const TRADES_PER_PAGE = 20; // Increase from 10 to 20 for more trades per page
-
-// Add a helper function to format token amounts with appropriate decimal places
-const formatTokenAmount = (amount: number, decimals = 6) => {
-  // For very large numbers with many decimals, use appropriate formatting
-  if (amount > 1_000_000) {
-    return amount.toLocaleString(undefined, { 
-      maximumFractionDigits: 2 
-    });
-  }
-  
-  // For large numbers, use fewer decimal places
-  if (amount > 1000) {
-    return amount.toLocaleString(undefined, { 
-      maximumFractionDigits: 2 
-    });
-  }
-  
-  // For medium amounts (1-1000), show more decimals
-  if (amount >= 1) {
-    return amount.toLocaleString(undefined, { 
-      maximumFractionDigits: 4 
-    });
-  }
-  
-  // For small amounts (<1), use decimals or significant digits based on size
-  if (amount < 0.000001) {
-    return amount.toExponential(4);
-  }
-  
-  // For other small amounts, show up to 8 decimal places
-  return amount.toLocaleString(undefined, { 
-    maximumFractionDigits: 8
-  });
-};
-
-// Add this helper function to format market cap values
-const formatMarketCap = (marketCap?: number) => {
-  if (!marketCap || marketCap === 0) {
-    return 'N/A';
-  }
-  
-  // Format large numbers with abbreviations
-  if (marketCap >= 1_000_000_000) {
-    return `$${(marketCap / 1_000_000_000).toLocaleString(undefined, { 
-      maximumFractionDigits: 1
-    })}B`;
-  } else if (marketCap >= 1_000_000) {
-    return `$${(marketCap / 1_000_000).toLocaleString(undefined, { 
-      maximumFractionDigits: 1
-    })}M`;
-  } else if (marketCap >= 1_000) {
-    return `$${(marketCap / 1_000).toLocaleString(undefined, { 
-      maximumFractionDigits: 1
-    })}K`;
-  } else {
-    return `$${marketCap.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-  }
-};
-
-// Add a new formatter for very small price numbers
-const formatSmallPrice = (price?: number) => {
-  if (!price || price === 0) {
-    return 'N/A';
-  }
-  
-  // For normal-sized numbers, just format with $ sign
-  if (price >= 0.01) {
-    return `$${price.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
-  }
-  
-  // For very small numbers, format with leading zeros notation
-  const priceStr = price.toString();
-  const decimalParts = priceStr.split('.');
-  
-  if (decimalParts.length === 2) {
-    const decimalPart = decimalParts[1];
-    // Count leading zeros
-    let leadingZeros = 0;
-    for (let i = 0; i < decimalPart.length; i++) {
-      if (decimalPart[i] === '0') {
-        leadingZeros++;
-      } else {
-        break;
-      }
-    }
-    
-    if (leadingZeros >= 3) {
-      // Show digits after leading zeros
-      const significantPart = decimalPart.substring(leadingZeros);
-      // Try to get at least 2 digits after the zeros
-      const digitsToShow = Math.min(2, significantPart.length);
-      return `$0.0(${leadingZeros})${significantPart.substring(0, digitsToShow)}`;
-    }
-  }
-  
-  // For other small numbers, use standard formatting
-  return `$${price.toLocaleString(undefined, { maximumFractionDigits: 8 })}`;
-};
-
-const formatDate = (timestamp: number | string | Date) => {
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString();
-  } catch (err) {
-    console.error('Error formatting date:', err);
-    return 'Invalid Date';
-  }
-};
-
-const formatTime = (timestamp: number | string | Date) => {
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString();
-  } catch (err) {
-    console.error('Error formatting time:', err);
-    return 'Invalid Time';
-  }
-};
+const TRADES_PER_PAGE = 10; // Reduce to 10 trades per page
 
 // Cache object to store trades data between page navigations
 const tradesCache = new Map<string, {
@@ -139,7 +23,7 @@ const tradesCache = new Map<string, {
 
 export default function TradingHistory() {
   const { user, loading } = useAuth();
-  const { selectedWalletId, wallets, setSelectedWalletId, isWalletScanning, markWalletAsScanning, markWalletScanComplete } = useWalletSelection();
+  const { selectedWalletId, wallets, setSelectedWalletId, isWalletScanning, markWalletAsScanning, markWalletScanComplete, getWalletCache, setWalletCache, isCacheValid } = useWalletSelection();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -158,14 +42,37 @@ export default function TradingHistory() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [showNotification, setShowNotification] = useState(false);
   const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
   const walletsRef = useRef(wallets);
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<'type' | 'amount' | 'priceUSD' | 'valueUSD' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
 
   // Keep wallets ref updated
   useEffect(() => {
     walletsRef.current = wallets;
   }, [wallets]);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (cooldownTimeLeft > 0) {
+      interval = setInterval(() => {
+        setCooldownTimeLeft(prev => {
+          if (prev <= 1) {
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cooldownTimeLeft]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -173,14 +80,28 @@ export default function TradingHistory() {
     }
   }, [user, loading, router]);
 
-  // Load data when a wallet is selected or filters change
+  // Load data when a wallet is selected
   useEffect(() => {
     const getTradeHistory = async () => {
-      if (!selectedWalletId || !user?.id) return;
+      if (!selectedWalletId) return;
       
-      // Get fresh wallet data from ref to avoid triggering re-renders
       const selectedWallet = walletsRef.current.find(w => w.id === selectedWalletId);
       if (!selectedWallet) return;
+
+      // Check if we have cached data first
+      const cachedData = getWalletCache(selectedWalletId);
+      if (cachedData && isCacheValid(selectedWalletId)) {
+        console.log('Using cached data for trading history');
+        setTrades(cachedData);
+        setTotalTrades(cachedData.length);
+        setTotalPages(Math.ceil(cachedData.length / TRADES_PER_PAGE));
+        return;
+      }
+      
+      setDataLoading(true);
+      setLoadingMessage("Loading your trading history...");
+      setError(null);
+      setApiError(null);
       
       // Check if initial scan is complete first - use explicit comparison to ensure boolean value
       const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
@@ -188,84 +109,6 @@ export default function TradingHistory() {
       
       // Only set initial scan in progress if scan is NOT complete AND not already scanning
       const walletIsCurrentlyScanning = isWalletScanning(selectedWalletId);
-      
-      // Set up cache variables first
-      const cacheKey = `${selectedWalletId}_${currentPage}`;
-      const cachedData = tradesCache.get(cacheKey);
-      const now = Date.now();
-      const fiveMinutesAgo = now - 5 * 60 * 1000;
-      
-      // If wallet is already complete, skip all scanning logic
-      if (isInitialScanComplete) {
-        setDataLoading(true);
-        setLoadingMessage("Loading trade history from database...");
-        
-        try {
-          // Calculate timestamp for 24 hours ago
-          const oneDayAgo = new Date();
-          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
-          
-          const result = await tradingHistoryService.getTradingHistory(
-            user!.id,
-            selectedWallet.wallet_address,
-            TRADES_PER_PAGE,
-            1,
-            oneDayAgo.getTime()
-          );
-          
-          if (result && result.trades.length > 0) {
-            setTrades(result.trades);
-            setTotalTrades(result.totalCount);
-            setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
-            
-            // Cache the result for future use
-            tradesCache.set(cacheKey, {
-              trades: result.trades,
-              totalCount: result.totalCount,
-              timestamp: now
-            });
-            
-            console.log(`Loaded ${result.trades.length} trades from database`);
-          } else {
-            console.log('No trades found for this wallet in the last 24 hours');
-            setTrades([]);
-            setTotalTrades(0);
-            
-            // Cache empty result to prevent unnecessary requests
-            tradesCache.set(cacheKey, {
-              trades: [],
-              totalCount: 0,
-              timestamp: now
-            });
-          }
-        } catch (error) {
-          console.error('Error loading trades from database:', error);
-          setApiError('Unable to load trading history. Please try again later.');
-          setErrorType('general');
-        } finally {
-          setDataLoading(false);
-          setLoadingMessage('');
-        }
-        return;
-      }
-      
-      // Check cache first - use cached data if available and less than 5 minutes old
-      
-      // Use cached data if it's recent and wallet is already being scanned or scan is complete
-      if (cachedData && cachedData.timestamp > fiveMinutesAgo && (isInitialScanComplete || walletIsCurrentlyScanning)) {
-        console.log('Using cached trade data');
-        setTrades(cachedData.trades);
-        setTotalTrades(cachedData.totalCount);
-        setTotalPages(Math.ceil(cachedData.totalCount / TRADES_PER_PAGE));
-        setDataLoading(false); // Ensure loading is set to false when using cache
-        return;
-      }
-      
-      // Set loading state only if we need to fetch
-      setDataLoading(true);
-      setError(null);
-      setApiError(null);
-      setNextCursor(null); // Reset cursor when changing wallet or filters
       
       // Check if we've already initiated scanning for this wallet in this session
       const hasBeenScanned = scannedWallets.has(selectedWalletId);
@@ -316,10 +159,10 @@ export default function TradingHistory() {
             setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
             
             // Cache the result for future use
-            tradesCache.set(cacheKey, {
+            tradesCache.set(selectedWalletId, {
               trades: result.trades,
               totalCount: result.totalCount,
-              timestamp: now
+              timestamp: Date.now()
             });
             
             console.log(`Loaded ${result.trades.length} trades from database`);
@@ -329,10 +172,10 @@ export default function TradingHistory() {
             setTotalTrades(0);
             
             // Cache empty result to prevent unnecessary requests
-            tradesCache.set(cacheKey, {
+            tradesCache.set(selectedWalletId, {
               trades: [],
               totalCount: 0,
-              timestamp: now
+              timestamp: Date.now()
             });
           }
           
@@ -499,6 +342,7 @@ export default function TradingHistory() {
     
     setRefreshing(true);
     setRefreshMessage(null);
+    setShowNotification(false);
     
     try {
       const result = await tradingHistoryService.refreshTradingHistory(
@@ -506,36 +350,39 @@ export default function TradingHistory() {
         selectedWallet.wallet_address
       );
       
-      setRefreshMessage(result.message);
-      
-      // If new trades were found, reload the data
-      if (result.newTradesCount > 0) {
-        // Clear cache and reload the data to show new trades
-        tradesCache.clear();
+      if (result.newTradesCount === 0) {
+        setRefreshMessage("You're up to date!");
+        setShowNotification(true);
+      } else {
+        setRefreshMessage(result.message);
+        setShowNotification(true);
         
-        const oneDayAgo = new Date();
-        oneDayAgo.setHours(oneDayAgo.getHours() - 24);
-        
+        // If new trades were found, reload the data
         const dataResult = await tradingHistoryService.getTradingHistory(
           user.id,
           selectedWallet.wallet_address,
           TRADES_PER_PAGE,
-          1,
-          oneDayAgo.getTime()
+          currentPage
         );
         
         setTrades(dataResult.trades);
         setTotalTrades(dataResult.totalCount);
         setTotalPages(Math.ceil(dataResult.totalCount / TRADES_PER_PAGE));
-        setCurrentPage(1);
       }
       
       // Clear message after 5 seconds
-      setTimeout(() => setRefreshMessage(null), 5000);
+      setTimeout(() => {
+        setRefreshMessage(null);
+        setShowNotification(false);
+      }, 5000);
     } catch (error) {
-      console.error('Error refreshing data:', error);
-      setRefreshMessage('Failed to refresh data. Please try again.');
-      setTimeout(() => setRefreshMessage(null), 5000);
+      console.error('Error refreshing trades:', error);
+      setRefreshMessage('Failed to refresh trades. Please try again.');
+      setShowNotification(true);
+      setTimeout(() => {
+        setRefreshMessage(null);
+        setShowNotification(false);
+      }, 5000);
     } finally {
       setRefreshing(false);
     }
@@ -564,6 +411,69 @@ export default function TradingHistory() {
     } finally {
       setStarringTrade(null);
     }
+  };
+
+  // Filter trades based on the selected token filter
+  const filteredTrades = trades.filter(trade => {
+    if (tokenFilter === 'all') return true;
+    return trade.tokenSymbol.toLowerCase() === tokenFilter.toLowerCase();
+  });
+
+  // Sort trades if a sort field is selected
+  const sortedTrades = sortField ? [...filteredTrades].sort((a, b) => {
+    let aValue: any = a[sortField];
+    let bValue: any = b[sortField];
+    
+    if (sortField === 'type') {
+      aValue = aValue || '';
+      bValue = bValue || '';
+    } else {
+      aValue = aValue || 0;
+      bValue = bValue || 0;
+    }
+    
+    if (sortDirection === 'asc') {
+      return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+    } else {
+      return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+    }
+  }) : filteredTrades;
+
+  // Calculate pagination based on sorted and filtered trades
+  const paginatedTrades = sortedTrades.slice(
+    (currentPage - 1) * TRADES_PER_PAGE,
+    currentPage * TRADES_PER_PAGE
+  );
+  const totalFilteredPages = Math.ceil(sortedTrades.length / TRADES_PER_PAGE);
+
+  const handleSort = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+    setCurrentPage(1); // Reset to first page when sorting
+  };
+
+  const getSortIcon = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD') => {
+    if (sortField !== field) {
+      return (
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+        </svg>
+      );
+    }
+    
+    return sortDirection === 'asc' ? (
+      <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
   };
 
   if (loading) {
@@ -596,7 +506,7 @@ export default function TradingHistory() {
                   <>
                     <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span>Refreshing...</span>
                   </>
@@ -612,15 +522,6 @@ export default function TradingHistory() {
             )}
           </div>
           <p className="text-gray-500">View your recent Solana trading activity (last 24 hours)</p>
-          {refreshMessage && (
-            <div className={`mt-3 p-3 rounded-md text-sm ${
-              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
-                ? 'bg-red-900/30 border border-red-500 text-red-200' 
-                : 'bg-green-900/30 border border-green-500 text-green-200'
-            }`}>
-              {refreshMessage}
-            </div>
-          )}
         </div>
 
         {error && (
@@ -652,7 +553,10 @@ export default function TradingHistory() {
               <select 
                 className="w-full sm:w-auto bg-[#23232b] text-gray-300 rounded-md px-3 py-2 text-sm border border-gray-700"
                 value={tokenFilter}
-                onChange={(e) => setTokenFilter(e.target.value)}
+                onChange={(e) => {
+                  setTokenFilter(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
                 disabled={dataLoading}
               >
                 <option value="all">All Tokens</option>
@@ -677,15 +581,43 @@ export default function TradingHistory() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Star</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Token
-                    <span className="text-xs text-indigo-500 ml-1 font-normal">(Jupiter API)</span>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Price (USD)
-                    <span className="text-xs text-indigo-500 ml-1 font-normal">(Jupiter API)</span>
+                    <button 
+                      onClick={() => handleSort('type')} 
+                      className="flex items-center space-x-1 hover:text-white transition-colors"
+                    >
+                      <span>Type</span>
+                      {getSortIcon('type')}
+                    </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Value (USD)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    <button 
+                      onClick={() => handleSort('amount')} 
+                      className="flex items-center space-x-1 hover:text-white transition-colors"
+                    >
+                      <span>Amount</span>
+                      {getSortIcon('amount')}
+                    </button>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    <button 
+                      onClick={() => handleSort('priceUSD')} 
+                      className="flex items-center space-x-1 hover:text-white transition-colors"
+                    >
+                      <span>Price (USD)</span>
+                      {getSortIcon('priceUSD')}
+                    </button>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    <button 
+                      onClick={() => handleSort('valueUSD')} 
+                      className="flex items-center space-x-1 hover:text-white transition-colors"
+                    >
+                      <span>Value (USD)</span>
+                      {getSortIcon('valueUSD')}
+                    </button>
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Time</th>
                 </tr>
@@ -703,8 +635,8 @@ export default function TradingHistory() {
                       </div>
                     </td>
                   </tr>
-                ) : trades.length > 0 ? (
-                  trades.map((trade) => (
+                ) : paginatedTrades.length > 0 ? (
+                  paginatedTrades.map((trade) => (
                     <tr key={trade.signature} className="bg-[#1a1a1a] hover:bg-[#23232b] transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <button
@@ -716,7 +648,7 @@ export default function TradingHistory() {
                           {starringTrade === trade.signature ? (
                             <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                           ) : (
                             <svg 
@@ -756,7 +688,7 @@ export default function TradingHistory() {
                         {trade.priceUSD ? formatSmallPrice(trade.priceUSD) : '$0'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {trade.valueUSD ? `$${trade.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '$0'}
+                        {trade.valueUSD ? formatSmallPrice(trade.valueUSD) : '$0'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {formatDate(trade.timestamp)}
@@ -789,9 +721,9 @@ export default function TradingHistory() {
                   <span>{loadingMessage || 'Loading transactions...'}</span>
                 </div>
               </div>
-            ) : trades.length > 0 ? (
+            ) : paginatedTrades.length > 0 ? (
               <div className="space-y-4">
-                {trades.map((trade) => (
+                {paginatedTrades.map((trade) => (
                   <div key={trade.signature} className="bg-[#252525] p-4 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-2">
@@ -847,7 +779,7 @@ export default function TradingHistory() {
                       </div>
                       <div>
                         <p className="text-gray-400">Value (USD)</p>
-                        <p className="text-gray-300">{trade.valueUSD ? `$${trade.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '$0'}</p>
+                        <p className="text-gray-300">{trade.valueUSD ? formatSmallPrice(trade.valueUSD) : '$0'}</p>
                       </div>
                     </div>
                     
@@ -889,28 +821,76 @@ export default function TradingHistory() {
               </button>
             </div>
           )}
+
+          {/* Pagination Controls */}
+          {totalFilteredPages >= 1 && (
+            <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="text-sm text-gray-400">
+                Showing {((currentPage - 1) * TRADES_PER_PAGE) + 1} to {Math.min(currentPage * TRADES_PER_PAGE, sortedTrades.length)} of {sortedTrades.length} trades
+                {tokenFilter !== 'all' && ` (filtered by ${tokenFilter.toUpperCase()})`}
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-500 text-white text-sm"
+                >
+                  First
+                </button>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-500 text-white text-sm"
+                >
+                  Previous
+                </button>
+                
+                <span className="px-3 py-1 text-sm text-gray-300">
+                  Page {currentPage} of {totalFilteredPages}
+                </span>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalFilteredPages, prev + 1))}
+                  disabled={currentPage === totalFilteredPages}
+                  className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-500 text-white text-sm"
+                >
+                  Next
+                </button>
+                
+                <button
+                  onClick={() => setCurrentPage(totalFilteredPages)}
+                  disabled={currentPage === totalFilteredPages}
+                  className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-500 text-white text-sm"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
-            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Trades</h3>
-            <p className="text-lg sm:text-2xl font-semibold text-white">{trades.length}</p>
+            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Trades{tokenFilter !== 'all' ? ` (${tokenFilter.toUpperCase()})` : ''}</h3>
+            <p className="text-lg sm:text-2xl font-semibold text-white">{sortedTrades.length}</p>
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
-            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Volume</h3>
+            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Volume{tokenFilter !== 'all' ? ` (${tokenFilter.toUpperCase()})` : ''}</h3>
             <p className="text-lg sm:text-2xl font-semibold text-white">
-              ${trades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {formatSmallPrice(sortedTrades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0))}
             </p>
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
-            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h P/L</h3>
+            <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h P/L{tokenFilter !== 'all' ? ` (${tokenFilter.toUpperCase()})` : ''}</h3>
             <p className="text-lg sm:text-2xl font-semibold text-white">
-              ${trades.reduce((sum, trade) => {
+              {formatSmallPrice(sortedTrades.reduce((sum, trade) => {
                 const value = trade.valueUSD || 0;
                 return sum + (trade.type === 'BUY' ? -value : value);
-              }, 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              }, 0))}
             </p>
           </div>
         </div>
@@ -921,6 +901,13 @@ export default function TradingHistory() {
             "Initial wallet scan in progress. This may take a moment. We're scanning your transaction history." : 
             loadingMessage || ''
           } 
+        />
+
+        <NotificationToast
+          message={refreshMessage || ''}
+          isVisible={showNotification}
+          type="success"
+          duration={5000}
         />
       </div>
     </DashboardLayout>

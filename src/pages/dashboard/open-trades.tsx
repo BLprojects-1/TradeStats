@@ -8,6 +8,7 @@ import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { ProcessedTrade } from '../../services/tradeProcessor';
 import { jupiterApiService } from '../../services/jupiterApiService';
+import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
 
 export interface TokenData {
   tokenAddress: string;
@@ -118,7 +119,8 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
     
     // Process each batch with a small delay between batches if needed
     const batchPromises = batch.map(({tokenData, tokenAddress, timestamp}) => {
-      return jupiterApiService.getTokenPriceInUSD(tokenAddress, timestamp)
+      // For open positions, use current real-time prices (no timestamp) to calculate current value and P/L
+      return jupiterApiService.getTokenPriceInUSD(tokenAddress)
         .then(price => {
           tokenData.currentPrice = price;
           tokenData.totalValue = tokenData.remaining * price;
@@ -127,7 +129,7 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
           tokenData.profitLoss = tokenData.totalValue - (buyValue - sellValue);
         })
         .catch(err => {
-          console.error(`Error fetching price for ${tokenAddress}:`, err);
+          console.error(`Error fetching current price for ${tokenAddress}:`, err);
           tokenData.currentPrice = 0;
           tokenData.totalValue = 0;
         });
@@ -161,11 +163,31 @@ export default function OpenTrades() {
   const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
   const walletsRef = useRef(wallets);
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
 
   // Keep wallets ref updated
   useEffect(() => {
     walletsRef.current = wallets;
   }, [wallets]);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (cooldownTimeLeft > 0) {
+      interval = setInterval(() => {
+        setCooldownTimeLeft(prev => {
+          if (prev <= 1) {
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cooldownTimeLeft]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -350,9 +372,23 @@ export default function OpenTrades() {
     
     const selectedWallet = wallets.find(w => w.id === selectedWalletId);
     if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
+
+    // Check cooldown
+    const now = Date.now();
+    const cooldownMs = 2 * 60 * 1000; // 2 minutes
+    const timeSinceLastRefresh = now - lastRefreshTime;
+    
+    if (timeSinceLastRefresh < cooldownMs) {
+      const timeLeft = Math.ceil((cooldownMs - timeSinceLastRefresh) / 1000);
+      setCooldownTimeLeft(timeLeft);
+      setRefreshMessage(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`);
+      setTimeout(() => setRefreshMessage(null), 3000);
+      return;
+    }
     
     setRefreshing(true);
     setRefreshMessage(null);
+    setLastRefreshTime(now);
     
     try {
       const result = await tradingHistoryService.refreshTradingHistory(
@@ -360,11 +396,12 @@ export default function OpenTrades() {
         selectedWallet.wallet_address
       );
       
-      setRefreshMessage(result.message);
-      
-      // If new trades were found, reload the data
-      if (result.newTradesCount > 0) {
-        // Reload the data to show new trades
+      if (result.newTradesCount === 0) {
+        setRefreshMessage("You're up to date!");
+      } else {
+        setRefreshMessage(result.message);
+        
+        // If new trades were found, reload the data
         const dataResult = await tradingHistoryService.getTradingHistory(
           user.id,
           selectedWallet.wallet_address,
@@ -444,7 +481,7 @@ export default function OpenTrades() {
             {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
               <button
                 onClick={handleRefresh}
-                disabled={refreshing}
+                disabled={refreshing || cooldownTimeLeft > 0}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
               >
                 {refreshing ? (
@@ -454,6 +491,13 @@ export default function OpenTrades() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span>Refreshing...</span>
+                  </>
+                ) : cooldownTimeLeft > 0 ? (
+                  <>
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{Math.floor(cooldownTimeLeft / 60)}:{(cooldownTimeLeft % 60).toString().padStart(2, '0')}</span>
                   </>
                 ) : (
                   <>
@@ -562,17 +606,16 @@ export default function OpenTrades() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {token.totalBought.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                        {formatTokenAmount(token.totalBought)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {token.totalSold.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                        {formatTokenAmount(token.totalSold)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {(token.totalBought - token.totalSold > 0 ? '+' : '') + 
-                          (token.totalBought - token.totalSold).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                        {formatTokenAmount(token.totalBought - token.totalSold)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {token.remaining.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                        {formatTokenAmount(token.remaining)}
                       </td>
                     </tr>
                   ))
@@ -637,22 +680,21 @@ export default function OpenTrades() {
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <p className="text-gray-400">Bought</p>
-                        <p className="text-gray-300">{token.totalBought.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                        <p className="text-gray-300">{formatTokenAmount(token.totalBought)}</p>
                       </div>
                       <div>
                         <p className="text-gray-400">Sold</p>
-                        <p className="text-gray-300">{token.totalSold.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                        <p className="text-gray-300">{formatTokenAmount(token.totalSold)}</p>
                       </div>
                       <div>
                         <p className="text-gray-400">P/L</p>
                         <p className="text-gray-300">
-                          {(token.totalBought - token.totalSold > 0 ? '+' : '') + 
-                            (token.totalBought - token.totalSold).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(token.totalBought - token.totalSold)}
                         </p>
                       </div>
                       <div>
                         <p className="text-gray-400">Remaining</p>
-                        <p className="text-gray-300">{token.remaining.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                        <p className="text-gray-300">{formatTokenAmount(token.remaining)}</p>
                       </div>
                     </div>
                   </div>
@@ -678,14 +720,14 @@ export default function OpenTrades() {
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Total Value</h3>
               <p className="text-xl sm:text-2xl font-semibold text-white">
-                ${walletData.reduce((sum, token) => sum + (token.totalValue || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {formatSmallPrice(walletData.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
               </p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Unrealized P/L</h3>
               <p className="text-xl sm:text-2xl font-semibold text-white">
-                ${walletData.reduce((sum, token) => sum + (token.profitLoss || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {formatSmallPrice(walletData.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
               </p>
             </div>
           </div>

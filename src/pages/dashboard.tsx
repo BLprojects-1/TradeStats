@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { useWalletSelection } from '../contexts/WalletSelectionContext';
@@ -13,6 +13,8 @@ import { PerformanceService, PerformanceData } from '../services/performanceServ
 import { tradingHistoryService } from '../services/tradingHistoryService';
 import { ProcessedTrade } from '../services/tradeProcessor';
 import { jupiterApiService } from '../services/jupiterApiService';
+import { formatTokenAmount, formatSmallPrice } from '../utils/formatters';
+import NotificationToast from '../components/NotificationToast';
 
 export interface TokenData {
   tokenAddress: string;
@@ -114,7 +116,8 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
     const batch = tokensToFetch.slice(i, i + BATCH_SIZE);
     
     const batchPromises = batch.map(({tokenData, tokenAddress, timestamp}) => {
-      return jupiterApiService.getTokenPriceInUSD(tokenAddress, timestamp)
+      // For open positions, use current real-time prices (no timestamp) to calculate current value and P/L
+      return jupiterApiService.getTokenPriceInUSD(tokenAddress)
         .then(price => {
           tokenData.currentPrice = price;
           tokenData.totalValue = tokenData.remaining * price;
@@ -123,7 +126,7 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
           tokenData.profitLoss = tokenData.totalValue - (buyValue - sellValue);
         })
         .catch(err => {
-          console.error(`Error fetching price for ${tokenAddress}:`, err);
+          console.error(`Error fetching current price for ${tokenAddress}:`, err);
           tokenData.currentPrice = 0;
           tokenData.totalValue = 0;
         });
@@ -151,6 +154,9 @@ export default function Dashboard() {
   const [performanceLoading, setPerformanceLoading] = useState(false);
   const [openTrades, setOpenTrades] = useState<TokenData[]>([]);
   const [openTradesLoading, setOpenTradesLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [showNotification, setShowNotification] = useState(false);
 
   useEffect(() => {
     // If not loading and no user, redirect to home page
@@ -271,8 +277,6 @@ export default function Dashboard() {
     }
   };
 
-
-
   const handleRefreshPerformance = async () => {
     if (!user?.id || showOnboarding) return;
     
@@ -283,15 +287,78 @@ export default function Dashboard() {
       if (wallets.length === 0) {
         const sampleData = PerformanceService.generateSampleData();
         setPerformanceData(sampleData);
+        setRefreshMessage("You're up to date!");
+        setShowNotification(true);
       } else {
         const data = await PerformanceService.getPerformanceData(user.id);
         setPerformanceData(data);
+        setRefreshMessage("You're up to date!");
+        setShowNotification(true);
       }
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setRefreshMessage(null);
+        setShowNotification(false);
+      }, 5000);
     } catch (err) {
       console.error('Error refreshing performance data:', err);
       setError('Failed to refresh performance data. Please try again.');
     } finally {
       setPerformanceLoading(false);
+    }
+  };
+
+  const handleRefreshTrades = async () => {
+    if (!selectedWalletId || !user?.id || refreshing) return;
+    
+    const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+    if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
+    
+    setRefreshing(true);
+    setRefreshMessage(null);
+    setShowNotification(false);
+    
+    try {
+      const result = await tradingHistoryService.refreshTradingHistory(
+        user.id,
+        selectedWallet.wallet_address
+      );
+      
+      if (result.newTradesCount === 0) {
+        setRefreshMessage("You're up to date!");
+        setShowNotification(true);
+      } else {
+        setRefreshMessage(result.message);
+        setShowNotification(true);
+        
+        // If new trades were found, reload the open trades data
+        const dataResult = await tradingHistoryService.getTradingHistory(
+          user.id,
+          selectedWallet.wallet_address,
+          500,
+          1
+        );
+        
+        const openPositions = await processTradesToHoldings(dataResult.trades);
+        setOpenTrades(openPositions);
+      }
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setRefreshMessage(null);
+        setShowNotification(false);
+      }, 5000);
+    } catch (error) {
+      console.error('Error refreshing trades:', error);
+      setRefreshMessage('Failed to refresh trades. Please try again.');
+      setShowNotification(true);
+      setTimeout(() => {
+        setRefreshMessage(null);
+        setShowNotification(false);
+      }, 5000);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -336,7 +403,33 @@ export default function Dashboard() {
         
         <div className="grid grid-cols-1 gap-4 sm:gap-6">
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
-            <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Open Positions (24h)</h2>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6">
+              <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Open Positions (24h)</h2>
+              {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
+                <button
+                  onClick={handleRefreshTrades}
+                  disabled={refreshing}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+                >
+                  {refreshing ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Refreshing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span>Refresh</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
             
             {/* Desktop table - hidden on mobile */}
             <div className="hidden sm:block overflow-x-auto">
@@ -375,17 +468,16 @@ export default function Dashboard() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {token.totalBought.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(token.totalBought)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {token.totalSold.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(token.totalSold)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {(token.totalBought - token.totalSold > 0 ? '+' : '') + 
-                            (token.totalBought - token.totalSold).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(token.totalBought - token.totalSold)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {token.remaining.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(token.remaining)}
                         </td>
                       </tr>
                     ))
@@ -425,22 +517,21 @@ export default function Dashboard() {
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div>
                           <p className="text-gray-400">Bought</p>
-                          <p className="text-gray-300">{token.totalBought.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                          <p className="text-gray-300">{formatTokenAmount(token.totalBought)}</p>
                         </div>
                         <div>
                           <p className="text-gray-400">Sold</p>
-                          <p className="text-gray-300">{token.totalSold.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                          <p className="text-gray-300">{formatTokenAmount(token.totalSold)}</p>
                         </div>
                         <div>
                           <p className="text-gray-400">P/L</p>
                           <p className="text-gray-300">
-                            {(token.totalBought - token.totalSold > 0 ? '+' : '') + 
-                              (token.totalBought - token.totalSold).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                            {formatTokenAmount(token.totalBought - token.totalSold)}
                           </p>
                         </div>
                         <div>
                           <p className="text-gray-400">Remaining</p>
-                          <p className="text-gray-300">{token.remaining.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                          <p className="text-gray-300">{formatTokenAmount(token.remaining)}</p>
                         </div>
                       </div>
                     </div>
@@ -465,14 +556,14 @@ export default function Dashboard() {
                  <div className="bg-[#252525] p-4 rounded-lg">
                    <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Total Value</h4>
                    <p className="text-xl sm:text-2xl font-semibold text-white">
-                     ${openTrades.reduce((sum, token) => sum + (token.totalValue || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                     {formatSmallPrice(openTrades.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
                    </p>
                  </div>
                  
                  <div className="bg-[#252525] p-4 rounded-lg">
                    <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Unrealized P/L</h4>
                    <p className="text-xl sm:text-2xl font-semibold text-white">
-                     ${openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                     {formatSmallPrice(openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
                    </p>
                  </div>
                </div>
@@ -481,13 +572,28 @@ export default function Dashboard() {
           
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4 sm:mb-6">
-              <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Performance Overview</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Performance Overview (24h)</h2>
               <button
                 onClick={handleRefreshPerformance}
                 disabled={performanceLoading}
-                className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
               >
-                {performanceLoading ? 'Refreshing...' : 'Refresh'}
+                {performanceLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Refreshing...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Refresh</span>
+                  </>
+                )}
               </button>
             </div>
             {performanceLoading ? (
@@ -521,7 +627,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-
+      <NotificationToast
+        message={refreshMessage || ''}
+        isVisible={showNotification}
+        type="success"
+        duration={5000}
+      />
     </DashboardLayout>
   );
 } 

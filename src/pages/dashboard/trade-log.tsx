@@ -7,45 +7,9 @@ import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { ProcessedTrade } from '../../services/tradeProcessor';
+import { formatTokenAmount, formatSmallPrice, formatDate, formatTime } from '../../utils/formatters';
 
 const TRADES_PER_PAGE = 20;
-
-// Format helper functions
-const formatDate = (timestamp: number | string | Date) => {
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString();
-  } catch (err) {
-    console.error('Error formatting date:', err);
-    return 'Invalid Date';
-  }
-};
-
-const formatTime = (timestamp: number | string | Date) => {
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString();
-  } catch (err) {
-    console.error('Error formatting time:', err);
-    return 'Invalid Time';
-  }
-};
-
-const formatTokenAmount = (amount: number, decimals = 6) => {
-  if (amount > 1_000_000) {
-    return amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-  if (amount > 1000) {
-    return amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  }
-  if (amount >= 1) {
-    return amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
-  }
-  if (amount < 0.000001) {
-    return amount.toExponential(4);
-  }
-  return amount.toLocaleString(undefined, { maximumFractionDigits: 8 });
-};
 
 export default function TradeLog() {
   const { user, loading } = useAuth();
@@ -66,6 +30,8 @@ export default function TradeLog() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [addingTrade, setAddingTrade] = useState(false);
   const [unstarringTrade, setUnstarringTrade] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -124,8 +90,6 @@ export default function TradeLog() {
 
     return true;
   });
-
-
 
   const handleEditNotes = (trade: ProcessedTrade) => {
     if (editingNotes === trade.signature) {
@@ -218,6 +182,52 @@ export default function TradeLog() {
     }
   };
 
+  const handleRefresh = async () => {
+    if (!user?.id || refreshing) return;
+    
+    const selectedWallet = selectedWalletId ? wallets.find(w => w.id === selectedWalletId) : null;
+    if (selectedWallet && !selectedWallet.initial_scan_complete) return;
+    
+    setRefreshing(true);
+    setRefreshMessage(null);
+    
+    try {
+      if (selectedWallet) {
+        const result = await tradingHistoryService.refreshTradingHistory(
+          user.id,
+          selectedWallet.wallet_address
+        );
+        
+        setRefreshMessage(result.message);
+        
+        // If new trades were found, reload the starred trades
+        if (result.newTradesCount > 0) {
+          const starredResult = await tradingHistoryService.getStarredTrades(
+            user.id,
+            selectedWallet.wallet_address,
+            TRADES_PER_PAGE,
+            (currentPage - 1) * TRADES_PER_PAGE
+          );
+          
+          setStarredTrades(starredResult.trades);
+          setTotalTrades(starredResult.totalCount);
+          setTotalPages(Math.ceil(starredResult.totalCount / TRADES_PER_PAGE));
+        }
+      } else {
+        setRefreshMessage('Please select a wallet to refresh data.');
+      }
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setRefreshMessage(null), 5000);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setRefreshMessage('Failed to refresh data. Please try again.');
+      setTimeout(() => setRefreshMessage(null), 5000);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -234,8 +244,41 @@ export default function TradeLog() {
     <DashboardLayout title="Trade Log">
       <div className="space-y-4 sm:space-y-6">
         <div className="mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl font-semibold text-white mb-2">Trade Log</h1>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-white">Trade Log</h1>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+            >
+              {refreshing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Refreshing...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Refresh</span>
+                </>
+              )}
+            </button>
+          </div>
           <p className="text-gray-500">Your personal collection of starred trades, notes, and learning insights</p>
+          {refreshMessage && (
+            <div className={`mt-3 p-3 rounded-md text-sm ${
+              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
+                ? 'bg-red-900/30 border border-red-500 text-red-200' 
+                : 'bg-green-900/30 border border-green-500 text-green-200'
+            }`}>
+              {refreshMessage}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -249,8 +292,6 @@ export default function TradeLog() {
           onRetry={() => {}} 
           errorType={errorType as 'rpc' | 'auth' | 'timeout' | 'general'} 
         />}
-
-
 
         {/* Quick-Add Widget */}
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
@@ -360,7 +401,7 @@ export default function TradeLog() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{trade.type}</td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm ${(trade.profitLoss || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${(trade.profitLoss || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          {formatSmallPrice(trade.profitLoss || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{formatDate(trade.timestamp)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{formatTime(trade.timestamp)}</td>
@@ -482,7 +523,7 @@ export default function TradeLog() {
                       <div>
                         <p className="text-gray-400">P/L</p>
                         <p className={`${(trade.profitLoss || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${(trade.profitLoss || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          {formatSmallPrice(trade.profitLoss || 0)}
                         </p>
                       </div>
                       <div>

@@ -8,6 +8,7 @@ import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { ProcessedTrade } from '../../services/tradeProcessor';
+import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
 
 // Modified TradeData interface that matches our processed trades
 export interface TradeData {
@@ -145,11 +146,31 @@ export default function TopTrades() {
   const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
   const walletsRef = useRef(wallets);
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
 
   // Keep wallets ref updated
   useEffect(() => {
     walletsRef.current = wallets;
   }, [wallets]);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (cooldownTimeLeft > 0) {
+      interval = setInterval(() => {
+        setCooldownTimeLeft(prev => {
+          if (prev <= 1) {
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cooldownTimeLeft]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -358,9 +379,23 @@ export default function TopTrades() {
     
     const selectedWallet = wallets.find(w => w.id === selectedWalletId);
     if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
+
+    // Check cooldown
+    const now = Date.now();
+    const cooldownMs = 2 * 60 * 1000; // 2 minutes
+    const timeSinceLastRefresh = now - lastRefreshTime;
+    
+    if (timeSinceLastRefresh < cooldownMs) {
+      const timeLeft = Math.ceil((cooldownMs - timeSinceLastRefresh) / 1000);
+      setCooldownTimeLeft(timeLeft);
+      setRefreshMessage(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`);
+      setTimeout(() => setRefreshMessage(null), 3000);
+      return;
+    }
     
     setRefreshing(true);
     setRefreshMessage(null);
+    setLastRefreshTime(now);
     
     try {
       const result = await tradingHistoryService.refreshTradingHistory(
@@ -368,11 +403,12 @@ export default function TopTrades() {
         selectedWallet.wallet_address
       );
       
-      setRefreshMessage(result.message);
-      
-      // If new trades were found, reload the data
-      if (result.newTradesCount > 0) {
-        // Reload the data to show new trades
+      if (result.newTradesCount === 0) {
+        setRefreshMessage("You're up to date!");
+      } else {
+        setRefreshMessage(result.message);
+        
+        // If new trades were found, reload the data
         const dataResult = await tradingHistoryService.getTradingHistory(
           user.id,
           selectedWallet.wallet_address,
@@ -404,25 +440,40 @@ export default function TopTrades() {
       const selectedWallet = wallets.find(w => w.id === selectedWalletId);
       if (!selectedWallet) return;
 
-      // Use token address as pseudo-signature for top trades
-      const pseudoSignature = `top_trade_${tokenAddress}`;
-      
       const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, selectedWallet.wallet_address);
       
       // Check if already starred
       const currentlyStarred = topTrades.find(trade => trade.tokenAddress === tokenAddress)?.starred || false;
       
-      await tradingHistoryService.toggleStarredTrade(walletId, pseudoSignature, !currentlyStarred);
+      // Find all trades for this token in the trading history and star them
+      const tokenTrades = tradingHistory.filter(trade => trade.tokenAddress === tokenAddress);
       
-      // Update local state
+      // Star/unstar all trades for this token
+      for (const trade of tokenTrades) {
+        try {
+          await tradingHistoryService.toggleStarredTrade(walletId, trade.signature, !currentlyStarred);
+        } catch (err) {
+          console.error(`Error starring trade ${trade.signature}:`, err);
+        }
+      }
+      
+      // Update local state for topTrades
       setTopTrades(prev => prev.map(trade => 
         trade.tokenAddress === tokenAddress 
           ? { ...trade, starred: !currentlyStarred }
           : trade
       ));
+      
+      // Also update tradingHistory state if needed
+      setTradingHistory(prev => prev.map(trade =>
+        trade.tokenAddress === tokenAddress
+          ? { ...trade, starred: !currentlyStarred }
+          : trade
+      ));
+      
     } catch (err) {
-      console.error('Error starring trade:', err);
-      setError('Failed to star trade. Please try again.');
+      console.error('Error starring trades for token:', err);
+      setError('Failed to star trades. Please try again.');
     } finally {
       setStarringTrade(null);
     }
@@ -451,16 +502,23 @@ export default function TopTrades() {
             {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
               <button
                 onClick={handleRefresh}
-                disabled={refreshing}
+                disabled={refreshing || cooldownTimeLeft > 0}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
               >
                 {refreshing ? (
                   <>
                     <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <span>Refreshing...</span>
+                  </>
+                ) : cooldownTimeLeft > 0 ? (
+                  <>
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{Math.floor(cooldownTimeLeft / 60)}:{(cooldownTimeLeft % 60).toString().padStart(2, '0')}</span>
                   </>
                 ) : (
                   <>
@@ -559,13 +617,13 @@ export default function TopTrades() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {trade.totalBought.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(trade.totalBought)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {trade.totalSold.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                          {formatTokenAmount(trade.totalSold)}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm ${trade.profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${trade.profitLoss.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          {trade.profitLoss >= 0 ? `+${formatSmallPrice(trade.profitLoss)}` : formatSmallPrice(trade.profitLoss)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                           {trade.duration}
@@ -635,16 +693,16 @@ export default function TopTrades() {
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div>
                           <p className="text-gray-400">Bought</p>
-                          <p className="text-gray-300">{trade.totalBought.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                          <p className="text-gray-300">{formatTokenAmount(trade.totalBought)}</p>
                         </div>
                         <div>
                           <p className="text-gray-400">Sold</p>
-                          <p className="text-gray-300">{trade.totalSold.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                          <p className="text-gray-300">{formatTokenAmount(trade.totalSold)}</p>
                         </div>
                         <div>
                           <p className="text-gray-400">P/L</p>
                           <p className={trade.profitLoss >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            ${trade.profitLoss.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            {trade.profitLoss >= 0 ? `+${formatSmallPrice(trade.profitLoss)}` : formatSmallPrice(trade.profitLoss)}
                           </p>
                         </div>
                         <div>
@@ -668,18 +726,43 @@ export default function TopTrades() {
             <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Best Trade (24h)</h2>
             {bestTrade ? (
               <div className="bg-[#252525] p-4 rounded-lg">
-                <div className="flex items-center mb-3 sm:mb-4">
-                  {bestTrade.tokenLogoURI && (
-                    <img src={bestTrade.tokenLogoURI} alt={bestTrade.tokenSymbol} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full mr-3" />
-                  )}
-                  <h3 className="text-lg sm:text-xl font-semibold text-white">{bestTrade.tokenSymbol}</h3>
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="flex items-center">
+                    {bestTrade.tokenLogoURI && (
+                      <img src={bestTrade.tokenLogoURI} alt={bestTrade.tokenSymbol} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full mr-3" />
+                    )}
+                    <h3 className="text-lg sm:text-xl font-semibold text-white">{bestTrade.tokenSymbol}</h3>
+                  </div>
+                  <button
+                    onClick={() => handleStarTrade(bestTrade.tokenAddress)}
+                    disabled={starringTrade === bestTrade.tokenAddress}
+                    className="hover:text-yellow-400 transition-colors disabled:opacity-50"
+                    aria-label={bestTrade.starred ? 'Unstar best trade' : 'Star best trade'}
+                  >
+                    {starringTrade === bestTrade.tokenAddress ? (
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg 
+                        className={`h-5 w-5 ${bestTrade.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        fill={bestTrade.starred ? 'currentColor' : 'none'} 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-gray-400">Profit</p>
                     <p className="text-base sm:text-lg font-semibold text-green-400">
-                      ${bestTrade.profitLoss.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {formatSmallPrice(bestTrade.profitLoss)}
                     </p>
                   </div>
                   <div>
@@ -699,18 +782,43 @@ export default function TopTrades() {
             <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Worst Trade (24h)</h2>
             {worstTrade ? (
               <div className="bg-[#252525] p-4 rounded-lg">
-                <div className="flex items-center mb-3 sm:mb-4">
-                  {worstTrade.tokenLogoURI && (
-                    <img src={worstTrade.tokenLogoURI} alt={worstTrade.tokenSymbol} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full mr-3" />
-                  )}
-                  <h3 className="text-lg sm:text-xl font-semibold text-white">{worstTrade.tokenSymbol}</h3>
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="flex items-center">
+                    {worstTrade.tokenLogoURI && (
+                      <img src={worstTrade.tokenLogoURI} alt={worstTrade.tokenSymbol} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full mr-3" />
+                    )}
+                    <h3 className="text-lg sm:text-xl font-semibold text-white">{worstTrade.tokenSymbol}</h3>
+                  </div>
+                  <button
+                    onClick={() => handleStarTrade(worstTrade.tokenAddress)}
+                    disabled={starringTrade === worstTrade.tokenAddress}
+                    className="hover:text-yellow-400 transition-colors disabled:opacity-50"
+                    aria-label={worstTrade.starred ? 'Unstar worst trade' : 'Star worst trade'}
+                  >
+                    {starringTrade === worstTrade.tokenAddress ? (
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg 
+                        className={`h-5 w-5 ${worstTrade.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        fill={worstTrade.starred ? 'currentColor' : 'none'} 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-gray-400">Loss</p>
                     <p className="text-base sm:text-lg font-semibold text-red-400">
-                      ${worstTrade.profitLoss.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {formatSmallPrice(worstTrade.profitLoss)}
                     </p>
                   </div>
                   <div>
@@ -739,14 +847,14 @@ export default function TopTrades() {
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Average Win</h3>
               <p className="text-lg sm:text-2xl font-semibold text-green-400">
-                ${avgWin.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {formatSmallPrice(avgWin)}
               </p>
             </div>
             
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-2">24h Average Loss</h3>
               <p className="text-2xl font-semibold text-red-400">
-                ${avgLoss.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {formatSmallPrice(avgLoss)}
               </p>
             </div>
             

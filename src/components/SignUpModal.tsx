@@ -3,9 +3,10 @@ import { supabase } from '../utils/supabaseClient';
 
 interface SignUpModalProps {
   onClose: () => void;
+  onSwitchToSignIn?: () => void;
 }
 
-const SignUpModal = ({ onClose }: SignUpModalProps) => {
+const SignUpModal = ({ onClose, onSwitchToSignIn }: SignUpModalProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -270,6 +271,11 @@ const SignUpModal = ({ onClose }: SignUpModalProps) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  WebkitBoxShadow: '0 0 0 1000px #1a1a1a inset',
+                  WebkitTextFillColor: 'white',
+                  transition: 'background-color 5000s ease-in-out 0s'
+                }}
                 required
                 disabled={loading}
               />
@@ -285,6 +291,11 @@ const SignUpModal = ({ onClose }: SignUpModalProps) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  WebkitBoxShadow: '0 0 0 1000px #1a1a1a inset',
+                  WebkitTextFillColor: 'white',
+                  transition: 'background-color 5000s ease-in-out 0s'
+                }}
                 required
                 disabled={loading}
               />
@@ -300,6 +311,11 @@ const SignUpModal = ({ onClose }: SignUpModalProps) => {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  WebkitBoxShadow: '0 0 0 1000px #1a1a1a inset',
+                  WebkitTextFillColor: 'white',
+                  transition: 'background-color 5000s ease-in-out 0s'
+                }}
                 required
                 disabled={loading}
               />
@@ -307,11 +323,25 @@ const SignUpModal = ({ onClose }: SignUpModalProps) => {
             
             <button
               type="submit"
-              className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-[#121212] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-[#121212] disabled:opacity-50 disabled:cursor-not-allowed mb-4"
               disabled={loading}
             >
               {loading ? 'Creating Account...' : 'Sign Up'}
             </button>
+            
+            <div className="text-center">
+              <p className="text-gray-400 text-sm">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={onSwitchToSignIn}
+                  className="text-indigo-400 hover:text-indigo-300 underline"
+                  disabled={loading}
+                >
+                  Sign in
+                </button>
+              </p>
+            </div>
           </form>
         )}
       </div>

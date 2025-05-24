@@ -9,6 +9,7 @@ export interface PerformanceDataPoint {
 export interface PerformanceMetrics {
   totalPnL: number;
   totalTrades: number;
+  tokensTraded: number;
   winRate: number;
   bestTrade: number;
   worstTrade: number;
@@ -47,6 +48,7 @@ export class PerformanceService {
           metrics: {
             totalPnL: 0,
             totalTrades: 0,
+            tokensTraded: 0,
             winRate: 0,
             bestTrade: 0,
             worstTrade: 0,
@@ -77,6 +79,7 @@ export class PerformanceService {
           metrics: {
             totalPnL: 0,
             totalTrades: 0,
+            tokensTraded: 0,
             winRate: 0,
             bestTrade: 0,
             worstTrade: 0,
@@ -132,12 +135,16 @@ export class PerformanceService {
       const worstTrade = profitLosses.length > 0 ? Math.min(...profitLosses) : 0;
       const winRate = trades.length > 0 ? (winningTrades.length / trades.length) * 100 : 0;
       const averageTradeSize = trades.length > 0 ? totalVolume / trades.length : 0;
+      
+      // Calculate unique tokens traded
+      const uniqueTokens = new Set(trades.map(trade => trade.token_address)).size;
 
       return {
         dataPoints,
         metrics: {
           totalPnL,
           totalTrades: trades.length,
+          tokensTraded: uniqueTokens,
           winRate,
           bestTrade,
           worstTrade,
@@ -177,6 +184,7 @@ export class PerformanceService {
       metrics: {
         totalPnL: cumulativePnL,
         totalTrades: 15,
+        tokensTraded: 8,
         winRate: 66.7,
         bestTrade: 125.50,
         worstTrade: -45.20,

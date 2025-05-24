@@ -21,9 +21,6 @@ export interface ProcessedTrade {
   tags?: string;       // For trade log functionality
 }
 
-// Approximate SOL to USD conversion - in a real app you'd use an API for this
-const SOL_TO_USD_RATE = 70; // Assuming 1 SOL = $70 USD
-
 // SOL mint address
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
@@ -325,14 +322,14 @@ export class TradeProcessor {
       let priceUSD = 0;
       let valueUSD = 0;
       
+      // ✅ Prices will be fetched from Jupiter API with historical timestamps below
+      // No longer using a fixed SOL_TO_USD_RATE since Jupiter provides accurate historical data
       if (amount > 0 && totalSolValue > 0) {
-        // Price per token in SOL
-        const pricePerToken = totalSolValue / amount;
-        // Convert to USD
-        priceUSD = pricePerToken * SOL_TO_USD_RATE;
-        valueUSD = totalSolValue * SOL_TO_USD_RATE;
+        // Prices will be fetched from Jupiter API with historical timestamps
+        priceUSD = 0;
+        valueUSD = 0;
       }
-      
+
       // Fetch price data from Jupiter API
       // We won't be getting market cap data since Jupiter doesn't provide it directly
       let marketCap: number | undefined = undefined;
@@ -353,16 +350,20 @@ export class TradeProcessor {
         let priceSOL = 0;
         
         try {
+          const tradeTimestamp = tx.timestamp || tx.blockTime * 1000;
+          console.log(`TradeProcessor: Fetching historical price for ${mainTokenChange.mint} at timestamp ${tradeTimestamp}`);
+          
           const priceData = await jupiterApiService.getTokenPrice(
-            mainTokenChange.mint
+            mainTokenChange.mint,
+            tradeTimestamp
           );
           
           if (priceData?.data?.[mainTokenChange.mint]?.price) {
             priceUSD = parseFloat(priceData.data[mainTokenChange.mint].price);
             
-            // Get SOL price for comparison
+            // Get historical SOL price for comparison at the same timestamp
             const solMint = 'So11111111111111111111111111111111111111112';
-            const solPriceData = await jupiterApiService.getTokenPrice(solMint);
+            const solPriceData = await jupiterApiService.getTokenPrice(solMint, tradeTimestamp);
             
             if (solPriceData?.data?.[solMint]?.price) {
               const solUsdPrice = parseFloat(solPriceData.data[solMint].price);

@@ -62,27 +62,24 @@ export const PerformanceStats: React.FC<PerformanceStatsProps> = ({
         <StatCard
           title="Total P&L"
           value={formatCurrency(metrics.totalPnL)}
-          subtitle="24h"
           isPositive={metrics.totalPnL >= 0}
         />
         
         <StatCard
-          title="Total Trades"
-          value={metrics.totalTrades}
-          subtitle="24h"
+          title="Tokens Traded"
+          value={metrics.tokensTraded || metrics.totalTrades}
+          
         />
         
         <StatCard
           title="Win Rate"
           value={formatPercent(metrics.winRate)}
-          subtitle="24h"
           isPositive={metrics.winRate >= 50}
         />
         
         <StatCard
           title="Volume"
           value={formatCurrency(metrics.totalVolume)}
-          subtitle="24h"
         />
       </div>
       

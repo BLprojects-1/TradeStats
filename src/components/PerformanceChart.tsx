@@ -12,6 +12,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
 }) => {
   const chartId = React.useId();
   const [hoveredPointIndex, setHoveredPointIndex] = React.useState<number | null>(null);
+  const [hoveredPoint, setHoveredPoint] = React.useState<PerformanceDataPoint | null>(null);
 
   const { pathData, minValue, maxValue, isPositive } = useMemo(() => {
     if (!dataPoints || dataPoints.length === 0) {
@@ -100,25 +101,46 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           viewBox="0 0 400 160" 
           className="overflow-visible"
           onMouseMove={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 400;
+            if (dataPoints.length === 0) return;
             
-            // Find closest data point based on x position
-            let closestIndex = 0;
-            let closestDistance = Infinity;
+            const svg = e.currentTarget;
+            const rect = svg.getBoundingClientRect();
             
-            dataPoints.forEach((_, index) => {
-              const pointX = 15 + (index / (dataPoints.length - 1)) * 370;
-              const distance = Math.abs(x - pointX);
-              if (distance < closestDistance) {
-                closestDistance = distance;
-                closestIndex = index;
+            // Get actual mouse coordinates relative to SVG
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Convert screen coordinates to viewBox coordinates
+            // Screen width maps to viewBox width (400), screen height maps to viewBox height (160)
+            const viewBoxX = (mouseX / rect.width) * 400;
+            const viewBoxY = (mouseY / rect.height) * 160;
+            
+            // Only show hover if mouse is within the chart area (accounting for padding)
+            const chartPadding = 20;
+            if (viewBoxX >= chartPadding && viewBoxX <= (400 - chartPadding) && 
+                viewBoxY >= chartPadding && viewBoxY <= (160 - chartPadding)) {
+              
+              // Map viewBox X coordinate to data point index
+              const chartWidth = 400 - (2 * chartPadding);
+              const dataIndex = Math.round(((viewBoxX - chartPadding) / chartWidth) * (dataPoints.length - 1));
+              const clampedIndex = Math.max(0, Math.min(dataPoints.length - 1, dataIndex));
+              
+              if (clampedIndex !== hoveredPointIndex) {
+                setHoveredPointIndex(clampedIndex);
+                setHoveredPoint(dataPoints[clampedIndex]);
               }
-            });
-            
-            setHoveredPointIndex(closestIndex);
+            } else {
+              // Mouse is outside chart area
+              if (hoveredPointIndex !== null) {
+                setHoveredPointIndex(null);
+                setHoveredPoint(null);
+              }
+            }
           }}
-          onMouseLeave={() => setHoveredPointIndex(null)}
+          onMouseLeave={() => {
+            setHoveredPointIndex(null);
+            setHoveredPoint(null);
+          }}
         >
           {/* Grid lines */}
           <defs>

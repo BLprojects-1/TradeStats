@@ -175,6 +175,7 @@ interface TransactionFilterOptions {
   from?: Date;
   to?: Date;
   limit?: number;
+  before?: string;
 }
 
 class DrpcClient {
@@ -907,13 +908,13 @@ class DrpcClient {
   /**
    * Get transactions for a specific wallet address with optional time filtering
    * @param walletAddress The wallet address to fetch transactions for
-   * @param options Optional filter options (from date, to date, limit)
-   * @returns Array of processed transactions
+   * @param options Optional filter options (from date, to date, limit, before signature for pagination)
+   * @returns Object containing array of processed transactions and lastSignature for pagination
    */
   async getTransactionsByWallet(
     walletAddress: string,
     options: TransactionFilterOptions = {}
-  ): Promise<Transaction[]> {
+  ): Promise<{ transactions: Transaction[], lastSignature: string | null }> {
     try {
       console.log(`Fetching transactions for wallet: ${walletAddress}`, options);
       
@@ -922,14 +923,14 @@ class DrpcClient {
       // Get more transactions than requested to account for filtering
       const fetchLimit = Math.min(limit * 2, 200);
       
-      // Construct the getSignaturesForAddress request without using date filters
-      // since they need to be applied after we get the data
+      // Construct the getSignaturesForAddress request with proper pagination support
       const signaturesPayload = {
         method: 'getSignaturesForAddress',
         params: [
           walletAddress,
           {
-            limit: fetchLimit
+            limit: fetchLimit,
+            ...(options.before && { before: options.before }) // Add before parameter for pagination
           }
         ]
       };
@@ -940,14 +941,15 @@ class DrpcClient {
       
       if (!signaturesResponse?.result || !Array.isArray(signaturesResponse.result)) {
         console.warn('No signatures returned for wallet:', walletAddress);
-        return [];
+        return { transactions: [], lastSignature: null };
       }
       
-      const signatures = signaturesResponse.result.map((item: any) => item.signature);
+      const signatures = signaturesResponse.result;
       console.log(`Retrieved ${signatures.length} signatures for wallet ${walletAddress}`);
       
       // Now fetch the transaction details for each signature
       const transactions: Transaction[] = [];
+      let lastSignature: string | null = null;
       
       // Process in batches to avoid rate limits
       const BATCH_SIZE = 5;
@@ -955,10 +957,10 @@ class DrpcClient {
         const batch = signatures.slice(i, i + BATCH_SIZE);
         
         // Process batch in parallel
-        const batchPromises = batch.map((signature: string) => 
-          this.getTransaction(signature)
+        const batchPromises = batch.map((sigData: any) => 
+          this.getTransaction(sigData.signature)
             .catch((err: Error) => {
-              console.error(`Failed to fetch transaction ${signature}:`, err);
+              console.error(`Failed to fetch transaction ${sigData.signature}:`, err);
               return null;
             })
         );
@@ -966,7 +968,10 @@ class DrpcClient {
         const batchResults = await Promise.all(batchPromises);
         
         // Add valid transactions to the result
-        for (const tx of batchResults) {
+        for (let j = 0; j < batchResults.length; j++) {
+          const tx = batchResults[j];
+          const sigData = batch[j];
+          
           // Skip null transactions
           if (!tx) continue;
           
@@ -987,6 +992,9 @@ class DrpcClient {
           
           transactions.push(tx);
           
+          // Update lastSignature for pagination (use the signature from the current batch)
+          lastSignature = sigData.signature;
+          
           // Stop if we have enough transactions after filtering
           if (transactions.length >= limit) {
             break;
@@ -1004,8 +1012,14 @@ class DrpcClient {
         }
       }
       
+      // If we processed all signatures but didn't reach the limit, 
+      // set lastSignature to the last signature for potential next page
+      if (transactions.length < limit && signatures.length > 0) {
+        lastSignature = signatures[signatures.length - 1].signature;
+      }
+      
       console.log(`Successfully processed ${transactions.length} transactions for wallet ${walletAddress}`);
-      return transactions;
+      return { transactions, lastSignature };
     } catch (error) {
       console.error('Error in getTransactionsByWallet:', error);
       throw error;
