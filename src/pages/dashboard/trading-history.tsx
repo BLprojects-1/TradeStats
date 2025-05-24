@@ -11,6 +11,7 @@ import { jupiterApiService } from '../../services/jupiterApiService';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatMarketCap, formatSmallPrice, formatDate, formatTime } from '../../utils/formatters';
 import NotificationToast from '../../components/NotificationToast';
+import { useRefreshButton } from '../../hooks/useRefreshButton';
 
 const TRADES_PER_PAGE = 10; // Reduce to 10 trades per page
 
@@ -20,6 +21,84 @@ const tradesCache = new Map<string, {
   totalCount: number,
   timestamp: number
 }>();
+
+// Helper function to apply discrepancy checking to trades
+const applyDiscrepancyChecking = async (trades: ProcessedTrade[], userId: string, walletAddress: string): Promise<ProcessedTrade[]> => {
+  // Group trades by token to check for discrepancies
+  const tokenMap = new Map<string, {
+    buys: { amount: number, timestamp: number, valueUSD: number }[],
+    sells: { amount: number, timestamp: number, valueUSD: number }[],
+    tokenSymbol: string
+  }>();
+  
+  // Process each trade to group by token
+  for (const trade of trades) {
+    if (!trade.tokenAddress || !trade.amount) continue;
+    
+    let tokenData = tokenMap.get(trade.tokenAddress);
+    if (!tokenData) {
+      tokenData = {
+        buys: [],
+        sells: [],
+        tokenSymbol: trade.tokenSymbol
+      };
+      tokenMap.set(trade.tokenAddress, tokenData);
+    }
+    
+    if (trade.type === 'BUY') {
+      tokenData.buys.push({
+        amount: trade.amount,
+        timestamp: trade.timestamp,
+        valueUSD: trade.valueUSD
+      });
+    } else if (trade.type === 'SELL') {
+      tokenData.sells.push({
+        amount: trade.amount,
+        timestamp: trade.timestamp,
+        valueUSD: trade.valueUSD
+      });
+    }
+  }
+  
+  // Check for discrepancies and fetch all-time data if needed
+  const tokensToUpdate = new Set<string>();
+  
+  for (const [tokenAddress, data] of tokenMap.entries()) {
+    if (data.buys.length === 0 || data.sells.length === 0) continue;
+    
+    const totalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
+    const totalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
+    
+    // Check for 2.5% discrepancy
+    const netPosition = Math.abs(totalBought - totalSold);
+    const maxAmount = Math.max(totalBought, totalSold);
+    const discrepancyPercent = maxAmount > 0 ? (netPosition / maxAmount) * 100 : 0;
+    
+    if (discrepancyPercent > 2.5) {
+      console.log(`Discrepancy detected for ${data.tokenSymbol}: ${discrepancyPercent.toFixed(2)}% - triggering all-time scrape`);
+      tokensToUpdate.add(tokenAddress);
+    }
+  }
+  
+  // Fetch all-time data for tokens with discrepancies
+  if (tokensToUpdate.size > 0) {
+    for (const tokenAddress of tokensToUpdate) {
+      try {
+        const allTimeResult = await tradingHistoryService.getAllTokenTrades(
+          userId,
+          walletAddress,
+          tokenAddress
+        );
+        console.log(`Fetched ${allTimeResult.trades.length} all-time trades for ${tokenAddress}`);
+        // Note: The all-time data will be available for the TradeInfoModal
+      } catch (error) {
+        console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
+      }
+    }
+  }
+  
+  return trades; // Return original trades as the main list should still show 24h data
+};
 
 export default function TradingHistory() {
   const { user, loading } = useAuth();
@@ -50,6 +129,33 @@ export default function TradingHistory() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
+
+  const {
+    isLoading: isRefreshing,
+    isOnCooldown,
+    cooldownTimeLeft: refreshCooldownTimeLeft,
+    showNotification: refreshShowNotification,
+    notificationType: refreshNotificationType,
+    notificationMessage: refreshNotificationMessage,
+    handleRefresh: handleRefreshButton,
+    handleDismissNotification: handleDismissRefreshNotification
+  } = useRefreshButton({
+    onRefresh: async () => {
+      if (!user?.id || !selectedWalletId) {
+        throw new Error('Please select a wallet first.');
+      }
+
+      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+      if (!selectedWallet) {
+        throw new Error('Selected wallet not found.');
+      }
+
+      return tradingHistoryService.refreshTradingHistory(
+        user.id,
+        selectedWallet.wallet_address
+      );
+    }
+  });
 
   // Keep wallets ref updated
   useEffect(() => {
@@ -145,13 +251,19 @@ export default function TradingHistory() {
           // The service will now handle the logic to either:
           // 1. Pull data directly from Supabase if initial_scan_complete is TRUE
           // 2. Process data from DRPC/Jupiter and update Supabase if initial_scan_complete is FALSE
-          const result = await tradingHistoryService.getTradingHistory(
+          let result = await tradingHistoryService.getTradingHistory(
             user!.id,
             selectedWallet.wallet_address,
             TRADES_PER_PAGE,
             1,
             oneDayAgo.getTime() // Pass the 24 hour timestamp to filter trades
           );
+          
+          // Apply discrepancy checking to trades
+          if (result && result.trades.length > 0) {
+            const processedTrades = await applyDiscrepancyChecking(result.trades, user!.id, selectedWallet.wallet_address);
+            result = { ...result, trades: processedTrades };
+          }
           
           if (result && result.trades.length > 0) {
             setTrades(result.trades);
@@ -334,60 +446,6 @@ export default function TradingHistory() {
     }
   };
 
-  const handleRefresh = async () => {
-    if (!selectedWalletId || !user?.id || refreshing) return;
-    
-    const selectedWallet = wallets.find(w => w.id === selectedWalletId);
-    if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
-    
-    setRefreshing(true);
-    setRefreshMessage(null);
-    setShowNotification(false);
-    
-    try {
-      const result = await tradingHistoryService.refreshTradingHistory(
-        user.id,
-        selectedWallet.wallet_address
-      );
-      
-      if (result.newTradesCount === 0) {
-        setRefreshMessage("You're up to date!");
-        setShowNotification(true);
-      } else {
-        setRefreshMessage(result.message);
-        setShowNotification(true);
-        
-        // If new trades were found, reload the data
-        const dataResult = await tradingHistoryService.getTradingHistory(
-          user.id,
-          selectedWallet.wallet_address,
-          TRADES_PER_PAGE,
-          currentPage
-        );
-        
-        setTrades(dataResult.trades);
-        setTotalTrades(dataResult.totalCount);
-        setTotalPages(Math.ceil(dataResult.totalCount / TRADES_PER_PAGE));
-      }
-      
-      // Clear message after 5 seconds
-      setTimeout(() => {
-        setRefreshMessage(null);
-        setShowNotification(false);
-      }, 5000);
-    } catch (error) {
-      console.error('Error refreshing trades:', error);
-      setRefreshMessage('Failed to refresh trades. Please try again.');
-      setShowNotification(true);
-      setTimeout(() => {
-        setRefreshMessage(null);
-        setShowNotification(false);
-      }, 5000);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   const handleStarTrade = async (trade: ProcessedTrade) => {
     if (!user?.id || !selectedWalletId) return;
     
@@ -496,30 +554,40 @@ export default function TradingHistory() {
         <div className="mb-4 sm:mb-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
             <h1 className="text-xl sm:text-2xl font-semibold text-white">24h Trading History</h1>
-            {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+            <button
+              onClick={handleRefreshButton}
+              disabled={isRefreshing || isOnCooldown}
+              className={`
+                flex items-center space-x-2 px-4 py-2 rounded-lg
+                ${isRefreshing || isOnCooldown
+                  ? 'bg-indigo-800 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+                }
+                transition-colors duration-200
+              `}
+            >
+              <svg
+                className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {refreshing ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Refreshing...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Refresh</span>
-                  </>
-                )}
-              </button>
-            )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span>
+                {isRefreshing
+                  ? 'Refreshing...'
+                  : isOnCooldown
+                  ? `Wait ${Math.ceil(refreshCooldownTimeLeft / 1000)}s`
+                  : 'Refresh'
+                }
+              </span>
+            </button>
           </div>
           <p className="text-gray-500">View your recent Solana trading activity (last 24 hours)</p>
         </div>
@@ -904,10 +972,10 @@ export default function TradingHistory() {
         />
 
         <NotificationToast
-          message={refreshMessage || ''}
-          isVisible={showNotification}
-          type="success"
-          duration={5000}
+          isVisible={refreshShowNotification}
+          message={refreshNotificationMessage}
+          type={refreshNotificationType}
+          onDismiss={handleDismissRefreshNotification}
         />
       </div>
     </DashboardLayout>

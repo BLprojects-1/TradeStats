@@ -9,6 +9,9 @@ import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { ProcessedTrade } from '../../services/tradeProcessor';
 import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
+import TradeInfoModal from '../../components/TradeInfoModal';
+import { useRefreshButton } from '../../hooks/useRefreshButton';
+import NotificationToast from '../../components/NotificationToast';
 
 // Modified TradeData interface that matches our processed trades
 export interface TradeData {
@@ -41,7 +44,7 @@ const calculateDuration = (start: number, end: number): string => {
 };
 
 // Helper function to process trades and find top performers
-const processTradesForTopPerformers = (trades: ProcessedTrade[]): TradeData[] => {
+const processTradesForTopPerformers = async (trades: ProcessedTrade[], userId: string, walletAddress: string): Promise<TradeData[]> => {
   // Group trades by token
   const tokenMap = new Map<string, {
     buys: { amount: number, timestamp: number, valueUSD: number }[],
@@ -94,6 +97,44 @@ const processTradesForTopPerformers = (trades: ProcessedTrade[]): TradeData[] =>
     const totalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
     const totalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
     
+    // Check for 2.5% discrepancy - if found, trigger additional all-time scrape
+    const netPosition = Math.abs(totalBought - totalSold);
+    const maxAmount = Math.max(totalBought, totalSold);
+    const discrepancyPercent = maxAmount > 0 ? (netPosition / maxAmount) * 100 : 0;
+    
+    if (discrepancyPercent > 2.5) {
+      console.log(`Discrepancy detected for ${data.tokenSymbol}: ${discrepancyPercent.toFixed(2)}% - triggering all-time scrape`);
+      try {
+        // Get all-time trades for this specific token to ensure accuracy
+        const allTimeResult = await tradingHistoryService.getAllTokenTrades(
+          userId,
+          walletAddress,
+          tokenAddress
+        );
+        
+        // Recalculate with all-time data
+        const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
+        const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
+        
+        if (allTimeBuys.length > 0 && allTimeSells.length > 0) {
+          // Update with more accurate all-time data
+          const allTimeTotalBought = allTimeBuys.reduce((sum, buy) => sum + (buy.amount || 0), 0);
+          const allTimeTotalSold = allTimeSells.reduce((sum, sell) => sum + (sell.amount || 0), 0);
+          
+          // Use all-time data for more accurate calculations
+          data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+          data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+        }
+      } catch (error) {
+        console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
+        // Continue with original data if all-time fetch fails
+      }
+    }
+    
+    // Recalculate with potentially updated data
+    const finalTotalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
+    const finalTotalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
+    
     // Calculate profit/loss
     const totalBuyValue = data.buys.reduce((sum, buy) => sum + buy.valueUSD, 0);
     const totalSellValue = data.sells.reduce((sum, sell) => sum + sell.valueUSD, 0);
@@ -117,8 +158,8 @@ const processTradesForTopPerformers = (trades: ProcessedTrade[]): TradeData[] =>
       tokenAddress,
       tokenSymbol: data.tokenSymbol,
       tokenLogoURI: data.tokenLogoURI || undefined,
-      totalBought,
-      totalSold,
+      totalBought: finalTotalBought,
+      totalSold: finalTotalSold,
       profitLoss,
       duration,
       firstBuyTimestamp: firstBuy.timestamp,
@@ -148,6 +189,42 @@ export default function TopTrades() {
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
+  const [swingPlans, setSwingPlans] = useState<Map<string, string>>(new Map());
+  const [showNotification, setShowNotification] = useState(false);
+  
+  // Modal state
+  const [selectedTradeModal, setSelectedTradeModal] = useState<{
+    tokenAddress: string;
+    tokenSymbol: string;
+    tokenLogoURI?: string;
+  } | null>(null);
+
+  const {
+    isLoading: isRefreshing,
+    isOnCooldown,
+    cooldownTimeLeft: refreshCooldownTimeLeft,
+    showNotification: refreshShowNotification,
+    notificationType: refreshNotificationType,
+    notificationMessage: refreshNotificationMessage,
+    handleRefresh: handleRefreshButton,
+    handleDismissNotification: handleDismissRefreshNotification
+  } = useRefreshButton({
+    onRefresh: async () => {
+      if (!user?.id || !selectedWalletId) {
+        throw new Error('Please select a wallet first.');
+      }
+
+      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+      if (!selectedWallet) {
+        throw new Error('Selected wallet not found.');
+      }
+
+      return tradingHistoryService.refreshTradingHistory(
+        user.id,
+        selectedWallet.wallet_address
+      );
+    }
+  });
 
   // Keep wallets ref updated
   useEffect(() => {
@@ -208,7 +285,7 @@ export default function TopTrades() {
           );
           
           // Process the trades to find top performers
-          const processedTopTrades = processTradesForTopPerformers(result.trades);
+          const processedTopTrades = await processTradesForTopPerformers(result.trades, user!.id, selectedWallet.wallet_address);
           setTopTrades(processedTopTrades);
           setTradingHistory(result.trades);
         } catch (err: any) {
@@ -254,7 +331,7 @@ export default function TopTrades() {
         );
         
         // Process the trades to find top performers
-        const processedTopTrades = processTradesForTopPerformers(result.trades);
+        const processedTopTrades = await processTradesForTopPerformers(result.trades, user!.id, selectedWallet.wallet_address);
         setTopTrades(processedTopTrades);
         setTradingHistory(result.trades);
         
@@ -318,6 +395,28 @@ export default function TopTrades() {
     getTradeData();
   }, [selectedWalletId, user?.id]);
 
+  // Load swing plans from localStorage on mount
+  useEffect(() => {
+    if (user?.id) {
+      const savedPlans = localStorage.getItem(`swing_plans_${user.id}`);
+      if (savedPlans) {
+        setSwingPlans(new Map(JSON.parse(savedPlans)));
+      }
+    }
+  }, [user?.id]);
+
+  const handleSwingPlanChange = (tokenAddress: string, plan: string) => {
+    setSwingPlans(prev => {
+      const newPlans = new Map(prev);
+      newPlans.set(tokenAddress, plan);
+      // Save to localStorage
+      if (user?.id) {
+        localStorage.setItem(`swing_plans_${user.id}`, JSON.stringify(Array.from(newPlans.entries())));
+      }
+      return newPlans;
+    });
+  };
+
   // Calculate best and worst trades
   const bestTrade = topTrades.length > 0 
     ? topTrades.reduce((best, trade) => trade.profitLoss > best.profitLoss ? trade : best, topTrades[0])
@@ -358,7 +457,7 @@ export default function TopTrades() {
             );
             
             // Process the trades to find top performers
-            const processedTopTrades = processTradesForTopPerformers(result.trades);
+            const processedTopTrades = await processTradesForTopPerformers(result.trades, user!.id, selectedWallet.wallet_address);
             setTopTrades(processedTopTrades);
             setTradingHistory(result.trades);
             
@@ -371,64 +470,6 @@ export default function TopTrades() {
         };
         getTradeData();
       }
-    }
-  };
-
-  const handleRefresh = async () => {
-    if (!selectedWalletId || !user?.id || refreshing) return;
-    
-    const selectedWallet = wallets.find(w => w.id === selectedWalletId);
-    if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
-
-    // Check cooldown
-    const now = Date.now();
-    const cooldownMs = 2 * 60 * 1000; // 2 minutes
-    const timeSinceLastRefresh = now - lastRefreshTime;
-    
-    if (timeSinceLastRefresh < cooldownMs) {
-      const timeLeft = Math.ceil((cooldownMs - timeSinceLastRefresh) / 1000);
-      setCooldownTimeLeft(timeLeft);
-      setRefreshMessage(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`);
-      setTimeout(() => setRefreshMessage(null), 3000);
-      return;
-    }
-    
-    setRefreshing(true);
-    setRefreshMessage(null);
-    setLastRefreshTime(now);
-    
-    try {
-      const result = await tradingHistoryService.refreshTradingHistory(
-        user.id,
-        selectedWallet.wallet_address
-      );
-      
-      if (result.newTradesCount === 0) {
-        setRefreshMessage("You're up to date!");
-      } else {
-        setRefreshMessage(result.message);
-        
-        // If new trades were found, reload the data
-        const dataResult = await tradingHistoryService.getTradingHistory(
-          user.id,
-          selectedWallet.wallet_address,
-          500,
-          1
-        );
-        
-        const processedTopTrades = processTradesForTopPerformers(dataResult.trades);
-        setTopTrades(processedTopTrades);
-        setTradingHistory(dataResult.trades);
-      }
-      
-      // Clear message after 5 seconds
-      setTimeout(() => setRefreshMessage(null), 5000);
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-      setRefreshMessage('Failed to refresh data. Please try again.');
-      setTimeout(() => setRefreshMessage(null), 5000);
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -479,6 +520,18 @@ export default function TopTrades() {
     }
   };
 
+  const handleTradeClick = (trade: TradeData) => {
+    setSelectedTradeModal({
+      tokenAddress: trade.tokenAddress,
+      tokenSymbol: trade.tokenSymbol,
+      tokenLogoURI: trade.tokenLogoURI
+    });
+  };
+
+  const handleCloseModal = () => {
+    setSelectedTradeModal(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -499,49 +552,52 @@ export default function TopTrades() {
         <div className="mb-4 sm:mb-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
             <h1 className="text-xl sm:text-2xl font-semibold text-white">24h Top Trades</h1>
-            {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing || cooldownTimeLeft > 0}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+            <button
+              onClick={handleRefreshButton}
+              disabled={isRefreshing || isOnCooldown}
+              className={`
+                flex items-center space-x-2 px-4 py-2 rounded-lg
+                ${isRefreshing || isOnCooldown
+                  ? 'bg-indigo-800 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+                }
+                transition-colors duration-200
+              `}
+            >
+              <svg
+                className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {refreshing ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Refreshing...</span>
-                  </>
-                ) : cooldownTimeLeft > 0 ? (
-                  <>
-                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>{Math.floor(cooldownTimeLeft / 60)}:{(cooldownTimeLeft % 60).toString().padStart(2, '0')}</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Refresh</span>
-                  </>
-                )}
-              </button>
-            )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span>
+                {isRefreshing
+                  ? 'Refreshing...'
+                  : isOnCooldown
+                  ? `Wait ${Math.ceil(refreshCooldownTimeLeft / 1000)}s`
+                  : 'Refresh'
+                }
+              </span>
+            </button>
           </div>
           <p className="text-gray-500">View your best performing trades in the last 24 hours</p>
-          {refreshMessage && (
-            <div className={`mt-3 p-3 rounded-md text-sm ${
-              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
-                ? 'bg-red-900/30 border border-red-500 text-red-200' 
-                : 'bg-green-900/30 border border-green-500 text-green-200'
-            }`}>
-              {refreshMessage}
-            </div>
-          )}
         </div>
+
+        {refreshShowNotification && refreshNotificationMessage && (
+          <NotificationToast
+            isVisible={refreshShowNotification}
+            message={refreshNotificationMessage}
+            type={refreshNotificationType}
+            onDismiss={handleDismissRefreshNotification}
+          />
+        )}
 
         {error && (
           <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4 sm:mb-6">
@@ -582,10 +638,17 @@ export default function TopTrades() {
                   topTrades
                     .sort((a, b) => b.profitLoss - a.profitLoss) // Sort by profit (highest first)
                     .map((trade) => (
-                      <tr key={trade.tokenAddress}>
+                      <tr 
+                        key={trade.tokenAddress}
+                        onClick={() => handleTradeClick(trade)}
+                        className="hover:bg-[#252525] cursor-pointer transition-colors"
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                           <button
-                            onClick={() => handleStarTrade(trade.tokenAddress)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStarTrade(trade.tokenAddress);
+                            }}
                             disabled={starringTrade === trade.tokenAddress}
                             className="hover:text-yellow-400 transition-colors disabled:opacity-50"
                             aria-label={trade.starred ? 'Unstar trade' : 'Star trade'}
@@ -658,7 +721,11 @@ export default function TopTrades() {
                 {topTrades
                   .sort((a, b) => b.profitLoss - a.profitLoss)
                   .map((trade) => (
-                    <div key={trade.tokenAddress} className="bg-[#252525] p-4 rounded-lg">
+                    <div 
+                      key={trade.tokenAddress} 
+                      onClick={() => handleTradeClick(trade)}
+                      className="bg-[#252525] p-4 rounded-lg cursor-pointer hover:bg-[#2a2a2a] transition-colors"
+                    >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-2">
                           {trade.tokenLogoURI && (
@@ -667,7 +734,10 @@ export default function TopTrades() {
                           <span className="text-white font-medium">{trade.tokenSymbol}</span>
                         </div>
                         <button
-                          onClick={() => handleStarTrade(trade.tokenAddress)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStarTrade(trade.tokenAddress);
+                          }}
                           disabled={starringTrade === trade.tokenAddress}
                           className="hover:text-yellow-400 transition-colors disabled:opacity-50"
                           aria-label={trade.starred ? 'Unstar trade' : 'Star trade'}
@@ -734,7 +804,10 @@ export default function TopTrades() {
                     <h3 className="text-lg sm:text-xl font-semibold text-white">{bestTrade.tokenSymbol}</h3>
                   </div>
                   <button
-                    onClick={() => handleStarTrade(bestTrade.tokenAddress)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStarTrade(bestTrade.tokenAddress);
+                    }}
                     disabled={starringTrade === bestTrade.tokenAddress}
                     className="hover:text-yellow-400 transition-colors disabled:opacity-50"
                     aria-label={bestTrade.starred ? 'Unstar best trade' : 'Star best trade'}
@@ -790,7 +863,10 @@ export default function TopTrades() {
                     <h3 className="text-lg sm:text-xl font-semibold text-white">{worstTrade.tokenSymbol}</h3>
                   </div>
                   <button
-                    onClick={() => handleStarTrade(worstTrade.tokenAddress)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStarTrade(worstTrade.tokenAddress);
+                    }}
                     disabled={starringTrade === worstTrade.tokenAddress}
                     className="hover:text-yellow-400 transition-colors disabled:opacity-50"
                     aria-label={worstTrade.starred ? 'Unstar worst trade' : 'Star worst trade'}
@@ -872,6 +948,21 @@ export default function TopTrades() {
             loadingMessage || ''
           } 
         />
+
+        {/* Trade Info Modal */}
+        {selectedTradeModal && selectedWalletId && (
+          <TradeInfoModal
+            isOpen={!!selectedTradeModal}
+            onClose={handleCloseModal}
+            tokenAddress={selectedTradeModal.tokenAddress}
+            tokenSymbol={selectedTradeModal.tokenSymbol}
+            tokenLogoURI={selectedTradeModal.tokenLogoURI}
+            walletAddress={wallets.find(w => w.id === selectedWalletId)?.wallet_address || ''}
+            mode="top-trades"
+            initialSwingPlan={swingPlans.get(selectedTradeModal.tokenAddress) || ''}
+            onSwingPlanChange={(plan) => handleSwingPlanChange(selectedTradeModal.tokenAddress, plan)}
+          />
+        )}
       </div>
     </DashboardLayout>
   );

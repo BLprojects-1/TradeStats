@@ -16,6 +16,11 @@ import { jupiterApiService } from '../services/jupiterApiService';
 import { formatTokenAmount, formatSmallPrice } from '../utils/formatters';
 import NotificationToast from '../components/NotificationToast';
 
+interface OnboardingData {
+  hasCompletedOnboarding: boolean;
+  progress: number;
+}
+
 export interface TokenData {
   tokenAddress: string;
   tokenSymbol: string;
@@ -30,7 +35,7 @@ export interface TokenData {
 }
 
 // Helper function to process trades into token holdings
-const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenData[]> => {
+const processTradesToHoldings = async (trades: ProcessedTrade[], userId?: string, walletAddress?: string): Promise<TokenData[]> => {
   // Group trades by token
   const tokenMap = new Map<string, {
     tokenSymbol: string,
@@ -81,23 +86,66 @@ const processTradesToHoldings = async (trades: ProcessedTrade[]): Promise<TokenD
     }
   }
   
-  // Calculate remaining tokens and fetch current prices
+  // Calculate remaining tokens and check for discrepancies
   const holdings: TokenData[] = [];
   const tokensToFetch: {tokenData: TokenData, tokenAddress: string, timestamp: number}[] = [];
   
   for (const [tokenAddress, data] of tokenMap.entries()) {
-    const remaining = data.buys.reduce((sum, buy) => sum + buy.amount, 0) - 
-                     data.sells.reduce((sum, sell) => sum + sell.amount, 0);
+    const totalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
+    const totalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
+    const remaining = totalBought - totalSold;
     
     if (remaining <= 0) continue;
+
+    // Check for 2.5% discrepancy - if found, trigger additional all-time scrape
+    if (userId && walletAddress) {
+      const netPosition = Math.abs(totalBought - totalSold);
+      const maxAmount = Math.max(totalBought, totalSold);
+      const discrepancyPercent = maxAmount > 0 ? (netPosition / maxAmount) * 100 : 0;
+      
+      if (discrepancyPercent > 2.5) {
+        console.log(`Discrepancy detected for ${data.tokenSymbol}: ${discrepancyPercent.toFixed(2)}% - triggering all-time scrape`);
+        try {
+          // Get all-time trades for this specific token to ensure accuracy
+          const allTimeResult = await tradingHistoryService.getAllTokenTrades(
+            userId,
+            walletAddress,
+            tokenAddress
+          );
+          
+          // Recalculate with all-time data
+          const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
+          const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
+          
+          if (allTimeBuys.length > 0 || allTimeSells.length > 0) {
+            // Update with more accurate all-time data
+            data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+            data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+            data.buyValue = data.buys.reduce((sum, buy) => sum + buy.valueUSD, 0);
+            data.sellValue = data.sells.reduce((sum, sell) => sum + sell.valueUSD, 0);
+          }
+        } catch (error) {
+          console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
+          // Continue with original data if all-time fetch fails
+        }
+      }
+    }
+
+    // Recalculate with potentially updated data
+    const finalTotalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
+    const finalTotalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
+    const finalRemaining = finalTotalBought - finalTotalSold;
+    
+    // Only include tokens with a positive remaining balance after recalculation
+    if (finalRemaining <= 0) continue;
     
     const tokenData: TokenData = {
       tokenAddress,
       tokenSymbol: data.tokenSymbol,
       tokenLogoURI: data.tokenLogoURI || undefined,
-      totalBought: data.buys.reduce((sum, buy) => sum + buy.amount, 0),
-      totalSold: data.sells.reduce((sum, sell) => sum + sell.amount, 0),
-      remaining,
+      totalBought: finalTotalBought,
+      totalSold: finalTotalSold,
+      remaining: finalRemaining,
       totalValue: 0,
       lastTransactionTimestamp: data.latestTimestamp
     };
@@ -157,6 +205,32 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [showNotification, setShowNotification] = useState(false);
+  const [totalProfitLoss, setTotalProfitLoss] = useState<number>(0);
+  const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'incomplete' | 'complete'>('checking');
+  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+  const [onboardingProgress, setOnboardingProgress] = useState<number>(0);
+  const [refreshingPerformance, setRefreshingPerformance] = useState(false);
+  const [refreshingTrades, setRefreshingTrades] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (cooldownTimeLeft > 0) {
+      interval = setInterval(() => {
+        setCooldownTimeLeft(prev => {
+          if (prev <= 1) {
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cooldownTimeLeft]);
 
   useEffect(() => {
     // If not loading and no user, redirect to home page
@@ -251,7 +325,7 @@ export default function Dashboard() {
         );
         
         // Process the trades to find open positions
-        const openPositions = await processTradesToHoldings(result.trades);
+        const openPositions = await processTradesToHoldings(result.trades, user?.id, selectedWallet.wallet_address);
         setOpenTrades(openPositions);
       } catch (err) {
         console.error('Error loading open trades data:', err);
@@ -314,10 +388,23 @@ export default function Dashboard() {
     
     const selectedWallet = wallets.find(w => w.id === selectedWalletId);
     if (!selectedWallet || !selectedWallet.initial_scan_complete) return;
+
+    // Check cooldown
+    const now = Date.now();
+    const cooldownMs = 2 * 60 * 1000; // 2 minutes
+    const timeSinceLastRefresh = now - lastRefreshTime;
+    
+    if (timeSinceLastRefresh < cooldownMs) {
+      const timeLeft = Math.ceil((cooldownMs - timeSinceLastRefresh) / 1000);
+      setCooldownTimeLeft(timeLeft);
+      setRefreshMessage(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`);
+      setTimeout(() => setRefreshMessage(null), 3000);
+      return;
+    }
     
     setRefreshing(true);
     setRefreshMessage(null);
-    setShowNotification(false);
+    setLastRefreshTime(now);
     
     try {
       const result = await tradingHistoryService.refreshTradingHistory(
@@ -327,10 +414,8 @@ export default function Dashboard() {
       
       if (result.newTradesCount === 0) {
         setRefreshMessage("You're up to date!");
-        setShowNotification(true);
       } else {
         setRefreshMessage(result.message);
-        setShowNotification(true);
         
         // If new trades were found, reload the open trades data
         const dataResult = await tradingHistoryService.getTradingHistory(
@@ -340,23 +425,16 @@ export default function Dashboard() {
           1
         );
         
-        const openPositions = await processTradesToHoldings(dataResult.trades);
+        const openPositions = await processTradesToHoldings(dataResult.trades, user?.id, selectedWallet.wallet_address);
         setOpenTrades(openPositions);
       }
       
       // Clear message after 5 seconds
-      setTimeout(() => {
-        setRefreshMessage(null);
-        setShowNotification(false);
-      }, 5000);
+      setTimeout(() => setRefreshMessage(null), 5000);
     } catch (error) {
-      console.error('Error refreshing trades:', error);
-      setRefreshMessage('Failed to refresh trades. Please try again.');
-      setShowNotification(true);
-      setTimeout(() => {
-        setRefreshMessage(null);
-        setShowNotification(false);
-      }, 5000);
+      console.error('Error refreshing data:', error);
+      setRefreshMessage('Failed to refresh data. Please try again.');
+      setTimeout(() => setRefreshMessage(null), 5000);
     } finally {
       setRefreshing(false);
     }
@@ -387,6 +465,15 @@ export default function Dashboard() {
         <div className="mb-4 sm:mb-6">
           <h1 className="text-xl sm:text-2xl font-semibold mb-2 text-white">Dashboard Overview</h1>
           <p className="text-gray-500">Welcome to your Solana trading dashboard</p>
+          {refreshMessage && (
+            <div className={`mt-3 p-3 rounded-md text-sm ${
+              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
+                ? 'bg-red-900/30 border border-red-500 text-red-200' 
+                : 'bg-green-900/30 border border-green-500 text-green-200'
+            }`}>
+              {refreshMessage}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -408,16 +495,23 @@ export default function Dashboard() {
               {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
                 <button
                   onClick={handleRefreshTrades}
-                  disabled={refreshing}
+                  disabled={refreshing || cooldownTimeLeft > 0}
                   className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
                 >
                   {refreshing ? (
                     <>
                       <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                       <span>Refreshing...</span>
+                    </>
+                  ) : cooldownTimeLeft > 0 ? (
+                    <>
+                      <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>{Math.floor(cooldownTimeLeft / 60)}:{(cooldownTimeLeft % 60).toString().padStart(2, '0')}</span>
                     </>
                   ) : (
                     <>
@@ -631,7 +725,8 @@ export default function Dashboard() {
         message={refreshMessage || ''}
         isVisible={showNotification}
         type="success"
-        duration={5000}
+        autoDismissMs={5000}
+        onDismiss={() => setShowNotification(false)}
       />
     </DashboardLayout>
   );

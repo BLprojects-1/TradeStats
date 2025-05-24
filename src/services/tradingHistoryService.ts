@@ -879,6 +879,60 @@ export class TradingHistoryService {
   }
 
   /**
+   * Get all trades for a specific token address
+   */
+  async getAllTokenTrades(
+    userId: string,
+    walletAddress: string,
+    tokenAddress: string
+  ): Promise<{ trades: ProcessedTrade[], totalCount: number }> {
+    try {
+      const { walletId } = await this.ensureWalletExists(userId, walletAddress);
+
+      const { data: trades, error, count } = await supabase
+        .from('trading_history')
+        .select('*', { count: 'exact' })
+        .eq('wallet_id', walletId)
+        .eq('token_address', tokenAddress)
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching token trades:', error);
+        throw error;
+      }
+
+      // Map to ProcessedTrade format
+      const processedTrades: ProcessedTrade[] = (trades || []).map(trade => ({
+        signature: trade.signature,
+        timestamp: new Date(trade.timestamp).getTime(),
+        type: trade.type as 'BUY' | 'SELL' | 'UNKNOWN',
+        tokenAddress: trade.token_address,
+        tokenSymbol: trade.token_symbol || 'Unknown',
+        tokenLogoURI: trade.token_logo_uri || null,
+        amount: trade.amount,
+        decimals: trade.decimals || 9,
+        priceUSD: trade.price_usd || 0,
+        priceSOL: trade.price_sol || 0,
+        valueUSD: trade.value_usd || 0,
+        valueSOL: trade.value_sol || 0,
+        profitLoss: trade.profit_loss || 0,
+        blockTime: trade.block_time,
+        starred: trade.starred || false,
+        notes: trade.notes || '',
+        tags: trade.tags || ''
+      }));
+
+      return {
+        trades: processedTrades,
+        totalCount: count || 0
+      };
+    } catch (error) {
+      console.error('Error in getAllTokenTrades:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Refresh historical prices for cached trades using their stored timestamps
    * This ensures we get accurate historical prices instead of relying on cached values
    */

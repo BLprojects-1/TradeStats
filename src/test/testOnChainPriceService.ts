@@ -29,7 +29,7 @@ async function testOnChainPriceService() {
       // Test 1: Get current price from on-chain service
       console.log('\n1. Testing on-chain price lookup...');
       const startTime = Date.now();
-      const onChainPrice = await onChainPriceService.getHistoricalPrice(token.mint);
+      const onChainPrice = await onChainPriceService.getHistoricalPrice(token.mint, Date.now());
       const onChainTime = Date.now() - startTime;
       console.log(`   On-chain price: $${onChainPrice.toFixed(6)}`);
       console.log(`   Time taken: ${onChainTime}ms`);
@@ -57,7 +57,7 @@ async function testOnChainPriceService() {
       // Test 4: Test caching
       console.log('\n4. Testing cache performance...');
       const cacheStartTime = Date.now();
-      const cachedPrice = await onChainPriceService.getHistoricalPrice(token.mint);
+      const cachedPrice = await onChainPriceService.getHistoricalPrice(token.mint, Date.now());
       const cacheTime = Date.now() - cacheStartTime;
       console.log(`   Cached price: $${cachedPrice.toFixed(6)}`);
       console.log(`   Time taken: ${cacheTime}ms`);
@@ -67,7 +67,7 @@ async function testOnChainPriceService() {
       console.log('\n5. Testing historical price lookup...');
       try {
         const historicalSlot = 240000000; // Example slot
-        const historicalPrice = await onChainPriceService.getHistoricalPrice(token.mint, historicalSlot);
+        const historicalPrice = await onChainPriceService.getHistoricalPrice(token.mint, Date.now());
         console.log(`   Historical price at slot ${historicalSlot}: $${historicalPrice.toFixed(6)}`);
       } catch (error) {
         console.log(`   Historical price lookup not fully implemented yet`);

@@ -49,6 +49,12 @@ interface RpcResponse<T> {
   error?: { message: string };
 }
 
+interface LocalPoolsHistoricalResponse {
+  price: number;
+  poolId?: string;
+  source?: string;
+}
+
 export class OnChainPriceService {
   // Price cache
   private priceCache = new Map<string, { price: number; timestamp: number; slot: number; poolId?: string }>();
@@ -122,7 +128,7 @@ export class OnChainPriceService {
         decimals: 9, // Default, would need to fetch from mint account for accuracy
         slot: currentSlot,
         poolId: priceResult.poolId,
-        source: priceResult.source
+        source: priceResult.source || 'LocalPools'
       };
       
     } catch (error: any) {
@@ -189,7 +195,7 @@ export class OnChainPriceService {
       // Method 3: Try our local pools service for approximation
       try {
         console.log(`🔄 Falling back to local pools service estimation for ${tokenMint}...`);
-        const localResponse = await axios.get(`http://127.0.0.1:3001/token/historical-price/${tokenMint}/${targetTimestamp}`, {
+        const localResponse = await axios.get<LocalPoolsHistoricalResponse>(`http://127.0.0.1:3001/token/historical-price/${tokenMint}/${targetTimestamp}`, {
           timeout: 5000
         });
         
@@ -199,7 +205,7 @@ export class OnChainPriceService {
           this.historicalCache.set(cacheKey, {
             price: localPrice,
             timestamp: Date.now(),
-            source: 'LocalPools'
+            source: localResponse.data.source || 'LocalPools'
           });
           console.log(`✅ Local pools historical price for ${tokenMint}: $${localPrice}`);
           return localPrice;

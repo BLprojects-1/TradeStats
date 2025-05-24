@@ -76,6 +76,8 @@ const TermsOfService = () => {
                 By accessing or using Ryvu, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our services.
               </p>
               
+              <p>The terms &quot;User&quot;, &quot;You&quot;, &quot;Your&quot;, &quot;Service&quot;, and &quot;Agreement&quot; have specific meanings in this document.</p>
+              
               <h2 className="text-xl font-semibold mt-8 mb-4 text-white">1. Service Description</h2>
               
               <p>

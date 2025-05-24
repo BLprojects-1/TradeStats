@@ -152,6 +152,8 @@ const PrivacyPolicy = () => {
               <p className="mt-2">
                 <a href="mailto:support@ryvu.xyz" className="text-indigo-400 hover:text-indigo-300 transition">support@ryvu.xyz</a>
               </p>
+
+              <p>The terms &quot;Personal Data&quot;, &quot;Data Subject&quot;, &quot;Controller&quot;, and &quot;Processor&quot; have the meanings given in the GDPR.</p>
             </div>
           </div>
         </div>
