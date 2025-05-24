@@ -23,11 +23,11 @@ const NotificationToast = ({ message, isVisible, type = 'info', autoDismissMs = 
 
   const bgColor = type === 'success' ? 'bg-green-900/30 border-green-500' :
                  type === 'error' ? 'bg-red-900/30 border-red-500' :
-                 'bg-blue-900/30 border-blue-500';
+                 'bg-indigo-900/30 border-indigo-500';
 
   const textColor = type === 'success' ? 'text-green-200' :
                    type === 'error' ? 'text-red-200' :
-                   'text-blue-200';
+                   'text-indigo-200';
 
   return (
     <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg border ${bgColor} ${textColor} z-50`}>

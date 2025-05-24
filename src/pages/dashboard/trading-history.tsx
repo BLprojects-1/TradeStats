@@ -15,12 +15,19 @@ import { useRefreshButton } from '../../hooks/useRefreshButton';
 
 const TRADES_PER_PAGE = 10; // Reduce to 10 trades per page
 
+// Update the cache interface at the top of the file
+interface PageCache {
+  trades: ProcessedTrade[];
+  totalCount: number;
+  timestamp: number;
+  page: number;
+}
+
 // Cache object to store trades data between page navigations
-const tradesCache = new Map<string, {
-  trades: ProcessedTrade[],
-  totalCount: number,
-  timestamp: number
-}>();
+const tradesCache = new Map<string, PageCache>();
+
+// Add cache duration constant
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Helper function to apply discrepancy checking to trades
 const applyDiscrepancyChecking = async (trades: ProcessedTrade[], userId: string, walletAddress: string): Promise<ProcessedTrade[]> => {
@@ -150,6 +157,9 @@ export default function TradingHistory() {
         throw new Error('Selected wallet not found.');
       }
 
+      // Clear cache before refreshing
+      clearCache();
+      
       return tradingHistoryService.refreshTradingHistory(
         user.id,
         selectedWallet.wallet_address
@@ -189,148 +199,85 @@ export default function TradingHistory() {
   // Load data when a wallet is selected
   useEffect(() => {
     const getTradeHistory = async () => {
-      if (!selectedWalletId) return;
+      if (!selectedWalletId || !user?.id) return;
       
-      const selectedWallet = walletsRef.current.find(w => w.id === selectedWalletId);
+      const selectedWallet = wallets.find(w => w.id === selectedWalletId);
       if (!selectedWallet) return;
-
-      // Check if we have cached data first
-      const cachedData = getWalletCache(selectedWalletId);
-      if (cachedData && isCacheValid(selectedWalletId)) {
-        console.log('Using cached data for trading history');
-        setTrades(cachedData);
-        setTotalTrades(cachedData.length);
-        setTotalPages(Math.ceil(cachedData.length / TRADES_PER_PAGE));
+      
+      // Generate cache key for this specific page
+      const cacheKey = `${selectedWalletId}_${currentPage}`;
+      const now = Date.now();
+      
+      // Check cache first
+      const cachedData = tradesCache.get(cacheKey);
+      if (cachedData && (now - cachedData.timestamp) < CACHE_DURATION) {
+        console.log(`Using cached data for page ${currentPage}`);
+        setTrades(cachedData.trades);
+        setTotalTrades(cachedData.totalCount);
+        setTotalPages(Math.ceil(cachedData.totalCount / TRADES_PER_PAGE));
         return;
       }
+
+      // Check if initial scan is complete
+      const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
       
-      setDataLoading(true);
-      setLoadingMessage("Loading your trading history...");
+      // Only show loading if we don't have cached data
+      if (!cachedData) {
+        if (!isInitialScanComplete) {
+          setLoadingMessage("Scanning wallet for trades...");
+        }
+        setDataLoading(true);
+      }
+      
       setError(null);
       setApiError(null);
       
-      // Check if initial scan is complete first - use explicit comparison to ensure boolean value
-      const isInitialScanComplete = selectedWallet.initial_scan_complete === true;
-      console.log(`Wallet ${selectedWallet.wallet_address} initial_scan_complete:`, isInitialScanComplete);
-      
-      // Only set initial scan in progress if scan is NOT complete AND not already scanning
-      const walletIsCurrentlyScanning = isWalletScanning(selectedWalletId);
-      
-      // Check if we've already initiated scanning for this wallet in this session
-      const hasBeenScanned = scannedWallets.has(selectedWalletId);
-      
-      // Track if we initiated the scan in this call
-      let weInitiatedScan = false;
-      
-      // Only mark as scanning and show initial scan message if we're actually doing an initial scan
-      if (!isInitialScanComplete && !walletIsCurrentlyScanning && !hasBeenScanned) {
-        markWalletAsScanning(selectedWalletId);
-        setScannedWallets(prev => new Set(prev).add(selectedWalletId));
-        weInitiatedScan = true;
-        setLoadingMessage("Initial wallet scan in progress. This may take up to 2 minutes for the first scan.");
-      } else if (isInitialScanComplete) {
-        // For wallets that are already scanned, show normal loading message
-        setLoadingMessage("Loading trade history from database...");
-      } else {
-        // Wallet is currently scanning, just show the scanning message
-        setLoadingMessage("Wallet scan in progress...");
-      }
-      
       try {
-        console.log(`Loading trades for wallet: ${selectedWallet.wallet_address}, initialScanComplete: ${isInitialScanComplete}`);
-        
-        // Reset pagination when filters change
-        setCurrentPage(1);
+        console.log(`Loading trades for wallet: ${selectedWallet.wallet_address}, page: ${currentPage}`);
         
         // Calculate timestamp for 24 hours ago
         const oneDayAgo = new Date();
         oneDayAgo.setHours(oneDayAgo.getHours() - 24);
         
-        try {
-          // Use tradingHistoryService to get trade history
-          // The service will now handle the logic to either:
-          // 1. Pull data directly from Supabase if initial_scan_complete is TRUE
-          // 2. Process data from DRPC/Jupiter and update Supabase if initial_scan_complete is FALSE
-          let result = await tradingHistoryService.getTradingHistory(
-            user!.id,
-            selectedWallet.wallet_address,
-            TRADES_PER_PAGE,
-            1,
-            oneDayAgo.getTime() // Pass the 24 hour timestamp to filter trades
-          );
-          
-          // Apply discrepancy checking to trades
-          if (result && result.trades.length > 0) {
-            const processedTrades = await applyDiscrepancyChecking(result.trades, user!.id, selectedWallet.wallet_address);
-            result = { ...result, trades: processedTrades };
-          }
-          
-          if (result && result.trades.length > 0) {
-            setTrades(result.trades);
-            setTotalTrades(result.totalCount);
-            setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
-            
-            // Cache the result for future use
-            tradesCache.set(selectedWalletId, {
-              trades: result.trades,
-              totalCount: result.totalCount,
-              timestamp: Date.now()
-            });
-            
-            console.log(`Loaded ${result.trades.length} trades from database`);
-          } else {
-            console.log('No trades found for this wallet in the last 24 hours');
-            setTrades([]);
-            setTotalTrades(0);
-            
-            // Cache empty result to prevent unnecessary requests
-            tradesCache.set(selectedWalletId, {
-              trades: [],
-              totalCount: 0,
-              timestamp: Date.now()
-            });
-          }
-          
-          // Only mark as complete if we were the ones who initiated the scan AND wallet isn't already complete
-          if (!isInitialScanComplete && weInitiatedScan) {
-            markWalletScanComplete(selectedWalletId);
-            // Remove from scanned wallets since it's now complete
-            setScannedWallets(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(selectedWalletId);
-              return newSet;
-            });
-          }
-        } catch (apiError) {
-          console.error('Error loading trades:', apiError);
-          setApiError('Unable to load trading history. Please try again later.');
-          setErrorType('rpc');
-          
-          // If error during initial scan that we initiated, mark it as complete to prevent endless retries
-          if (!isInitialScanComplete && weInitiatedScan) {
-            markWalletScanComplete(selectedWalletId);
-            // Remove from scanned wallets since we're marking it complete
-            setScannedWallets(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(selectedWalletId);
-              return newSet;
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Error loading trade history:', err);
-        setError('Failed to load trading history. Please try again.');
+        const result = await tradingHistoryService.getTradingHistory(
+          user.id,
+          selectedWallet.wallet_address,
+          TRADES_PER_PAGE,
+          currentPage,
+          oneDayAgo.getTime()
+        );
         
-        // If error during initial scan that we initiated, mark it as complete to prevent endless retries
-        if (!isInitialScanComplete && weInitiatedScan) {
-          markWalletScanComplete(selectedWalletId);
-          // Remove from scanned wallets since we're marking it complete
-          setScannedWallets(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(selectedWalletId);
-            return newSet;
+        if (result && result.trades.length > 0) {
+          // Cache the results
+          tradesCache.set(cacheKey, {
+            trades: result.trades,
+            totalCount: result.totalCount,
+            timestamp: now,
+            page: currentPage
+          });
+          
+          setTrades(result.trades);
+          setTotalTrades(result.totalCount);
+          setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
+          console.log(`Loaded ${result.trades.length} trades from database, total: ${result.totalCount}`);
+        } else {
+          console.log('No trades found for this wallet in the last 24 hours');
+          setTrades([]);
+          setTotalTrades(0);
+          setTotalPages(1);
+          
+          // Cache empty result
+          tradesCache.set(cacheKey, {
+            trades: [],
+            totalCount: 0,
+            timestamp: now,
+            page: currentPage
           });
         }
+      } catch (error) {
+        console.error('Error loading trades:', error);
+        setApiError('Failed to load trades. Please try again.');
+        setErrorType('general');
       } finally {
         setDataLoading(false);
         setLoadingMessage('');
@@ -342,7 +289,7 @@ export default function TradingHistory() {
     }
   }, [selectedWalletId, user?.id, currentPage]);
 
-  // Update the loadMoreTrades function to use tradingHistoryService instead
+  // Update the loadMoreTrades function to include page in cache
   const loadMoreTrades = async () => {
     if (!selectedWalletId || !user?.id || loadingMore) return;
     
@@ -399,22 +346,24 @@ export default function TradingHistory() {
         setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
         setHasMoreTrades(nextPage < Math.ceil(result.totalCount / TRADES_PER_PAGE));
         
-        // Cache the result
+        // Cache the result with page number
         tradesCache.set(cacheKey, {
           trades: result.trades,
           totalCount: result.totalCount,
-          timestamp: now
+          timestamp: now,
+          page: nextPage
         });
         
         console.log(`Loaded ${result.trades.length} more trades from page ${nextPage}`);
       } else {
         setHasMoreTrades(false);
         
-        // Cache empty result
+        // Cache empty result with page number
         tradesCache.set(cacheKey, {
           trades: [],
-          totalCount: totalTrades, // Keep the same total count
-          timestamp: now
+          totalCount: totalTrades,
+          timestamp: now,
+          page: nextPage
         });
       }
     } catch (error) {
@@ -427,13 +376,65 @@ export default function TradingHistory() {
     }
   };
 
+  // Update handlePageChange to use cache
   const handlePageChange = async (newPage: number) => {
     if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
     
     const selectedWallet = wallets.find(w => w.id === selectedWalletId);
     if (!selectedWallet) return;
     
-    await loadMoreTrades();
+    // Check cache first
+    const cacheKey = `${selectedWalletId}_${newPage}`;
+    const now = Date.now();
+    const cachedData = tradesCache.get(cacheKey);
+    
+    if (cachedData && (now - cachedData.timestamp) < CACHE_DURATION) {
+      console.log(`Using cached data for page ${newPage}`);
+      setTrades(cachedData.trades);
+      setCurrentPage(newPage);
+      return;
+    }
+    
+    setDataLoading(true);
+    
+    try {
+      const oneDayAgo = new Date();
+      oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+      
+      const result = await tradingHistoryService.getTradingHistory(
+        user!.id,
+        selectedWallet.wallet_address,
+        TRADES_PER_PAGE,
+        newPage,
+        oneDayAgo.getTime()
+      );
+      
+      if (result) {
+        // Cache the results
+        tradesCache.set(cacheKey, {
+          trades: result.trades,
+          totalCount: result.totalCount,
+          timestamp: now,
+          page: newPage
+        });
+        
+        setTrades(result.trades);
+        setTotalTrades(result.totalCount);
+        setTotalPages(Math.ceil(result.totalCount / TRADES_PER_PAGE));
+        setCurrentPage(newPage);
+      }
+    } catch (error) {
+      console.error('Error changing page:', error);
+      setApiError('Failed to load trades for page ' + newPage);
+      setErrorType('general');
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  // Add cache clearing function for when we refresh data
+  const clearCache = () => {
+    tradesCache.clear();
   };
 
   const handleRetry = () => {
@@ -497,12 +498,9 @@ export default function TradingHistory() {
     }
   }) : filteredTrades;
 
-  // Calculate pagination based on sorted and filtered trades
-  const paginatedTrades = sortedTrades.slice(
-    (currentPage - 1) * TRADES_PER_PAGE,
-    currentPage * TRADES_PER_PAGE
-  );
-  const totalFilteredPages = Math.ceil(sortedTrades.length / TRADES_PER_PAGE);
+  // Remove the client-side pagination calculation
+  const paginatedTrades = sortedTrades;
+  const totalFilteredPages = Math.ceil(totalTrades / TRADES_PER_PAGE);
 
   const handleSort = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD') => {
     if (sortField === field) {
@@ -894,7 +892,7 @@ export default function TradingHistory() {
           {totalFilteredPages >= 1 && (
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="text-sm text-gray-400">
-                Showing {((currentPage - 1) * TRADES_PER_PAGE) + 1} to {Math.min(currentPage * TRADES_PER_PAGE, sortedTrades.length)} of {sortedTrades.length} trades
+                Showing {((currentPage - 1) * TRADES_PER_PAGE) + 1} to {Math.min(currentPage * TRADES_PER_PAGE, totalTrades)} of {totalTrades} trades
                 {tokenFilter !== 'all' && ` (filtered by ${tokenFilter.toUpperCase()})`}
               </div>
               
@@ -939,23 +937,24 @@ export default function TradingHistory() {
           )}
         </div>
 
+        {/* Statistics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
             <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Trades{tokenFilter !== 'all' ? ` (${tokenFilter.toUpperCase()})` : ''}</h3>
-            <p className="text-lg sm:text-2xl font-semibold text-white">{sortedTrades.length}</p>
+            <p className="text-lg sm:text-2xl font-semibold text-white">{totalTrades}</p>
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
             <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h Volume{tokenFilter !== 'all' ? ` (${tokenFilter.toUpperCase()})` : ''}</h3>
             <p className="text-lg sm:text-2xl font-semibold text-white">
-              {formatSmallPrice(sortedTrades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0))}
+              {formatSmallPrice(trades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0))}
             </p>
           </div>
           
           <div className="bg-[#1a1a1a] rounded-lg p-4 sm:p-6">
             <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-1 sm:mb-2">24h P/L{tokenFilter !== 'all' ? ` (${tokenFilter.toUpperCase()})` : ''}</h3>
             <p className="text-lg sm:text-2xl font-semibold text-white">
-              {formatSmallPrice(sortedTrades.reduce((sum, trade) => {
+              {formatSmallPrice(trades.reduce((sum, trade) => {
                 const value = trade.valueUSD || 0;
                 return sum + (trade.type === 'BUY' ? -value : value);
               }, 0))}

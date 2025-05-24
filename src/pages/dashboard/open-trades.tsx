@@ -97,36 +97,29 @@ const processTradesToHoldings = async (trades: ProcessedTrade[], userId: string,
     // Only include tokens with a positive remaining balance
     if (remaining <= 0) continue;
 
-    // Check for 2.5% discrepancy - if found, trigger additional all-time scrape
-    const netPosition = Math.abs(totalBought - totalSold);
-    const maxAmount = Math.max(totalBought, totalSold);
-    const discrepancyPercent = maxAmount > 0 ? (netPosition / maxAmount) * 100 : 0;
-    
-    if (discrepancyPercent > 2.5) {
-      console.log(`Discrepancy detected for ${data.tokenSymbol}: ${discrepancyPercent.toFixed(2)}% - triggering all-time scrape`);
-      try {
-        // Get all-time trades for this specific token to ensure accuracy
-        const allTimeResult = await tradingHistoryService.getAllTokenTrades(
-          userId,
-          walletAddress,
-          tokenAddress
-        );
-        
-        // Recalculate with all-time data
-        const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
-        const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
-        
-        if (allTimeBuys.length > 0 || allTimeSells.length > 0) {
-          // Update with more accurate all-time data
-          data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
-          data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
-          data.buyValue = data.buys.reduce((sum, buy) => sum + buy.valueUSD, 0);
-          data.sellValue = data.sells.reduce((sum, sell) => sum + sell.valueUSD, 0);
-        }
-      } catch (error) {
-        console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
-        // Continue with original data if all-time fetch fails
+    // Always fetch all-time data for tokens with remaining balance to ensure accuracy
+    try {
+      // Get all-time trades for this specific token to ensure accuracy
+      const allTimeResult = await tradingHistoryService.getAllTokenTrades(
+        userId,
+        walletAddress,
+        tokenAddress
+      );
+      
+      // Recalculate with all-time data
+      const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
+      const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
+      
+      if (allTimeBuys.length > 0 || allTimeSells.length > 0) {
+        // Update with more accurate all-time data
+        data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+        data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+        data.buyValue = data.buys.reduce((sum, buy) => sum + buy.valueUSD, 0);
+        data.sellValue = data.sells.reduce((sum, sell) => sum + sell.valueUSD, 0);
       }
+    } catch (error) {
+      console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
+      // Continue with original data if all-time fetch fails
     }
 
     // Recalculate with potentially updated data

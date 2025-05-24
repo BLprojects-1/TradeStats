@@ -454,9 +454,7 @@ export class TradeProcessor {
   }
 
   async getTopTrades(address: string, limit: number): Promise<ProcessedTrade[]> {
-    // This would typically fetch from a database or cache
-    // For now, we'll return an empty array
-    return [];
+    throw new Error('getTopTrades must be implemented using real trade data from the database');
   }
 
   private calculateSolChange(preBalances: number[], postBalances: number[]): number {

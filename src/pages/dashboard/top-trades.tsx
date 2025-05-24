@@ -93,42 +93,27 @@ const processTradesForTopPerformers = async (trades: ProcessedTrade[], userId: s
     // Only include tokens that have both buys and sells
     if (data.buys.length === 0 || data.sells.length === 0) continue;
     
-    // Calculate total bought/sold
-    const totalBought = data.buys.reduce((sum, buy) => sum + buy.amount, 0);
-    const totalSold = data.sells.reduce((sum, sell) => sum + sell.amount, 0);
-    
-    // Check for 2.5% discrepancy - if found, trigger additional all-time scrape
-    const netPosition = Math.abs(totalBought - totalSold);
-    const maxAmount = Math.max(totalBought, totalSold);
-    const discrepancyPercent = maxAmount > 0 ? (netPosition / maxAmount) * 100 : 0;
-    
-    if (discrepancyPercent > 2.5) {
-      console.log(`Discrepancy detected for ${data.tokenSymbol}: ${discrepancyPercent.toFixed(2)}% - triggering all-time scrape`);
-      try {
-        // Get all-time trades for this specific token to ensure accuracy
-        const allTimeResult = await tradingHistoryService.getAllTokenTrades(
-          userId,
-          walletAddress,
-          tokenAddress
-        );
-        
-        // Recalculate with all-time data
-        const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
-        const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
-        
-        if (allTimeBuys.length > 0 && allTimeSells.length > 0) {
-          // Update with more accurate all-time data
-          const allTimeTotalBought = allTimeBuys.reduce((sum, buy) => sum + (buy.amount || 0), 0);
-          const allTimeTotalSold = allTimeSells.reduce((sum, sell) => sum + (sell.amount || 0), 0);
-          
-          // Use all-time data for more accurate calculations
-          data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
-          data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
-        }
-      } catch (error) {
-        console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
-        // Continue with original data if all-time fetch fails
+    // Always fetch all-time data for tokens with trades to ensure accuracy
+    try {
+      // Get all-time trades for this specific token to ensure accuracy
+      const allTimeResult = await tradingHistoryService.getAllTokenTrades(
+        userId,
+        walletAddress,
+        tokenAddress
+      );
+      
+      // Recalculate with all-time data
+      const allTimeBuys = allTimeResult.trades.filter(t => t.type === 'BUY');
+      const allTimeSells = allTimeResult.trades.filter(t => t.type === 'SELL');
+      
+      if (allTimeBuys.length > 0 && allTimeSells.length > 0) {
+        // Update with more accurate all-time data
+        data.buys = allTimeBuys.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
+        data.sells = allTimeSells.map(t => ({ amount: t.amount || 0, timestamp: t.timestamp, valueUSD: t.valueUSD || 0 }));
       }
+    } catch (error) {
+      console.error(`Error fetching all-time trades for ${tokenAddress}:`, error);
+      // Continue with original data if all-time fetch fails
     }
     
     // Recalculate with potentially updated data

@@ -128,40 +128,4 @@ export class PerformanceService {
       throw error;
     }
   }
-
-  /**
-   * Generate sample data points for demonstration when no real data is available
-   */
-  static generateSampleData(): PerformanceData {
-    const now = Date.now();
-    const dataPoints: PerformanceDataPoint[] = [];
-    let cumulativePnL = 0;
-
-    // Generate 24 data points (one per hour)
-    for (let i = 23; i >= 0; i--) {
-      const timestamp = now - (i * 60 * 60 * 1000);
-      const change = (Math.random() - 0.4) * 100; // Slightly biased toward positive
-      cumulativePnL += change;
-      
-      dataPoints.push({
-        timestamp,
-        cumulativePnL,
-        value: Math.abs(change)
-      });
-    }
-
-    return {
-      dataPoints,
-      metrics: {
-        totalPnL: cumulativePnL,
-        totalTrades: 15,
-        tokensTraded: 8,
-        winRate: 66.7,
-        bestTrade: 125.50,
-        worstTrade: -45.20,
-        totalVolume: 2847.32,
-        averageTradeSize: 189.82
-      }
-    };
-  }
 } 

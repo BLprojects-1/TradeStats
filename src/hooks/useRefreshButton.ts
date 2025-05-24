@@ -10,7 +10,7 @@ interface UseRefreshButtonReturn {
   isOnCooldown: boolean;
   cooldownTimeLeft: number;
   showNotification: boolean;
-  notificationType: 'success' | 'error';
+  notificationType: 'success' | 'error' | 'info';
   notificationMessage: string;
   handleRefresh: () => Promise<void>;
   handleDismissNotification: () => void;
@@ -24,7 +24,7 @@ export function useRefreshButton({
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState(0);
   const [showNotification, setShowNotification] = useState(false);
-  const [notificationType, setNotificationType] = useState<'success' | 'error'>('success');
+  const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
   const [notificationMessage, setNotificationMessage] = useState('');
 
   // Update cooldown timer
@@ -49,10 +49,14 @@ export function useRefreshButton({
     }
 
     setIsLoading(true);
+    setNotificationType('info');
+    setNotificationMessage('Refresh in progress');
+    setShowNotification(true);
+    
     try {
       const result = await onRefresh();
       setNotificationType('success');
-      setNotificationMessage(result.message);
+      setNotificationMessage('Successfully refreshed!');
       setShowNotification(true);
       setLastRefreshTime(Date.now());
       setCooldownTimeLeft(cooldownMs);

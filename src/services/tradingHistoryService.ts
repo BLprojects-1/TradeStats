@@ -424,16 +424,16 @@ export class TradingHistoryService {
       if (initialScanComplete) {
         console.log('Wallet already scanned - fetching from database only');
       } else {
-        // For initial scan, fetch only last 24 hours of trades to match the UI display
+        // For initial scan, fetch ALL historical trades
         console.log('Performing initial scan for wallet:', walletAddress);
         
         const twentyFourHoursAgo = new Date();
         twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
         
-        console.log(`Fetching transactions from last 24 hours: ${twentyFourHoursAgo.toISOString()}`);
+        console.log(`Fetching ALL historical transactions`);
         
         try {
-          // Get ALL transactions from DRPC for the last 24 hours - use pagination to ensure we get everything
+          // Get ALL transactions from DRPC - use pagination to ensure we get everything
           console.log('🔄 Starting comprehensive initial scan...');
           
           let allTransactions: Transaction[] = [];
@@ -443,7 +443,7 @@ export class TradingHistoryService {
           let totalFetched = 0;
           let batchCount = 0;
           
-          while (hasMoreTransactions && totalFetched < 1000) { // Safety limit of 1000 transactions
+          while (hasMoreTransactions) { // Removed 1000 transaction limit
             batchCount++;
             console.log(`📥 Fetching batch ${batchCount}, beforeSignature: ${beforeSignature ? `${beforeSignature.substring(0, 8)}...` : 'none'}`);
             
@@ -475,18 +475,8 @@ export class TradingHistoryService {
             
             console.log(`📊 Batch complete: ${result.transactions.length} fetched, ${newTransactions.length} new, ${allTransactions.length} total unique`);
             
-            // If we got fewer than requested or no lastSignature, we've reached the end
-            if (result.transactions.length < batchSize || !result.lastSignature) {
-              console.log('✅ Reached end of available transactions');
-              hasMoreTransactions = false;
-            }
-            
-            // Add delay to avoid rate limits
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          
-          if (totalFetched >= 1000) {
-            console.log('⚠️ Hit safety limit of 1000 transactions fetched');
+            // Add a small delay between batches to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 200));
           }
           
           console.log(`🎯 Initial scan complete: Retrieved ${allTransactions.length} unique transactions for processing`);
