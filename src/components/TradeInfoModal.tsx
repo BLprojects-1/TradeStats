@@ -3,6 +3,7 @@ import { ProcessedTrade } from '../services/tradeProcessor';
 import { tradingHistoryService } from '../services/tradingHistoryService';
 import { formatTokenAmount, formatSmallPrice, formatDate, formatTime } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
+import { jupiterApiService } from '../services/jupiterApiService';
 
 interface TradeInfoModalProps {
   isOpen: boolean;
@@ -99,7 +100,7 @@ export default function TradeInfoModal({
     try {
       // Get all trades for this specific token
       const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, walletAddress);
-      
+
       // Get all-time trades for this token to ensure accuracy
       const result = await tradingHistoryService.getAllTokenTrades(
         user.id,
@@ -108,22 +109,22 @@ export default function TradeInfoModal({
       );
 
       const trades = result.trades;
-      
+
       // Calculate detailed metrics
       const buys = trades.filter((t: ProcessedTrade) => t.type === 'BUY');
       const sells = trades.filter((t: ProcessedTrade) => t.type === 'SELL');
-      
+
       const totalBought = buys.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.amount || 0), 0);
       const totalSold = sells.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.amount || 0), 0);
       const remaining = totalBought - totalSold;
-      
+
       const totalBuyValue = buys.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.valueUSD || 0), 0);
       const totalSellValue = sells.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.valueUSD || 0), 0);
-      
+
       // Get current price for unrealized P/L calculation
       const currentPrice = trades.length > 0 ? (trades[0].priceUSD || 0) : 0;
       const currentValue = remaining * currentPrice;
-      
+
       const realizedPL = totalSellValue - (totalBuyValue * (totalSold / totalBought));
       const unrealizedPL = currentValue - (totalBuyValue * (remaining / totalBought));
 
@@ -166,7 +167,7 @@ export default function TradeInfoModal({
 
     try {
       const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, walletAddress);
-      
+
       // Load individual trade notes
       const notes: { [signature: string]: string } = {};
       for (const trade of tradeDetail.trades) {
@@ -225,7 +226,7 @@ export default function TradeInfoModal({
     try {
       const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, walletAddress);
       await tradingHistoryService.updateTradeNotes(walletId, signature, notes, '');
-      
+
       setIndividualNotes(prev => ({
         ...prev,
         [signature]: notes
@@ -251,7 +252,7 @@ export default function TradeInfoModal({
 
   const calculateTokensGained = () => {
     if (!newSwingNote.sellPrice || !newSwingNote.buyPrice || !newSwingNote.amount) return 0;
-    
+
     const sellValue = parseFloat(newSwingNote.sellPrice) * parseFloat(newSwingNote.amount);
     const tokensGained = sellValue / parseFloat(newSwingNote.buyPrice);
     return tokensGained - parseFloat(newSwingNote.amount);
@@ -492,7 +493,7 @@ export default function TradeInfoModal({
                             />
                           </div>
                         </div>
-                        
+
                         {/* Token Gain Calculator */}
                         {newSwingNote.sellPrice && newSwingNote.buyPrice && newSwingNote.amount && (
                           <div className="bg-[#1a1a1a] p-3 rounded-md">

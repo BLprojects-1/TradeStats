@@ -34,17 +34,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase.auth.getSession();
+      const { data: { session: currentSession }, error } = await supabase.auth.getSession();
       
       if (error) {
         console.error('Error refreshing session:', error);
         return;
       }
       
-      if (data.session) {
-        console.log('Session refreshed:', data.session.user.id);
-        setSession(data.session);
-        setUser(data.session.user);
+      if (currentSession) {
+        // Check if the session is expired
+        const expiresAt = new Date(currentSession.expires_at! * 1000);
+        const now = new Date();
+        
+        if (expiresAt > now) {
+          console.log('Session refreshed:', currentSession.user.id);
+          setSession(currentSession);
+          setUser(currentSession.user);
+        } else {
+          // Session is expired, try to refresh it
+          const { data: { session: refreshedSession }, error: refreshError } = 
+            await supabase.auth.refreshSession();
+            
+          if (refreshError) {
+            console.error('Error refreshing expired session:', refreshError);
+            setSession(null);
+            setUser(null);
+          } else if (refreshedSession) {
+            console.log('Session refreshed after expiration:', refreshedSession.user.id);
+            setSession(refreshedSession);
+            setUser(refreshedSession.user);
+          }
+        }
       } else {
         console.log('No session found during refresh');
         setSession(null);
@@ -58,30 +78,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   useEffect(() => {
+    let mounted = true;
+
     // Get initial session
     const initSession = async () => {
-      setLoading(true);
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('Error getting session:', error);
-          setSession(null);
-          setUser(null);
+          if (mounted) {
+            setSession(null);
+            setUser(null);
+          }
           return;
         }
         
-        if (data.session) {
-          console.log('Initial session loaded for user:', data.session.user.id);
-          setSession(data.session);
-          setUser(data.session.user);
+        if (currentSession) {
+          console.log('Initial session loaded for user:', currentSession.user.id);
+          if (mounted) {
+            setSession(currentSession);
+            setUser(currentSession.user);
+          }
         } else {
           console.log('No initial session found');
         }
       } catch (error) {
         console.error('Unexpected error getting session:', error);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
     
@@ -89,51 +116,61 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Set up auth change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth state changed:', event, session ? `User: ${session.user.id}` : 'No session');
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+      async (event, currentSession) => {
+        console.log('Auth state changed:', event, currentSession ? `User: ${currentSession.user.id}` : 'No session');
+        
+        if (mounted) {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            setSession(currentSession);
+            setUser(currentSession?.user ?? null);
+          } else if (event === 'SIGNED_OUT') {
+            setSession(null);
+            setUser(null);
+          }
+          setLoading(false);
+        }
       }
     );
 
-    // Clean up the subscription
-    return () => subscription.unsubscribe();
+    // Clean up
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
     try {
       console.log('Signing out user');
       
-      // Sign out with scope: 'local' to clear all local session data
       await supabase.auth.signOut({
         scope: 'local'
-      });
-      
-      // Clear all Supabase-related items from localStorage
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
-          localStorage.removeItem(key);
-        }
-      });
-      
-      // Clear session storage as well
-      Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
-          sessionStorage.removeItem(key);
-        }
       });
       
       // Clear local state
       setSession(null);
       setUser(null);
       
-      // Force a complete page reload and redirect
+      // Clear storage
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+      
+      // Redirect to home page
       window.location.href = '/';
-      window.location.reload();
     } catch (error) {
       console.error('Error signing out:', error);
       // Even if there's an error, try to clear everything
+      setSession(null);
+      setUser(null);
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('sb-') || key.includes('supabase')) {
           localStorage.removeItem(key);
@@ -144,10 +181,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           sessionStorage.removeItem(key);
         }
       });
-      setSession(null);
-      setUser(null);
       window.location.href = '/';
-      window.location.reload();
     }
   };
 

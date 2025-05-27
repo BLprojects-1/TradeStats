@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.tracked_wallets (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   wallet_address TEXT NOT NULL,
   label TEXT,
+  initial_scan_complete BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   

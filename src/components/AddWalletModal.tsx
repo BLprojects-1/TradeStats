@@ -1,151 +1,191 @@
 import { useState } from 'react';
-import { addTrackedWallet, TrackedWallet } from '../utils/userProfile';
+import { supabase } from '../utils/supabaseClient';
+import { useWalletSelection } from '../contexts/WalletSelectionContext';
+import ScanningNotification from './ScanningNotification';
 
 interface AddWalletModalProps {
   userId: string;
   onClose: () => void;
-  onSuccess: (wallet: TrackedWallet) => void;
+  onSuccess: (wallet: any) => void;
 }
 
-const AddWalletModal = ({ userId, onClose, onSuccess }: AddWalletModalProps) => {
+export default function AddWalletModal({ userId, onClose, onSuccess }: AddWalletModalProps) {
   const [walletAddress, setWalletAddress] = useState('');
-  const [walletLabel, setWalletLabel] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showScanning, setShowScanning] = useState(false);
+  const { wallets, reloadWallets } = useWalletSelection();
 
-  const validateWalletAddress = (address: string): boolean => {
-    // Basic Solana wallet address validation (44 characters starting with a base58 character)
-    const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
-    return solanaAddressRegex.test(address);
+  const startWalletScan = async (walletId: string, address: string) => {
+    try {
+      console.log('🔄 Client: Starting wallet scan for:', { walletId, address });
+      
+      const response = await fetch('/api/wallets/scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          walletAddress: address
+        })
+      });
+
+      console.log('📡 Client: Received response:', { status: response.status });
+      const data = await response.json();
+      console.log('📦 Client: Response data:', data);
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start wallet scan');
+      }
+
+      console.log('✅ Client: Wallet scan completed:', data);
+      
+      // Update scanning state in localStorage
+      const scanningWallets = JSON.parse(localStorage.getItem('scanning_wallets') || '[]');
+      const updatedWallets = scanningWallets.filter((w: string) => w !== address);
+      localStorage.setItem('scanning_wallets', JSON.stringify(updatedWallets));
+      
+      // Reload wallets to get updated status
+      await reloadWallets();
+
+      // Close scanning notification
+      setShowScanning(false);
+      
+      return data;
+    } catch (error) {
+      console.error('❌ Client: Error scanning wallet:', error);
+      // Remove from scanning list on error
+      const scanningWallets = JSON.parse(localStorage.getItem('scanning_wallets') || '[]');
+      const updatedWallets = scanningWallets.filter((w: string) => w !== address);
+      localStorage.setItem('scanning_wallets', JSON.stringify(updatedWallets));
+      
+      // Show error in UI
+      setError(error instanceof Error ? error.message : 'Failed to scan wallet');
+      setSaving(false);
+      setShowScanning(false);
+      throw error;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
     
-    // Validate input
+    // Check wallet limit
+    if (wallets.length >= 3) {
+      setError('Maximum of 3 wallets allowed');
+      return;
+    }
+
     if (!walletAddress.trim()) {
-      setError('Please enter a wallet address');
+      setError('Wallet address is required');
       return;
     }
 
-    if (!validateWalletAddress(walletAddress)) {
-      setError('Please enter a valid Solana wallet address');
-      return;
-    }
-
-    // Ensure we have a valid user ID
-    if (!userId) {
-      setError('User ID is missing. Please try logging out and back in.');
-      return;
-    }
+    setSaving(true);
+    setError(null);
 
     try {
-      setIsSubmitting(true);
-      const result = await addTrackedWallet(userId, walletAddress, walletLabel || 'My Wallet');
-      
-      if (!result) {
-        throw new Error('Failed to add wallet address');
+      // Add wallet with initial_scan_complete set to false
+      const { data: newWallet, error: walletError } = await supabase
+        .from('tracked_wallets')
+        .insert({
+          user_id: userId,
+          wallet_address: walletAddress.trim(),
+          initial_scan_complete: false // Set to false initially
+        })
+        .select()
+        .single();
+
+      if (walletError) throw walletError;
+
+      // Immediately reload wallets to show the new one
+      await reloadWallets();
+
+      // Show scanning notification
+      setShowScanning(true);
+
+      // Store scanning state in localStorage
+      const scanningWallets = JSON.parse(localStorage.getItem('scanning_wallets') || '[]');
+      if (!scanningWallets.includes(walletAddress.trim())) {
+        scanningWallets.push(walletAddress.trim());
+        localStorage.setItem('scanning_wallets', JSON.stringify(scanningWallets));
       }
-      
-      // Pass the newly added wallet to the success callback
-      onSuccess(result);
+
+      // Close modal and show success immediately
+      onSuccess(newWallet);
       onClose();
-    } catch (err) {
-      console.error('Failed to add wallet:', err);
-      
-      // Handle specific error messages
-      if (err instanceof Error) {
-        if (err.message.includes('already exists')) {
-          setError('This wallet address is already added to your account');
-        } else if (err.message.includes('foreign key') || err.message.includes('User ID')) {
-          setError('Authentication error: Please log out and log back in.');
-        } else if (err.message.includes('401') || err.message.includes('Invalid API key')) {
-          setError(
-            'Authorization error: Your Supabase RLS policies need to be updated. ' +
-            'Please follow the instructions in supabase/README.md or run the fix-permissions.sh script.'
-          );
-        } else {
-          setError(err.message);
-        }
-      } else {
-        setError('Failed to add wallet. Please try again.');
-      }
-    } finally {
-      setIsSubmitting(false);
+
+      // Start the scan process in the background
+      startWalletScan(newWallet.id, walletAddress.trim()).catch(error => {
+        console.error('Background scan error:', error);
+        // The error will be handled by the startWalletScan function
+      });
+
+    } catch (err: any) {
+      console.error('Error adding wallet:', err);
+      setError(err.message || 'Failed to add wallet. Please try again.');
+      setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
-      <div className="bg-[#1a1a1a] rounded-xl shadow-lg max-w-md w-full p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-indigo-200">Add Wallet Address</h2>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
-        
-        {error && (
-          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-[#1a1a1a] rounded-lg p-6 max-w-md w-full">
+        <h2 className="text-xl font-semibold text-white mb-4">Add New Wallet</h2>
         
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="walletLabel" className="block text-sm font-medium text-gray-300 mb-1">
-              Wallet Label (optional)
+            <label className="block text-gray-300 text-sm font-medium mb-2">
+              Wallet Address
             </label>
             <input
               type="text"
-              id="walletLabel"
-              value={walletLabel}
-              onChange={(e) => setWalletLabel(e.target.value)}
-              placeholder="My Trading Wallet"
-              className="w-full px-4 py-2 bg-[#212121] text-white border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          
-          <div className="mb-6">
-            <label htmlFor="walletAddress" className="block text-sm font-medium text-gray-300 mb-1">
-              Solana Wallet Address
-            </label>
-            <input
-              type="text"
-              id="walletAddress"
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
+              className="w-full bg-[#252525] text-white border border-gray-700 rounded-lg p-2 focus:outline-none focus:border-indigo-500"
               placeholder="Enter Solana wallet address"
-              className="w-full px-4 py-2 bg-[#212121] text-white border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              required
             />
           </div>
-          
-          <div className="flex justify-end gap-3">
+
+          {error && (
+            <div className="mb-4 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition"
+              className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition disabled:opacity-70"
+              disabled={saving}
+              className={`
+                px-4 py-2 rounded-lg
+                ${saving
+                  ? 'bg-indigo-800 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+                }
+                transition-colors
+              `}
             >
-              {isSubmitting ? 'Adding...' : 'Add Wallet'}
+              {saving ? 'Adding...' : 'Add Wallet'}
             </button>
           </div>
         </form>
       </div>
+
+      {showScanning && (
+        <ScanningNotification
+          walletAddress={walletAddress}
+          onClose={() => setShowScanning(false)}
+        />
+      )}
     </div>
   );
-};
-
-export default AddWalletModal; 
+} 

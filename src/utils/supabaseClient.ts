@@ -14,11 +14,13 @@ console.log('Initializing Supabase client with URL:', supabaseUrl);
 // Create a single supabase client for interacting with your database
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false,
+    persistSession: true,
+    autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
-    debug: true, // Enable debug logs for authentication
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'supabase.auth.token',
+    debug: process.env.NODE_ENV === 'development',
   }
 });
 

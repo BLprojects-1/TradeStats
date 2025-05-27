@@ -30,7 +30,7 @@ export interface PaginatedTransactions {
   lastSignature: string | null;
 }
 
-interface TokenBalance {
+export interface TokenBalance {
   mint: string;
   owner: string;
   accountIndex: number;
@@ -178,17 +178,17 @@ interface TransactionFilterOptions {
   before?: string;
 }
 
-class DrpcClient {
+export class DrpcClient {
   // Primary and fallback endpoints with load balancing
   private readonly endpoints = {
-    // Use DRPC with the API key in the URL as per documentation
-    primary: 'https://lb.drpc.org/ogrpc?network=solana&dkey=AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF',
+    // Use DRPC with the API key from environment variable
+    primary: `https://lb.drpc.org/ogrpc?network=solana&dkey=${process.env.NEXT_PUBLIC_DRPC_API_KEY}`,
     fallbacks: []  // Empty as we don't want fallbacks
   };
   
   // API keys stored separately - keeping this for potential future use
   private readonly API_KEYS = {
-    DRPC: process.env.NEXT_PUBLIC_DRPC_API_KEY || 'AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF',
+    DRPC: process.env.NEXT_PUBLIC_DRPC_API_KEY,
   };
   
   // Metadata tracking per endpoint
@@ -915,113 +915,157 @@ class DrpcClient {
     walletAddress: string,
     options: TransactionFilterOptions = {}
   ): Promise<{ transactions: Transaction[], lastSignature: string | null }> {
+    console.log('🔍 DRPC: Getting transactions for wallet:', { walletAddress, options });
+    
+    const endpoint = this.getCurrentEndpoint();
+    let allTransactions: Transaction[] = [];
+    let lastSignature: string | null = null;
+    let hasMore = true;
+    let batchCount = 0;
+    const MAX_BATCHES = 10; // Limit to 10 batches to avoid infinite loops
+    
     try {
-      console.log(`Fetching transactions for wallet: ${walletAddress}`, options);
-      
-      // Calculate limit - we get extra transactions because we'll filter by date later
-      const limit = options.limit || 100; // Default to 100 transactions
-      // Get more transactions than requested to account for filtering
-      const fetchLimit = Math.min(limit * 2, 200);
-      
-      // Construct the getSignaturesForAddress request with proper pagination support
-      const signaturesPayload = {
-        method: 'getSignaturesForAddress',
-        params: [
-          walletAddress,
-          {
-            limit: fetchLimit,
-            ...(options.before && { before: options.before }) // Add before parameter for pagination
-          }
-        ]
-      };
-      
-      // Get signatures for the wallet
-      const endpoint = this.getCurrentEndpoint();
-      const signaturesResponse = await this.makeRequest(endpoint, signaturesPayload);
-      
-      if (!signaturesResponse?.result || !Array.isArray(signaturesResponse.result)) {
-        console.warn('No signatures returned for wallet:', walletAddress);
-        return { transactions: [], lastSignature: null };
-      }
-      
-      const signatures = signaturesResponse.result;
-      console.log(`Retrieved ${signatures.length} signatures for wallet ${walletAddress}`);
-      
-      // Now fetch the transaction details for each signature
-      const transactions: Transaction[] = [];
-      let lastSignature: string | null = null;
-      
-      // Process in batches to avoid rate limits
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < signatures.length; i += BATCH_SIZE) {
-        const batch = signatures.slice(i, i + BATCH_SIZE);
+      while (hasMore && batchCount < MAX_BATCHES) {
+        batchCount++;
+        console.log(`📦 DRPC: Fetching batch ${batchCount}...`);
         
-        // Process batch in parallel
-        const batchPromises = batch.map((sigData: any) => 
-          this.getTransaction(sigData.signature)
-            .catch((err: Error) => {
-              console.error(`Failed to fetch transaction ${sigData.signature}:`, err);
-              return null;
-            })
-        );
+        // Get signatures for this batch
+        const signatures = await this.getSignaturesForAddress(walletAddress, {
+          limit: 50,
+          before: lastSignature || undefined // Convert null to undefined for the API
+        });
         
-        const batchResults = await Promise.all(batchPromises);
-        
-        // Add valid transactions to the result
-        for (let j = 0; j < batchResults.length; j++) {
-          const tx = batchResults[j];
-          const sigData = batch[j];
-          
-          // Skip null transactions
-          if (!tx) continue;
-          
-          // Apply date filtering
-          const txTimestamp = tx.blockTime * 1000; // Convert to milliseconds
-          const fromDate = options.from?.getTime();
-          const toDate = options.to?.getTime();
-          
-          // Skip if transaction is before the from date
-          if (fromDate && txTimestamp < fromDate) {
-            continue;
-          }
-          
-          // Skip if transaction is after the to date
-          if (toDate && txTimestamp > toDate) {
-            continue;
-          }
-          
-          transactions.push(tx);
-          
-          // Update lastSignature for pagination (use the signature from the current batch)
-          lastSignature = sigData.signature;
-          
-          // Stop if we have enough transactions after filtering
-          if (transactions.length >= limit) {
-            break;
-          }
-        }
-        
-        // Stop fetching more batches if we have enough transactions
-        if (transactions.length >= limit) {
+        if (!signatures || signatures.length === 0) {
+          console.log('✅ DRPC: No more signatures found');
+          hasMore = false;
           break;
         }
         
-        // Add a small delay between batches to avoid rate limits
-        if (i + BATCH_SIZE < signatures.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        console.log(`📝 DRPC: Found ${signatures.length} signatures in batch ${batchCount}`);
+        
+        // Filter signatures by timestamp if needed
+        let filteredSignatures = signatures;
+        if (options.from) {
+          const fromTimestamp = Math.floor(options.from.getTime() / 1000);
+          filteredSignatures = signatures.filter(sig => 
+            sig.blockTime && sig.blockTime >= fromTimestamp
+          );
+        }
+        if (options.to) {
+          const toTimestamp = Math.floor(options.to.getTime() / 1000);
+          filteredSignatures = filteredSignatures.filter(sig => 
+            sig.blockTime && sig.blockTime <= toTimestamp
+          );
+        }
+        
+        // Get full transaction data for each signature
+        console.log(`🔄 DRPC: Fetching full transaction data for ${filteredSignatures.length} signatures`);
+        const transactionPromises = filteredSignatures.map(sig => 
+          this.getTransaction(sig.signature)
+        );
+        
+        const batchTransactions = await Promise.all(transactionPromises);
+        const validTransactions = batchTransactions.filter((tx): tx is Transaction => tx !== null);
+        
+        console.log(`✅ DRPC: Processed ${validTransactions.length} valid transactions from batch ${batchCount}`);
+        
+        allTransactions.push(...validTransactions);
+        
+        // Update lastSignature for next batch
+        lastSignature = signatures[signatures.length - 1].signature;
+        
+        // Check if we've hit the requested limit
+        if (options.limit && allTransactions.length >= options.limit) {
+          console.log('✅ DRPC: Reached requested limit');
+          allTransactions = allTransactions.slice(0, options.limit);
+          hasMore = false;
+        }
+        
+        // Add a small delay between batches
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
       
-      // If we processed all signatures but didn't reach the limit, 
-      // set lastSignature to the last signature for potential next page
-      if (transactions.length < limit && signatures.length > 0) {
-        lastSignature = signatures[signatures.length - 1].signature;
-      }
+      console.log('✅ DRPC: Completed transaction fetch:', {
+        totalTransactions: allTransactions.length,
+        batchesProcessed: batchCount
+      });
       
-      console.log(`Successfully processed ${transactions.length} transactions for wallet ${walletAddress}`);
-      return { transactions, lastSignature };
+      return {
+        transactions: allTransactions,
+        lastSignature
+      };
+      
     } catch (error) {
-      console.error('Error in getTransactionsByWallet:', error);
+      console.error('❌ DRPC: Error fetching transactions:', error);
+      throw error;
+    }
+  }
+
+  async getSignaturesForAddress(
+    address: string,
+    options?: {
+      limit?: number;
+      before?: string;
+      until?: string;
+    }
+  ): Promise<Array<{ signature: string; slot: number; err: any; memo: string | null; blockTime: number | null }>> {
+    try {
+      const endpoint = this.getCurrentEndpoint();
+      const payload = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'getSignaturesForAddress',
+        params: [
+          address,
+          {
+            limit: options?.limit || 1000,
+            before: options?.before,
+            until: options?.until
+          }
+        ]
+      };
+
+      const response = await this.makeRequest(endpoint, payload);
+      
+      if (response.error) {
+        throw new Error(`RPC Error: ${response.error.message}`);
+      }
+
+      return response.result || [];
+    } catch (error) {
+      console.error('Error in getSignaturesForAddress:', error);
+      throw error;
+    }
+  }
+
+  async getTokenAccountsByOwner(
+    owner: string,
+    mint: string
+  ): Promise<Array<{ pubkey: string; account: any }>> {
+    try {
+      const endpoint = this.getCurrentEndpoint();
+      const payload = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'getTokenAccountsByOwner',
+        params: [
+          owner,
+          { mint },
+          { encoding: 'jsonParsed' }
+        ]
+      };
+
+      const response = await this.makeRequest(endpoint, payload);
+      
+      if (response.error) {
+        throw new Error(`RPC Error: ${response.error.message}`);
+      }
+
+      return response.result?.value || [];
+    } catch (error) {
+      console.error('Error in getTokenAccountsByOwner:', error);
       throw error;
     }
   }

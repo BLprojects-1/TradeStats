@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { createUserProfile, addTrackedWallet } from '../utils/userProfile';
+import { createUserProfile, addTrackedWallet, TrackedWallet } from '../utils/userProfile';
 import { getAuthDebugInfo } from '../utils/debugSupabase';
 import { supabase } from '../utils/supabaseClient';
 import Head from 'next/head';
 import Footer from '../components/Footer';
 import { useWalletSelection } from '../contexts/WalletSelectionContext';
+import ScanTradesModal from './ScanTradesModal';
 
 interface WalletInput {
   address: string;
@@ -40,6 +41,8 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [debugAuthInfo, setDebugAuthInfo] = useState<AuthDebugInfo | null>(null);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [selectedWalletForScan, setSelectedWalletForScan] = useState<TrackedWallet | null>(null);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDisplayName(e.target.value);
@@ -58,6 +61,10 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
   };
 
   const addWalletField = () => {
+    if (wallets.length >= 3) {
+      setError('Maximum of 3 wallets allowed');
+      return;
+    }
     setWallets([...wallets, { address: '', label: `Wallet ${wallets.length + 1}` }]);
   };
 
@@ -80,83 +87,51 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
     e.preventDefault();
     setError(null);
     setDebugInfo(null);
-    
-    // Validate inputs
+
     if (!displayName.trim()) {
       setError('Please enter your name');
       return;
     }
-
-    // Ensure we have a valid user ID
-    if (!userId) {
-      setError('User ID is missing. Please try logging out and back in.');
-      setDebugInfo(`Current userId: ${userId}`);
+    if (wallets.length > 3) {
+      setError('Maximum of 3 wallets allowed');
       return;
     }
-
-    // Check if at least one wallet has a valid address
     const validWallets = wallets.filter(wallet => wallet.address && validateWalletAddress(wallet.address));
     if (validWallets.length === 0) {
       setError('Please add at least one valid Solana wallet address');
       return;
     }
-
     try {
       setIsSubmitting(true);
-      setDebugInfo(`Using userId: ${userId} for profile creation`);
-      
-      // 1. Create user profile
       const profile = await createUserProfile(userId, displayName);
-      if (!profile) {
-        throw new Error('Failed to create user profile');
-      }
-      
-      setDebugInfo(prevDebug => `${prevDebug || ''}\nProfile created successfully with ID: ${profile.id}`);
-      
-      // 2. Add each valid wallet
-      const results = [];
-      for (const wallet of validWallets) {
-        try {
-          const result = await addTrackedWallet(userId, wallet.address, wallet.label);
-          if (result) {
-            results.push(result);
+      if (!profile) throw new Error('Failed to create user profile');
+      // Add first wallet and show scan modal immediately
+      const firstWallet = validWallets[0];
+      const addedWallet = await addTrackedWallet(userId, firstWallet.address, firstWallet.label);
+      if (!addedWallet) throw new Error('Failed to add wallet');
+      setSelectedWalletForScan(addedWallet);
+      setShowScanModal(true);
+      setIsSubmitting(false);
+      // Add remaining wallets and reload in the background
+      (async () => {
+        if (validWallets.length > 1) {
+          const rest = validWallets.slice(1);
+          for (const wallet of rest) {
+            try { await addTrackedWallet(userId, wallet.address, wallet.label); } catch {}
           }
-        } catch (walletErr) {
-          console.error('Error adding wallet:', walletErr);
-          // Continue with other wallets even if one fails
         }
-      }
-      
-      if (results.length === 0) {
-        throw new Error('Failed to add any wallet addresses');
-      }
-      
-      setDebugInfo(prevDebug => `${prevDebug || ''}\nAdded ${results.length} wallets successfully`);
-      
-      // 3. Reload wallets in the context
-      await reloadWallets();
-      
-      // 4. Notify parent component that onboarding is complete
-      onComplete();
+        await reloadWallets();
+      })();
     } catch (err) {
-      console.error('Onboarding error:', err);
-      if (err instanceof Error) {
-        if (err.message.includes('401') || err.message.includes('Invalid API key')) {
-          setError(
-            'Authorization error: Your Supabase RLS policies need to be updated. ' +
-            'Please follow the instructions in supabase/README.md or run the fix-permissions.sh script.'
-          );
-        } else if (err.message.includes('foreign key constraint')) {
-          setError('Database error: User ID validation failed. Please try logging out and back in.');
-        } else {
-          setError(err.message);
-        }
-      } else {
-        setError('An unexpected error occurred');
-      }
-    } finally {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
       setIsSubmitting(false);
     }
+  };
+
+  const handleScanComplete = () => {
+    setShowScanModal(false);
+    setSelectedWalletForScan(null);
+    onComplete();
   };
 
   const handleDebugAuth = async () => {
@@ -169,31 +144,31 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
       setDebugInfo(`Error in diagnostics: ${err}`);
     }
   };
-  
+
   const inspectJWT = async () => {
     try {
       setDebugInfo("Examining JWT token...");
-      
+
       // Get session
       const { data } = await supabase.auth.getSession();
       const token = data?.session?.access_token;
-      
+
       if (!token) {
         setDebugInfo("No active session token found. Please log in again.");
         return;
       }
-      
+
       // Parse the JWT (do not do this in production with sensitive tokens)
       const parts = token.split('.');
       if (parts.length !== 3) {
         setDebugInfo("Invalid JWT format");
         return;
       }
-      
+
       try {
         // Base64 decode and parse the payload
         const payload = JSON.parse(atob(parts[1]));
-        
+
         // Check critical fields
         const tokenInfo = {
           subject: payload.sub,
@@ -204,7 +179,7 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
           isExpired: Date.now() > payload.exp * 1000,
           tokenHeader: parts[0].substring(0, 10) + '...',
         };
-        
+
         setDebugInfo(JSON.stringify(tokenInfo, null, 2));
       } catch (e) {
         setDebugInfo(`Error parsing token: ${e}`);
@@ -229,23 +204,23 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
           </div>
         </div>
       </header>
-      
+
       <main className="flex-grow flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-2xl bg-[#1a1a1a] rounded-xl shadow-lg p-8">
           <h1 className="text-3xl font-bold text-indigo-400 mb-6 text-center">Set up your trading journal</h1>
-          
+
           {error && (
             <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
-          
+
           {debugInfo && (
             <div className="bg-blue-900/30 border border-blue-500 text-blue-200 px-4 py-3 rounded mb-6 text-xs font-mono whitespace-pre-wrap">
               Debug Info: {debugInfo}
             </div>
           )}
-          
+
           <form onSubmit={handleSubmit}>
             <div className="mb-8">
               <label htmlFor="displayName" className="block text-xl font-medium text-indigo-200 mb-4">
@@ -261,13 +236,13 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
                 required
               />
             </div>
-            
+
             <div className="mb-8">
               <label className="block text-xl font-medium text-indigo-200 mb-4">
                 Add your Solana wallet addresses
               </label>
               <p className="text-gray-400 mb-4">Track your trading activity by adding your wallet addresses below.</p>
-              
+
               {wallets.map((wallet, index) => (
                 <div key={index} className="flex flex-col md:flex-row gap-3 mb-4">
                   <div className="flex-1">
@@ -300,7 +275,7 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
                   </div>
                 </div>
               ))}
-              
+
               <button
                 type="button"
                 onClick={addWalletField}
@@ -309,7 +284,7 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
                 + Add Another Wallet
               </button>
             </div>
-            
+
             <div className="flex justify-end">
               <button
                 type="submit"
@@ -319,7 +294,7 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
                 {isSubmitting ? 'Setting up...' : 'Complete Setup'}
               </button>
             </div>
-            
+
             {error && (
               <div className="mt-4 text-center">
                 <button
@@ -331,7 +306,7 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
                 </button>
               </div>
             )}
-            
+
             {showDebugPanel && (
               <div className="mt-4 p-4 bg-gray-900 rounded-md">
                 <h3 className="text-indigo-300 text-sm font-medium mb-2">Troubleshooting Tools</h3>
@@ -362,8 +337,23 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
           </form>
         </div>
       </main>
-      
+
       <Footer />
+      {showScanModal && selectedWalletForScan && (
+        <ScanTradesModal
+          wallet={selectedWalletForScan}
+          onClose={() => {
+            setShowScanModal(false);
+            setSelectedWalletForScan(null);
+            onComplete();
+          }}
+          onScanComplete={() => {
+            setShowScanModal(false);
+            setSelectedWalletForScan(null);
+            onComplete();
+          }}
+        />
+      )}
     </div>
   );
 };

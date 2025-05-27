@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test:bigquery": "NODE_OPTIONS='--loader ts-node/esm' ts-node --esm scripts/test-bigquery.ts",
     "fetch:trades": "ts-node scripts/fetch-trading-history.ts",
-    "test:jupiter": "node src/scripts/test-jupiter.cjs"
+    "test:jupiter": "node src/scripts/test-jupiter.cjs",
+    "update:scan-complete": "NODE_OPTIONS='--loader ts-node/esm' ts-node --esm scripts/update-initial-scan-complete.ts"
   },
   "dependencies": {
     "@google-cloud/bigquery": "^8.0.0",
@@ -17,10 +18,14 @@
     "@supabase/supabase-js": "^2.49.8",
     "@types/axios": "^0.9.36",
     "axios": "^1.6.7",
+    "cross-fetch": "^4.1.0",
     "fastify": "^4.24.3",
+    "fs-extra": "^11.3.0",
     "next": "14.0.3",
+    "p-limit": "^6.2.0",
     "react": "^18",
     "react-dom": "^18",
+    "react-hot-toast": "^2.5.2",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

@@ -11,6 +11,8 @@ import { ProcessedTrade } from '../../services/tradeProcessor';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
+import { supabase } from '../../utils/supabaseClient';
+import ScanTradesModal from '../../components/ScanTradesModal';
 
 export default function Account() {
   const { user, loading, signOut } = useAuth();
@@ -27,6 +29,9 @@ export default function Account() {
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [scanningWallet, setScanningWallet] = useState<string | null>(null);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [selectedWalletForScan, setSelectedWalletForScan] = useState<TrackedWallet | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -105,8 +110,21 @@ export default function Account() {
     setShowAddWalletModal(false);
   };
 
-  const handleWalletAdded = (newWallet: TrackedWallet) => {
-    setShowAddWalletModal(false);
+  const handleWalletAdded = async (newWallet: TrackedWallet) => {
+    try {
+      console.log('Wallet added successfully:', newWallet);
+      setShowAddWalletModal(false);
+      setSelectedWalletForScan(newWallet);
+      setShowScanModal(true);
+    } catch (err) {
+      console.error('Error adding wallet:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add wallet');
+    }
+  };
+
+  const handleScanComplete = () => {
+    setRefreshMessage('Trading history analysis completed!');
+    setTimeout(() => setRefreshMessage(null), 5000);
   };
 
   const handleRefresh = async () => {
@@ -320,6 +338,16 @@ export default function Account() {
           userId={user.id}
           onClose={handleCloseAddWalletModal}
           onSuccess={handleWalletAdded}
+        />
+      )}
+      {showScanModal && selectedWalletForScan && (
+        <ScanTradesModal
+          wallet={selectedWalletForScan}
+          onClose={() => {
+            setShowScanModal(false);
+            setSelectedWalletForScan(null);
+          }}
+          onScanComplete={handleScanComplete}
         />
       )}
     </DashboardLayout>

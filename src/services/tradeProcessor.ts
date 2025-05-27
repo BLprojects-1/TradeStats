@@ -1,5 +1,6 @@
 import { Transaction, TokenBalanceChange } from './drpcClient';
 import { jupiterApiService } from './jupiterApiService';
+import { TokenInfoService } from './tokenInfoService';
 
 export interface ProcessedTrade {
   signature: string;
@@ -47,9 +48,9 @@ export class TradeProcessor {
         (tx.tokenBalanceChanges && tx.tokenBalanceChanges.length > 0)
       ).length
     });
-    
+
     const trades: ProcessedTrade[] = [];
-    
+
     for (const tx of transactions) {
       console.log('TradeProcessor: Processing transaction:', {
         signature: tx.signature,
@@ -73,7 +74,7 @@ export class TradeProcessor {
         console.log('TradeProcessor: Skipping transaction with no token changes:', tx.signature);
         continue;
       }
-      
+
       // Calculate SOL change
       const solChange = this.calculateSolChange(tx.preBalances, tx.postBalances);
       console.log('TradeProcessor: SOL change:', {
@@ -103,7 +104,7 @@ export class TradeProcessor {
       // Process using pre/post token balances if available
       if (tx.meta?.preTokenBalances && tx.meta.preTokenBalances.length > 0 && 
           tx.meta.postTokenBalances && tx.meta.postTokenBalances.length > 0) {
-        
+
         // Log out all pre token balances for debugging
         console.log('TradeProcessor: Pre token balances:', tx.meta.preTokenBalances.map((tb: TokenBalanceItem) => ({
           accountIndex: tb.accountIndex,
@@ -111,7 +112,7 @@ export class TradeProcessor {
           owner: tb.owner,
           uiAmount: tb.uiTokenAmount.uiAmount
         })));
-        
+
         // Log out all post token balances for debugging  
         console.log('TradeProcessor: Post token balances:', tx.meta.postTokenBalances.map((tb: TokenBalanceItem) => ({
           accountIndex: tb.accountIndex,
@@ -123,7 +124,7 @@ export class TradeProcessor {
         // Find user's wallet addresses in the transaction
         // These are typically the transaction signers or addresses mentioned in the first few slots
         const userAddresses = new Set<string>();
-        
+
         // Add the first few addresses in pre/post balances (usually includes users)
         if (tx.meta.preTokenBalances.length > 0) {
           for (let i = 0; i < Math.min(3, tx.meta.preTokenBalances.length); i++) {
@@ -132,7 +133,7 @@ export class TradeProcessor {
             }
           }
         }
-        
+
         // Process each pre-token balance
         for (const preTB of tx.meta.preTokenBalances as TokenBalanceItem[]) {
           // Find the corresponding post-token balance by accountIndex
@@ -158,7 +159,7 @@ export class TradeProcessor {
           const tokenInfo = tx.tokenBalanceChanges?.find(
             tbc => tbc.tokenAddress === preTB.mint
           );
-          
+
           if (tokenInfo) {
             tokenSymbol = tokenInfo.tokenTicker || '';
             logo = tokenInfo.logo || '';
@@ -167,10 +168,10 @@ export class TradeProcessor {
 
           // Create a unique key for each token account
           const key = `${preTB.mint}:${preTB.accountIndex}`;
-          
+
           // Check if this is a user's account
           const isUserAccount = preTB.owner ? userAddresses.has(preTB.owner) : false;
-          
+
           tokenChanges.set(key, {
             mint: preTB.mint,
             tokenSymbol,
@@ -186,16 +187,16 @@ export class TradeProcessor {
       // If we don't have pre/post balances but have tokenBalanceChanges, use those directly
       else if (tx.tokenBalanceChanges && tx.tokenBalanceChanges.length > 0) {
         console.log('TradeProcessor: Using tokenBalanceChanges directly:', tx.tokenBalanceChanges);
-        
+
         for (const tbc of tx.tokenBalanceChanges) {
           // Skip very small changes (dust) - reduced threshold to catch more transactions
           if (Math.abs(tbc.uiAmount) < 0.0000001) continue;
-          
+
           // Skip SOL tokens for direct processing (we handle these separately)
           if (this.isSOLToken(tbc.tokenAddress)) continue;
-          
+
           const key = `${tbc.tokenAddress}:${tbc.accountIndex || 0}`;
-          
+
           tokenChanges.set(key, {
             mint: tbc.tokenAddress,
             tokenSymbol: tbc.tokenTicker || '',
@@ -226,7 +227,7 @@ export class TradeProcessor {
       // Track all positive and negative token changes separately to better determine transaction type
       const tokenOutflows: TokenChangeInfo[] = [];
       const tokenInflows: TokenChangeInfo[] = [];
-      
+
       // Sort token changes into inflows and outflows
       for (const tc of Array.from(tokenChanges.values())) {
         if (tc.change < 0) {
@@ -235,7 +236,7 @@ export class TradeProcessor {
           tokenInflows.push(tc);
         }
       }
-      
+
       // Log summary of token flows for debugging
       console.log('TradeProcessor: Token flow summary:', {
         signature: tx.signature,
@@ -300,10 +301,10 @@ export class TradeProcessor {
         isUserToken: mainTokenChange.isUserAccount,
         solChange: solChange
       });
-      
+
       // Calculate the amount (absolute value of change)
       const amount = Math.abs(mainTokenChange.change);
-      
+
       console.log('TradeProcessor: Main token change:', {
         signature: tx.signature,
         mint: mainTokenChange.mint,
@@ -313,15 +314,15 @@ export class TradeProcessor {
         type: tradeType,
         isUserAccount: mainTokenChange.isUserAccount
       });
-      
+
       // Calculate total SOL value including wrapped SOL transfers
       const solTokenValue = 0; // We'll calculate this if needed
       const totalSolValue = Math.abs(solChange);
-      
+
       // Calculate price and value in USD
       let priceUSD = 0;
       let valueUSD = 0;
-      
+
       // ✅ Prices will be fetched from Jupiter API with historical timestamps below
       // No longer using a fixed SOL_TO_USD_RATE since Jupiter provides accurate historical data
       if (amount > 0 && totalSolValue > 0) {
@@ -335,36 +336,36 @@ export class TradeProcessor {
       let marketCap: number | undefined = undefined;
 
       try {
-        // Update token information from Jupiter API
-        console.log(`TradeProcessor: Before Jupiter API call for token info - current symbol: "${mainTokenChange.tokenSymbol}", mint: ${mainTokenChange.mint}`);
-        
-        const jupTokenInfo = await jupiterApiService.getTokenInfo(
-          mainTokenChange.mint
-        );
-        
+        // Update token information from TokenInfoService (which uses caching)
+        console.log(`TradeProcessor: Getting token info from cache or API - current symbol: "${mainTokenChange.tokenSymbol}", mint: ${mainTokenChange.mint}`);
+
+        const tokenInfo = await TokenInfoService.getTokenInfo(mainTokenChange.mint);
+
         // Update token information
-        const tokenSymbol = jupTokenInfo.symbol || mainTokenChange.tokenSymbol || 'Unknown';
-        const tokenLogoURI = jupTokenInfo.logoURI || null;
-        
+        const tokenSymbol = tokenInfo.symbol || mainTokenChange.tokenSymbol || 'Unknown';
+        const tokenLogoURI = tokenInfo.logoURI || null;
+
+        console.log(`TradeProcessor: Got token info from TokenInfoService: Symbol=${tokenSymbol}, Logo=${tokenLogoURI ? 'Present' : 'Null'}`);
+
         // Get price information
         let priceSOL = 0;
-        
+
         try {
           const tradeTimestamp = tx.timestamp || tx.blockTime * 1000;
           console.log(`TradeProcessor: Fetching historical price for ${mainTokenChange.mint} at timestamp ${tradeTimestamp}`);
-          
+
           const priceData = await jupiterApiService.getTokenPrice(
             mainTokenChange.mint,
             tradeTimestamp
           );
-          
+
           if (priceData?.data?.[mainTokenChange.mint]?.price) {
             priceUSD = parseFloat(priceData.data[mainTokenChange.mint].price);
-            
+
             // Get historical SOL price for comparison at the same timestamp
             const solMint = 'So11111111111111111111111111111111111111112';
             const solPriceData = await jupiterApiService.getTokenPrice(solMint, tradeTimestamp);
-            
+
             if (solPriceData?.data?.[solMint]?.price) {
               const solUsdPrice = parseFloat(solPriceData.data[solMint].price);
               priceSOL = solUsdPrice > 0 ? priceUSD / solUsdPrice : 0;
@@ -373,13 +374,20 @@ export class TradeProcessor {
         } catch (error) {
           console.error('Error fetching token price:', error);
         }
-        
+
         // If we still don't have a token symbol, use shortened mint address as fallback
-        if (!mainTokenChange.tokenSymbol || mainTokenChange.tokenSymbol === '') {
-          mainTokenChange.tokenSymbol = `${mainTokenChange.mint.substring(0, 4)}...${mainTokenChange.mint.substring(mainTokenChange.mint.length - 4)}`;
-          console.log(`TradeProcessor: Using shortened mint as symbol: ${mainTokenChange.tokenSymbol}`);
+        if (!tokenSymbol || tokenSymbol === 'Unknown') {
+          const shortSymbol = `${mainTokenChange.mint.substring(0, 4)}...${mainTokenChange.mint.substring(mainTokenChange.mint.length - 4)}`;
+          console.log(`TradeProcessor: Using shortened mint as symbol: ${shortSymbol}`);
+          mainTokenChange.tokenSymbol = shortSymbol;
+        } else {
+          // Update the mainTokenChange with the fetched symbol
+          mainTokenChange.tokenSymbol = tokenSymbol;
         }
-        
+
+        // Update the logo in mainTokenChange
+        mainTokenChange.logo = tokenLogoURI || mainTokenChange.logo;
+
         // ALWAYS use Jupiter price data if available
         if (priceUSD > 0 && totalSolValue > 0) {
           valueUSD = amount * priceUSD;
@@ -387,21 +395,24 @@ export class TradeProcessor {
         }
       } catch (error) {
         console.error(`TradeProcessor: Error fetching data for ${mainTokenChange.mint}:`, error);
-        
+
         // If there was an error and we still don't have a symbol, use shortened mint address
         if (!mainTokenChange.tokenSymbol || mainTokenChange.tokenSymbol === '') {
           mainTokenChange.tokenSymbol = `${mainTokenChange.mint.substring(0, 4)}...${mainTokenChange.mint.substring(mainTokenChange.mint.length - 4)}`;
           console.log(`TradeProcessor: Using shortened mint as symbol after error: ${mainTokenChange.tokenSymbol}`);
         }
       }
-      
+
       // Don't use market cap since Jupiter doesn't provide it
       const finalMarketCap = undefined;
+
+      // Ensure we have a valid logo URI - use a default if none is available
+      const finalLogoURI = mainTokenChange.logo || 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/unknown-token.png';
 
       console.log('TradeProcessor: Creating trade with the following token details:', {
         tokenSymbol: mainTokenChange.tokenSymbol,
         tokenAddress: mainTokenChange.mint,
-        tokenLogoURI: mainTokenChange.logo || null,
+        tokenLogoURI: finalLogoURI,
         decimals: mainTokenChange.decimals
       });
 
@@ -411,7 +422,7 @@ export class TradeProcessor {
         type: tradeType,
         tokenAddress: mainTokenChange.mint,
         tokenSymbol: mainTokenChange.tokenSymbol,
-        tokenLogoURI: mainTokenChange.logo ? mainTokenChange.logo : null,
+        tokenLogoURI: finalLogoURI,
         amount,
         decimals: mainTokenChange.decimals,
         priceUSD,
@@ -421,7 +432,7 @@ export class TradeProcessor {
         profitLoss: isBuy ? -valueUSD : valueUSD,
         blockTime: tx.blockTime
       });
-      
+
       // Verify the trade object immediately after creation
       const createdTrade = trades[trades.length - 1];
       console.log('TradeProcessor: Verified created trade:', {
@@ -430,7 +441,7 @@ export class TradeProcessor {
         hasTokenLogo: !!createdTrade.tokenLogoURI
       });
     }
-    
+
     console.log('TradeProcessor: Final processed trades:', {
       totalTrades: trades.length,
       tradeTypes: trades.map(t => t.type),
@@ -441,7 +452,7 @@ export class TradeProcessor {
         valueUSD: t.valueUSD
       }))
     });
-    
+
     console.log('TradeProcessor: Final processed trades (with symbols):', 
       trades.map(t => ({
         tokenSymbol: t.tokenSymbol,
@@ -449,7 +460,7 @@ export class TradeProcessor {
         hasLogo: t.tokenLogoURI ? true : false
       }))
     );
-    
+
     return trades.sort((a, b) => b.timestamp - a.timestamp);
   }
 

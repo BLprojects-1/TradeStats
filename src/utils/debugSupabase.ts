@@ -28,29 +28,44 @@ export const getAuthDebugInfo = async () => {
       console.log('Debug function not available:', e);
     }
     
-    // Check RLS permissions with simple query
-    let hasReadPermission = false;
+    // Check RLS permissions with more detailed error handling
+    let profileQueryResult = { hasReadPermission: false, error: null, data: null };
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .limit(1);
-      
-      hasReadPermission = !error;
+      if (userData?.user?.id) {
+        const { data, error, status } = await supabase
+          .from('user_profiles')
+          .select('id, display_name')
+          .eq('id', userData.user.id)
+          .single();
+          
+        profileQueryResult = {
+          hasReadPermission: !error,
+          error: error ? { code: error.code, message: error.message, details: error.details, status } : null,
+          data: data
+        };
+      } else {
+        profileQueryResult.error = { message: "No user ID available for profile query" };
+      }
     } catch (e) {
       console.log('Permission check failed:', e);
+      profileQueryResult.error = { message: e instanceof Error ? e.message : 'Unknown error' };
     }
     
     // Get JWT token for inspection (don't log this in production)
     const token = sessionData?.session?.access_token || null;
     
-    // Get token expiry
-    let tokenExpiry = null;
+    // Get token expiry and additional payload info
+    let tokenInfo = null;
     if (token) {
       try {
         // Parse JWT without verification
         const payload = JSON.parse(atob(token.split('.')[1]));
-        tokenExpiry = new Date(payload.exp * 1000).toISOString();
+        tokenInfo = {
+          expiry: new Date(payload.exp * 1000).toISOString(),
+          role: payload.role,
+          aud: payload.aud,
+          sub: payload.sub,
+        };
       } catch (e) {
         console.log('Could not parse token:', e);
       }
@@ -65,8 +80,9 @@ export const getAuthDebugInfo = async () => {
       email: userData?.user?.email,
       emailConfirmed: userData?.user?.email_confirmed_at,
       dbDebugResult,
-      hasReadPermission,
-      tokenExpiry
+      profileQueryResult,
+      tokenInfo,
+      headers: supabase.rest.headers
     };
   } catch (error) {
     console.error('Error getting auth debug info:', error);

@@ -1,0 +1,1 @@
+CREATE POLICY allow_user_to_mark_scanned ON tracked_wallets FOR UPDATE USING (auth.role() = 'authenticated' AND auth.uid() = user_id) WITH CHECK (auth.role() = 'authenticated' AND auth.uid() = user_id);
