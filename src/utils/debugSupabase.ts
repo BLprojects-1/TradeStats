@@ -89,8 +89,7 @@ export const getAuthDebugInfo = async () => {
       emailConfirmed: userData?.user?.email_confirmed_at,
       dbDebugResult,
       profileQueryResult,
-      tokenInfo,
-      headers: supabase.rest.headers
+      tokenInfo
     };
   } catch (error) {
     console.error('Error getting auth debug info:', error);
