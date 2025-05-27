@@ -10,26 +10,34 @@ export const getAuthDebugInfo = async () => {
   try {
     // Get session
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    
+
     // Get user
     const { data: userData, error: userError } = await supabase.auth.getUser();
-    
+
     // Try to call debug function if it exists
     let dbDebugResult;
     try {
       const { data: debugData, error: debugError } = await supabase
         .from('debug_auth')
         .select('*');
-        
+
       if (!debugError) {
         dbDebugResult = debugData;
       }
     } catch (e) {
       console.log('Debug function not available:', e);
     }
-    
+
     // Check RLS permissions with more detailed error handling
-    let profileQueryResult = { hasReadPermission: false, error: null, data: null };
+    let profileQueryResult: { 
+      hasReadPermission: boolean; 
+      error: { code?: string; message: string; details?: string; status?: number; } | null; 
+      data: any; 
+    } = { 
+      hasReadPermission: false, 
+      error: null, 
+      data: null 
+    };
     try {
       if (userData?.user?.id) {
         const { data, error, status } = await supabase
@@ -37,7 +45,7 @@ export const getAuthDebugInfo = async () => {
           .select('id, display_name')
           .eq('id', userData.user.id)
           .single();
-          
+
         profileQueryResult = {
           hasReadPermission: !error,
           error: error ? { code: error.code, message: error.message, details: error.details, status } : null,
@@ -50,10 +58,10 @@ export const getAuthDebugInfo = async () => {
       console.log('Permission check failed:', e);
       profileQueryResult.error = { message: e instanceof Error ? e.message : 'Unknown error' };
     }
-    
+
     // Get JWT token for inspection (don't log this in production)
     const token = sessionData?.session?.access_token || null;
-    
+
     // Get token expiry and additional payload info
     let tokenInfo = null;
     if (token) {
@@ -70,7 +78,7 @@ export const getAuthDebugInfo = async () => {
         console.log('Could not parse token:', e);
       }
     }
-    
+
     return {
       authenticated: !!sessionData?.session,
       sessionError: sessionError?.message,
