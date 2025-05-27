@@ -517,7 +517,9 @@ export class HistoricalPriceService {
         historicalTrades,
         totalTrades: trades.length,
         totalVolume: trades.reduce((sum, trade) => sum + trade.usdValue, 0),
-        uniqueTokens: uniqueTokenMints
+        uniqueTokens: uniqueTokenMints,
+        totalValue: trades.reduce((sum, trade) => sum + trade.usdValue, 0),
+        profitLoss: 0 // Default to 0, can be calculated if needed
       };
 
       // Cache the result
