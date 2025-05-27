@@ -214,7 +214,7 @@ export class TradingHistoryService {
         priceSOL: trade.price_sol || 0,
         valueUSD: trade.value_usd || 0,
         valueSOL: trade.value_sol || 0,
-        profitLoss: null, // Set to null as specified
+        profitLoss: 0, // Set to 0 to match ProcessedTrade type
         blockTime: trade.block_time,
         starred: trade.starred || false,
         notes: trade.notes || '',
@@ -341,7 +341,7 @@ export class TradingHistoryService {
         price_usd: trade.priceUSD || 0,
         value_sol: trade.valueSOL || 0,
         value_usd: trade.valueUSD || 0,
-        profit_loss: null, // Set to null as specified
+        profit_loss: 0, // Set to 0 to match ProcessedTrade type
         market_cap: null, // Set to null as specified
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -451,7 +451,7 @@ export class TradingHistoryService {
             priceSOL: 1, // SOL price in SOL is always 1
             valueUSD,
             valueSOL: amount,
-            profitLoss: null, // Set to null as specified
+            profitLoss: 0, // Set to 0 to match ProcessedTrade type
             blockTime: tx.blockTime
           };
         }
@@ -524,7 +524,7 @@ export class TradingHistoryService {
         priceSOL,
         valueUSD,
         valueSOL: valueSOL,
-        profitLoss: null, // Set to null as specified
+        profitLoss: 0, // Set to 0 to match ProcessedTrade type
         blockTime: tx.blockTime
       };
     } catch (error) {
@@ -1098,7 +1098,7 @@ export class TradingHistoryService {
             priceSOL: freshPriceSOL,  // ✅ Fresh historical price
             valueUSD: freshValueUSD,  // ✅ Recalculated with fresh price
             valueSOL: freshValueSOL,  // ✅ Recalculated with fresh price
-            profitLoss: null,  // Set to null as specified
+            profitLoss: 0,  // Set to 0 to match ProcessedTrade type
             blockTime: trade.block_time,
             starred: trade.starred || false,
             notes: trade.notes || '',
@@ -1121,7 +1121,7 @@ export class TradingHistoryService {
             priceSOL: trade.price_sol || 0,  // Fallback to cached
             valueUSD: trade.value_usd || 0,  // Fallback to cached
             valueSOL: trade.value_sol || 0,  // Fallback to cached
-            profitLoss: null,  // Set to null as specified
+            profitLoss: 0,  // Set to 0 to match ProcessedTrade type
             blockTime: trade.block_time,
             starred: trade.starred || false,
             notes: trade.notes || '',
