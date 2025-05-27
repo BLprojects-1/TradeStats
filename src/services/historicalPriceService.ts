@@ -1455,7 +1455,7 @@ export class HistoricalPriceService {
           priceSOL: trade.solAmount / Math.abs(trade.tokenChange),
           valueUSD: trade.usdValue,
           valueSOL: trade.solAmount,
-          profitLoss: null, // Set to null as specified
+          profitLoss: 0, // Set to 0 to match ProcessedTrade type
           blockTime: Math.floor(trade.timestamp / 1000)
         };
       });
