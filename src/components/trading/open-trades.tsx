@@ -13,7 +13,7 @@ import TradeInfoModal from '../../components/TradeInfoModal';
 import { useRefreshButton } from '../../hooks/useRefreshButton';
 import NotificationToast from '../../components/NotificationToast';
 import { toast } from 'react-hot-toast';
-import { processTradesToPositions } from '../../utils/tradeProcessing';
+import { processTradesToHoldings } from '../../utils/tradeProcessing';
 import { supabase } from '../../lib/supabase';
 
 interface CachedTrade {
@@ -37,7 +37,7 @@ const OpenTrades = () => {
   const userId = user?.id;
   const { selectedWalletId, wallets } = useWalletSelection();
   const router = useRouter();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [openPositions, setOpenPositions] = useState<Position[]>([]);
@@ -89,7 +89,7 @@ const OpenTrades = () => {
 
       // Process all trades into positions
       const allTrades = Object.values(historicalData).flat();
-      const positions = processTradesToPositions(allTrades);
+      const positions = await processTradesToHoldings(allTrades);
       setOpenPositions(positions);
       setTotalCount(allTrades.length);
     } catch (error) {
@@ -120,7 +120,7 @@ const OpenTrades = () => {
         userId,
         selectedWallet.wallet_address
       );
-      
+
       if (newTradesCount > 0) {
         // Refetch trading history to update positions
         await fetchTradingHistory(selectedWallet.wallet_address);
