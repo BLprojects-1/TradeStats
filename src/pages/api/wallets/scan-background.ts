@@ -9,7 +9,7 @@ const supabaseAdmin = createClient(
 );
 
 export const config = {
-  maxDuration: 300, // Set maximum duration to 5 minutes
+  maxDuration: 60, // Set maximum duration to 60 seconds (maximum allowed on hobby plan)
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
