@@ -299,20 +299,20 @@ export class RefreshWalletService {
       // Get the recent_trade timestamp for the wallet
       this.updateScanStatus({ currentStep: 'Fetching recent trade timestamp...' });
       const recentTradeTimestamp = await this.getRecentTradeTimestamp(userId, walletAddress);
-      
+
       if (!recentTradeTimestamp) {
         console.log('No recent_trade timestamp found, using default 24-hour lookback');
         // Default to 24 hours ago if no recent_trade timestamp is found
         const defaultTimestamp = new Date();
         defaultTimestamp.setDate(defaultTimestamp.getDate() - 1);
         console.log(`Using default timestamp: ${defaultTimestamp.toISOString()}`);
-        
+
         // Proceed with the default timestamp
         return await this.fetchAndProcessTrades(walletAddress, userId, defaultTimestamp);
       }
-      
+
       console.log(`Found recent_trade timestamp: ${recentTradeTimestamp.toISOString()}`);
-      
+
       // Fetch and process trades from the recent_trade timestamp to present
       return await this.fetchAndProcessTrades(walletAddress, userId, recentTradeTimestamp);
     } catch (error) {
@@ -322,6 +322,214 @@ export class RefreshWalletService {
         currentStep: `Refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
       throw error;
+    }
+  }
+
+  /**
+   * Get all historical transactions for a specific token
+   */
+  private async fetchAllHistoricalTrades(wallet: string, mint: string): Promise<TradeData[]> {
+    try {
+      console.log(`\n🔍 Starting complete historical fetch for token: ${mint}`);
+
+      // 1. Initialize account queue with currently active ATAs
+      const accountQueue = new Set<string>(await this.getTokenAccountsForMint(wallet, mint));
+      console.log(`📂 Initial account queue size: ${accountQueue.size}`);
+
+      // 2. Track processed accounts to avoid duplicates
+      const processedAccounts = new Set<string>();
+
+      // 3. Track all signatures we find
+      const allSignatures = new Set<string>();
+
+      // 4. Process accounts until queue is empty
+      while (accountQueue.size > 0) {
+        // Get next account to process
+        const account = Array.from(accountQueue)[0];
+        accountQueue.delete(account);
+
+        if (processedAccounts.has(account)) {
+          console.log(`⏭️ Skipping already processed account: ${account}`);
+          continue;
+        }
+
+        console.log(`\n📑 Processing account: ${account}`);
+        console.log(`📊 Remaining accounts in queue: ${accountQueue.size}`);
+
+        let beforeSignature: string | null = null;
+        let keepPaging = true;
+        let pageCount = 0;
+
+        while (keepPaging) {
+          pageCount++;
+          console.log(`📄 Page ${pageCount} (before: ${beforeSignature || 'start'})`);
+
+          const params: [string, DRPCParams] = [
+            account,
+            {
+              limit: 500, // Using 500 as a safe page size
+              commitment: 'confirmed'
+            }
+          ];
+
+          if (beforeSignature) {
+            params[1].before = beforeSignature;
+          }
+
+          try {
+            const response = await axios.post(this.DRPC_API_URL, {
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getSignaturesForAddress',
+              params: params
+            });
+
+            const data = response.data as DRPCResponse;
+
+            if (data.error) {
+              console.error('DRPC Error:', data.error);
+              break;
+            }
+
+            const signatures = data.result || [];
+            console.log(`📊 Found ${signatures.length} signatures on this page`);
+
+            if (signatures.length === 0) {
+              console.log('No more signatures found');
+              break;
+            }
+
+            // Add new signatures to our Set
+            signatures.forEach((sig: { signature: string; blockTime: number }) => {
+              allSignatures.add(sig.signature);
+            });
+
+            // Process each transaction to discover new ATAs
+            for (const sigInfo of signatures) {
+              try {
+                const tx = await this.fetchTransaction(sigInfo.signature);
+                if (!tx) continue;
+
+                // Discover new ATAs from pre/post balances - be more aggressive
+                if (tx.meta?.preTokenBalances) {
+                  tx.meta.preTokenBalances.forEach((balance: any) => {
+                    if (balance.owner === wallet && tx.transaction.message.accountKeys[balance.accountIndex]) {
+                      const pubkey = tx.transaction.message.accountKeys[balance.accountIndex].pubkey;
+                      if (!processedAccounts.has(pubkey)) {
+                        accountQueue.add(pubkey);
+                        console.log(`   🔍 Discovered new ATA: ${pubkey} (pre-balance)`);
+                      }
+                    }
+                  });
+                }
+                if (tx.meta?.postTokenBalances) {
+                  tx.meta.postTokenBalances.forEach((balance: any) => {
+                    if (balance.owner === wallet && tx.transaction.message.accountKeys[balance.accountIndex]) {
+                      const pubkey = tx.transaction.message.accountKeys[balance.accountIndex].pubkey;
+                      if (!processedAccounts.has(pubkey)) {
+                        accountQueue.add(pubkey);
+                        console.log(`   🔍 Discovered new ATA: ${pubkey} (post-balance)`);
+                      }
+                    }
+                  });
+                }
+
+                // Also check accountKeys for any potential ATAs
+                tx.transaction.message.accountKeys.forEach((key: any) => {
+                  if (key.owner === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
+                    if (!processedAccounts.has(key.pubkey)) {
+                      accountQueue.add(key.pubkey);
+                      console.log(`   🔍 Discovered potential ATA from accountKeys: ${key.pubkey}`);
+                    }
+                  }
+                });
+
+              } catch (error) {
+                console.log(`⚠️ Error processing transaction ${sigInfo.signature}: ${error}`);
+                continue;
+              }
+            }
+
+            // Check if we need to continue paging
+            const oldestBlock = signatures[signatures.length - 1].blockTime;
+            console.log(`Oldest block in this page: ${new Date(oldestBlock * 1000).toISOString()}`);
+
+            // We'll keep paging as long as we're finding signatures
+            beforeSignature = signatures[signatures.length - 1].signature;
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+          } catch (error) {
+            console.error(`Error fetching signatures page ${pageCount}:`, error);
+            break;
+          }
+        }
+
+        // Mark this account as processed
+        processedAccounts.add(account);
+        console.log(`✅ Finished processing account: ${account}`);
+      }
+
+      console.log(`\n📈 Total unique historical signatures found: ${allSignatures.size}`);
+      console.log(`📈 Total unique ATAs processed: ${processedAccounts.size}`);
+
+      // 5. Process all discovered transactions
+      const trades: TradeData[] = [];
+      let processedCount = 0;
+
+      for (const signature of allSignatures) {
+        processedCount++;
+        if (processedCount % 10 === 0) {
+          console.log(`\n[${processedCount}/${allSignatures.size}] Processing historical trades...`);
+        }
+
+        try {
+          const tx = await this.fetchTransaction(signature);
+          if (!tx) continue;
+
+          const trade = await this.processTransaction(tx, wallet);
+          if (trade && trade.tokenMint === mint) {
+            trades.push(trade);
+            console.log(`✅ Found historical trade: ${trade.type} ${trade.tokenSymbol} (${trade.tokenMint})`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Error processing transaction ${signature}: ${error}`);
+          continue;
+        }
+      }
+
+      return trades;
+    } catch (error) {
+      console.error(`❌ Error fetching historical trades for mint ${mint}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get token accounts for a specific mint owned by wallet
+   */
+  private async getTokenAccountsForMint(walletAddress: string, tokenMint: string): Promise<string[]> {
+    try {
+      const response = await axios.post(this.DRPC_API_URL, {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getTokenAccountsByOwner',
+        params: [
+          walletAddress,
+          { mint: tokenMint },
+          { encoding: 'jsonParsed' }
+        ]
+      });
+
+      if ((response.data as any)?.error) {
+        console.error('Error fetching token accounts:', (response.data as any).error);
+        return [];
+      }
+
+      const accounts = (response.data as any)?.result?.value || [];
+      return accounts.map((account: any) => account.pubkey);
+    } catch (error) {
+      console.error('Error fetching token accounts:', error);
+      return [];
     }
   }
 
@@ -346,10 +554,10 @@ export class RefreshWalletService {
       // Step 2: Fetch all signatures since the fromTimestamp
       this.updateScanStatus({ currentStep: 'Fetching transaction history...' });
       const allSignatures = new Map<string, { signature: string; blockTime: number }>();
-      
+
       // Convert fromTimestamp to Unix timestamp (seconds)
       const fromTimestampUnix = Math.floor(fromTimestamp.getTime() / 1000);
-      
+
       for (const account of allATAs) {
         console.log(`\n📡 Fetching signatures for account: ${account} since ${fromTimestamp.toISOString()}`);
         const signatures = await this.getAccountSignatures(account, fromTimestampUnix);
@@ -430,8 +638,8 @@ export class RefreshWalletService {
         }
       }
 
-      // Step 6: Compile results
-      this.updateScanStatus({ currentStep: 'Finalizing results...' });
+      // Step 6: Compile initial results
+      this.updateScanStatus({ currentStep: 'Compiling initial results...' });
 
       const historicalTrades = new Map<string, TradeData[]>();
       for (const trade of trades) {
@@ -441,10 +649,48 @@ export class RefreshWalletService {
         historicalTrades.get(trade.tokenMint)!.push(trade);
       }
 
+      // Step 7: Second pass - fetch all historical trades for discovered tokens
+      console.log('\n🔍 Second pass: Fetching all historical trades for discovered tokens...');
+      this.updateScanStatus({ 
+        currentStep: 'Starting historical trade discovery for detected tokens...',
+        tradesFound: trades.length
+      });
+
+      // Get unique token mints from the trades we found
+      const tradedTokenMints = new Set<string>(trades.map(trade => trade.tokenMint));
+      console.log(`Found ${tradedTokenMints.size} tokens with trades in initial scan`);
+
+      // For each token mint, fetch all historical trades
+      let totalHistoricalTradesFound = 0;
+      for (const tokenMint of tradedTokenMints) {
+        this.updateScanStatus({ 
+          currentStep: `Fetching historical trades for token ${tokenMint}...`,
+        });
+
+        console.log(`\n🔍 Fetching all historical trades for token: ${tokenMint}`);
+        const tokenInfo = this.getTokenInfo(tokenMint);
+        console.log(`Token: ${tokenInfo.symbol} (${tokenMint})`);
+
+        const tokenHistoricalTrades = await this.fetchAllHistoricalTrades(walletAddress, tokenMint);
+        console.log(`✅ Found ${tokenHistoricalTrades.length} historical trades for token ${tokenMint}`);
+
+        // Add to historical trades map
+        historicalTrades.set(tokenMint, tokenHistoricalTrades);
+        totalHistoricalTradesFound += tokenHistoricalTrades.length;
+
+        this.updateScanStatus({ 
+          tradesFound: trades.length + totalHistoricalTradesFound,
+          currentStep: `Found ${tokenHistoricalTrades.length} historical trades for ${tokenInfo.symbol}`
+        });
+      }
+
+      // Step 8: Compile final results
+      this.updateScanStatus({ currentStep: 'Finalizing results...' });
+
       const result: AnalysisResult = {
         recentTrades: trades,
         historicalTrades,
-        totalTrades: trades.length,
+        totalTrades: trades.length + totalHistoricalTradesFound,
         totalVolume: trades.reduce((sum, trade) => sum + trade.usdValue, 0),
         uniqueTokens: uniqueTokenMints,
         totalValue: trades.reduce((sum, trade) => sum + trade.usdValue, 0),
@@ -458,20 +704,31 @@ export class RefreshWalletService {
       });
 
       // Store all trades in Supabase
-      if (trades.length > 0) {
-        console.log(`🔄 Storing ${trades.length} trades in Supabase for user ${userId}`);
-        await this.storeAllTrades(userId, trades);
-        
+      // Flatten all historical trades for storage
+      const allTradesToStore: TradeData[] = [];
+
+      // Add recent trades
+      allTradesToStore.push(...trades);
+
+      // Add historical trades
+      for (const [_, tokenTrades] of historicalTrades) {
+        allTradesToStore.push(...tokenTrades);
+      }
+
+      if (allTradesToStore.length > 0) {
+        console.log(`🔄 Storing ${allTradesToStore.length} trades in Supabase for user ${userId}`);
+        await this.storeAllTrades(userId, allTradesToStore);
+
         // Update the recent_trade timestamp to the most recent trade timestamp
-        const mostRecentTrade = trades.reduce((latest, trade) => 
+        const mostRecentTrade = allTradesToStore.reduce((latest, trade) => 
           trade.timestamp > latest.timestamp ? trade : latest
-        , trades[0]);
-        
+        , allTradesToStore[0]);
+
         const mostRecentTimestamp = new Date(mostRecentTrade.timestamp);
         await this.updateRecentTradeTimestamp(userId, walletAddress, mostRecentTimestamp);
       } else {
         console.log('No new trades found to store');
-        
+
         // Update the recent_trade timestamp to current time even if no trades were found
         await this.updateRecentTradeTimestamp(userId, walletAddress, new Date());
       }
@@ -623,7 +880,7 @@ export class RefreshWalletService {
           }
         } else {
           // For main wallet, filter by cutoff time
-          const filteredSigs = signatures.filter(sig => sig.blockTime >= cutoffTime);
+          const filteredSigs = signatures.filter((sig: { blockTime: number; signature: string }) => sig.blockTime >= cutoffTime);
           allSignatures.push(...filteredSigs);
         }
 
@@ -1102,7 +1359,78 @@ export class RefreshWalletService {
         return true;
       }
 
-      console.log(`📝 Storing ${trades.length} trades for wallet ${this.walletAddress}`);
+      console.log(`📝 Checking ${trades.length} trades for duplicates for wallet ${this.walletAddress}`);
+
+      // Get all signatures for existing trades to check for duplicates
+      const signatures = trades.map(trade => trade.signature);
+
+      // First check by wallet_address (specific to this wallet)
+      const { data: existingTradesByWallet, error: existingTradesByWalletError } = await supabase
+        .from('trading_history')
+        .select('signature')
+        .eq('wallet_address', this.walletAddress)
+        .in('signature', signatures);
+
+      // Also check by signature alone (across all wallets) to ensure no duplicates
+      const { data: existingTradesBySignature, error: existingTradesBySignatureError } = await supabase
+        .from('trading_history')
+        .select('signature, wallet_address')
+        .in('signature', signatures);
+
+      // Combine the errors if any
+      const existingTradesError = existingTradesByWalletError || existingTradesBySignatureError;
+
+      // Combine the results
+      interface ExistingTradeRecord {
+        signature: string;
+        wallet_address?: string;
+      }
+
+      const existingTrades: ExistingTradeRecord[] = [
+        ...(existingTradesByWallet || []),
+        ...(existingTradesBySignature || [])
+      ];
+
+      if (existingTradesError) {
+        console.error('❌ Error checking for existing trades:', existingTradesError);
+      } else if (existingTrades && existingTrades.length > 0) {
+        // Create a set of existing signatures for faster lookup
+        const existingSignatures = new Set<string>();
+        const duplicateDetails = new Map<string, string>();
+
+        existingTrades.forEach(trade => {
+          existingSignatures.add(trade.signature);
+          // Store wallet address for each duplicate signature if available
+          if (trade.wallet_address) {
+            duplicateDetails.set(trade.signature, trade.wallet_address);
+          }
+        });
+
+        console.log(`Found ${existingSignatures.size} existing trade signatures in the database`);
+
+        // Filter out trades that already exist in the database with detailed logging
+        const newTrades = trades.filter(trade => {
+          const isDuplicate = existingSignatures.has(trade.signature);
+          if (isDuplicate) {
+            const walletAddress = duplicateDetails.get(trade.signature) || 'unknown wallet';
+            console.log(`⚠️ Skipping duplicate trade with signature: ${trade.signature}, found in wallet: ${walletAddress}`);
+            console.log(`⚠️ Duplicate trade details: Token=${trade.tokenMint}, Type=${trade.type}, Amount=${trade.tokenChange}`);
+          }
+          return !isDuplicate;
+        });
+
+        if (newTrades.length === 0) {
+          console.log('ℹ️ All trades already exist in the database, nothing to store');
+          return true;
+        }
+
+        console.log(`📝 Storing ${newTrades.length} new trades for wallet ${this.walletAddress} (${trades.length - newTrades.length} duplicates filtered out)`);
+
+        // Update trades array to only include new trades
+        trades = newTrades;
+      } else {
+        console.log(`📝 No duplicate trades found, storing all ${trades.length} trades for wallet ${this.walletAddress}`);
+      }
 
       // Extract unique token mints
       const uniqueTokenMints = [...new Set(trades.map(trade => trade.tokenMint))];
