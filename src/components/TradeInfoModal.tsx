@@ -294,7 +294,7 @@ export default function TradeInfoModal({
 
         // Set individual notes with just this one trade
         const notes: { [signature: string]: string } = {
-          [firstTradeWithNotes.signature]: firstTradeWithNotes.notes
+          [firstTradeWithNotes.signature]: firstTradeWithNotes.notes || ''
         };
         console.log('Setting individualNotes state with just the first trade with notes:', notes);
         setIndividualNotes(notes);
