@@ -51,7 +51,7 @@ const Footer = () => {
                 </svg>
               </a>
               <a 
-                href="https://discord.gg/ryvu" 
+                href="https://discord.gg/6q7UrFsy" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/30 transition-all duration-300 hover:scale-110 group"
