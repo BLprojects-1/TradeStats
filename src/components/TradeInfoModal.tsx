@@ -83,31 +83,102 @@ export default function TradeInfoModal({
   const [overallNotes, setOverallNotes] = useState('');
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [savingNote, setSavingNote] = useState(false);
+  const [individualNoteSaved, setIndividualNoteSaved] = useState<string | null>(null);
   const [swingPlan, setSwingPlan] = useState(initialSwingPlan);
   const [showAllTransactions, setShowAllTransactions] = useState(false);
   const [sortBy, setSortBy] = useState<'time' | 'value' | 'size'>('time');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [savingTradeNotes, setSavingTradeNotes] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [loadingTradeNotes, setLoadingTradeNotes] = useState(false);
 
   useEffect(() => {
     if (isOpen && tokenAddress) {
       loadTradeDetail();
       loadSwingNotes();
       loadChecklist();
-      if (mode === 'trade-log') {
-        loadTradeNotes();
-      }
     }
-  }, [isOpen, tokenAddress, mode]);
+  }, [isOpen, tokenAddress]);
+
+  // Separate useEffect to load trade notes after tradeDetail is available
+  useEffect(() => {
+    console.log('useEffect for loadTradeNotes triggered with:', {
+      isOpen,
+      tokenAddress,
+      tradeDetailExists: !!tradeDetail,
+      mode
+    });
+    if (isOpen && tokenAddress && tradeDetail && (mode === 'trade-log' || mode === 'open-trades')) {
+      console.log('Conditions met, calling loadTradeNotes');
+      loadTradeNotes();
+    } else {
+      console.log('Conditions not met for loadTradeNotes:', {
+        isOpen,
+        tokenAddressExists: !!tokenAddress,
+        tradeDetailExists: !!tradeDetail,
+        isTradeLogOrOpenTradesMode: (mode === 'trade-log' || mode === 'open-trades')
+      });
+    }
+  }, [isOpen, tokenAddress, tradeDetail, mode]);
 
   // Update swing plan when initialSwingPlan prop changes
   useEffect(() => {
+    console.log('useEffect for initialSwingPlan triggered with:', initialSwingPlan);
+    console.log('Current swingPlan state before update:', swingPlan);
     setSwingPlan(initialSwingPlan);
+    console.log('Setting swingPlan state to:', initialSwingPlan);
   }, [initialSwingPlan]);
 
   const handleSwingPlanChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newPlan = e.target.value;
+    console.log('handleSwingPlanChange called with new value:', newPlan);
     setSwingPlan(newPlan);
-    onSwingPlanChange?.(newPlan);
+    console.log('Setting swingPlan state to:', newPlan);
+    if (onSwingPlanChange) {
+      console.log('Calling onSwingPlanChange with new plan');
+      onSwingPlanChange(newPlan);
+    } else {
+      console.log('onSwingPlanChange callback not provided');
+    }
+  };
+
+  /**
+   * Deduplicate trades based on signature
+   * @param trades The trades to deduplicate
+   * @returns An array of unique trades
+   */
+  const deduplicateTrades = (trades: ProcessedTrade[]): ProcessedTrade[] => {
+    console.log('🔄 Starting deduplication process for trade info modal...');
+
+    // Use a Map to keep only the first occurrence of each signature
+    const uniqueTradesMap = new Map();
+    let tradesWithSignature = 0;
+    let tradesWithoutSignature = 0;
+
+    for (const trade of trades) {
+      // Check if signature exists and is not null/empty
+      if (trade.signature && trade.signature !== null && trade.signature !== '') {
+        tradesWithSignature++;
+        if (!uniqueTradesMap.has(trade.signature)) {
+          uniqueTradesMap.set(trade.signature, trade);
+        }
+      } else {
+        tradesWithoutSignature++;
+        // For trades without signature, create a unique key using other fields
+        const uniqueKey = `${trade.tokenAddress}_${trade.timestamp}_${trade.type}_${trade.amount}_${trade.valueUSD}`;
+        if (!uniqueTradesMap.has(uniqueKey)) {
+          uniqueTradesMap.set(uniqueKey, trade);
+        }
+      }
+    }
+
+    console.log('📊 Trade info modal deduplication stats:');
+    console.log('  - Original trades count:', trades.length);
+    console.log('  - Trades with signature:', tradesWithSignature);
+    console.log('  - Trades without signature:', tradesWithoutSignature);
+    console.log('  - Unique trades after deduplication:', uniqueTradesMap.size);
+
+    return Array.from(uniqueTradesMap.values());
   };
 
   const loadTradeDetail = async () => {
@@ -125,7 +196,8 @@ export default function TradeInfoModal({
         tokenAddress
       );
 
-      const trades = result.trades;
+      // Deduplicate trades to ensure we don't count the same trade multiple times
+      const trades = deduplicateTrades(result.trades);
 
       // Calculate detailed metrics
       const buys = trades.filter((t: ProcessedTrade) => t.type === 'BUY');
@@ -191,29 +263,96 @@ export default function TradeInfoModal({
   };
 
   const loadTradeNotes = async () => {
+    console.log('loadTradeNotes called with user:', user?.id, 'tradeDetail:', !!tradeDetail, 'tokenAddress:', tokenAddress);
     if (!user?.id || !tradeDetail) return;
 
+    setLoadingTradeNotes(true);
     try {
       const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, walletAddress);
+      console.log('Wallet ID retrieved:', walletId);
 
-      // Load individual trade notes
-      const notes: { [signature: string]: string } = {};
-      for (const trade of tradeDetail.trades) {
-        if (trade.notes) {
-          notes[trade.signature] = trade.notes;
-        }
+      // Get all trades for this token from Supabase to ensure we have the latest notes
+      console.log('Loading trade notes from Supabase for token:', tokenAddress);
+      const result = await tradingHistoryService.getAllTokenTrades(
+        user.id,
+        walletAddress,
+        tokenAddress
+      );
+      console.log('Loaded', result.trades.length, 'trades from Supabase');
+
+      // Find the first trade with notes
+      const tradesWithNotes = result.trades.filter(trade => trade.notes && trade.notes.trim() !== '');
+      console.log('Found', tradesWithNotes.length, 'trades with notes');
+
+      // Only use the first trade with notes for both individual notes and swing plan
+      if (tradesWithNotes.length > 0) {
+        const firstTradeWithNotes = tradesWithNotes[0];
+        console.log('Using first trade with notes:', {
+          signature: firstTradeWithNotes.signature,
+          note: firstTradeWithNotes.notes
+        });
+
+        // Set individual notes with just this one trade
+        const notes: { [signature: string]: string } = {
+          [firstTradeWithNotes.signature]: firstTradeWithNotes.notes
+        };
+        console.log('Setting individualNotes state with just the first trade with notes:', notes);
+        setIndividualNotes(notes);
+      } else {
+        console.log('No trades with notes found');
+        setIndividualNotes({});
       }
-      setIndividualNotes(notes);
 
-      // Load overall token notes
-      const overallNotesKey = `token_notes_${user.id}_${tokenAddress}`;
-      const savedOverallNotes = localStorage.getItem(overallNotesKey);
-      if (savedOverallNotes) {
-        setOverallNotes(savedOverallNotes);
+      // Log all trades with notes for debugging
+      tradesWithNotes.forEach((trade, index) => {
+        console.log(`Trade ${index} with note:`, {
+          signature: trade.signature,
+          note: trade.notes
+        });
+      });
+
+      if (tradesWithNotes.length > 0) {
+        const noteFromSupabase = tradesWithNotes[0].notes;
+        console.log('Using note from Supabase for swing plan:', noteFromSupabase);
+        console.log('Current swingPlan state before update:', swingPlan);
+
+        // Force update the swingPlan state
+        setSwingPlan(noteFromSupabase || '');
+        console.log('Setting swingPlan state to:', noteFromSupabase);
+
+        // Call the callback if provided to update the parent component
+        if (onSwingPlanChange) {
+          console.log('Calling onSwingPlanChange with note from Supabase');
+          onSwingPlanChange(noteFromSupabase || '');
+        } else {
+          console.log('onSwingPlanChange callback not provided');
+        }
+      } else {
+        console.log('No trades with notes found in Supabase, falling back to local storage');
+        // Fallback to local storage if no notes found in Supabase
+        // Load overall token notes
+        const overallNotesKey = `token_notes_${user.id}_${tokenAddress}`;
+        const savedOverallNotes = localStorage.getItem(overallNotesKey);
+        if (savedOverallNotes) {
+          setOverallNotes(savedOverallNotes);
+        }
+
+        // Load swing plan
+        const swingPlanKey = `swing_plan_${user.id}_${tokenAddress}`;
+        const savedSwingPlan = localStorage.getItem(swingPlanKey);
+        if (savedSwingPlan) {
+          setSwingPlan(savedSwingPlan);
+          // Call the callback if provided to update the parent component
+          if (onSwingPlanChange) {
+            onSwingPlanChange(savedSwingPlan);
+          }
+        }
       }
 
     } catch (error) {
       console.error('Error loading trade notes:', error);
+    } finally {
+      setLoadingTradeNotes(false);
     }
   };
 
@@ -408,17 +547,27 @@ export default function TradeInfoModal({
     if (!user?.id) return;
 
     setSavingNote(true);
+    setIndividualNoteSaved(null);
     try {
       const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, walletAddress);
-      await tradingHistoryService.updateTradeNotes(walletId, signature, notes, '');
+      await tradingHistoryService.updateTradeNotes(walletId, signature, notes, '', tokenAddress);
+      console.log('Successfully saved individual note for trade signature:', signature, 'for token:', tokenAddress);
 
       setIndividualNotes(prev => ({
         ...prev,
         [signature]: notes
       }));
       setEditingNote(null);
+
+      // Show success message
+      setIndividualNoteSaved(signature);
+
+      // Reset success message after 3 seconds
+      setTimeout(() => {
+        setIndividualNoteSaved(null);
+      }, 3000);
     } catch (error) {
-      console.error('Error saving individual note:', error);
+      console.error('Error saving individual note for signature:', signature, 'for token:', tokenAddress, error);
     } finally {
       setSavingNote(false);
     }
@@ -432,6 +581,59 @@ export default function TradeInfoModal({
       localStorage.setItem(overallNotesKey, overallNotes);
     } catch (error) {
       console.error('Error saving overall notes:', error);
+    }
+  };
+
+  const saveTradeNotes = async () => {
+    if (!user?.id || !tradeDetail) return;
+
+    setSavingTradeNotes(true);
+    setNotesSaved(false);
+    try {
+      console.log('Saving trade notes for', tradeDetail.trades.length, 'trades with swingPlan:', swingPlan);
+      const { walletId } = await tradingHistoryService.ensureWalletExists(user.id, walletAddress);
+
+      // Save notes for all trades of this token
+      for (const trade of tradeDetail.trades) {
+        // Log more details about the trade to help with debugging
+        console.log('Processing trade:', {
+          signature: trade.signature,
+          tokenSymbol: trade.tokenSymbol,
+          timestamp: new Date(trade.timestamp).toISOString(),
+          type: trade.type
+        });
+
+        try {
+          await tradingHistoryService.updateTradeNotes(walletId, trade.signature, swingPlan, '', tokenAddress);
+          console.log('Successfully saved note for trade signature:', trade.signature, 'for token:', tokenAddress);
+        } catch (noteError) {
+          console.error('Error saving note for trade signature:', trade.signature, 'for token:', tokenAddress, noteError);
+          // Continue with other trades even if one fails
+        }
+      }
+
+      // Also update local storage for backward compatibility
+      const swingPlanKey = `swing_plan_${user.id}_${tokenAddress}`;
+      localStorage.setItem(swingPlanKey, swingPlan);
+      console.log('Trade notes saved successfully to local storage with key:', swingPlanKey);
+
+      // Call the callback if provided
+      if (onSwingPlanChange) {
+        console.log('Calling onSwingPlanChange callback with swingPlan:', swingPlan);
+        onSwingPlanChange(swingPlan);
+      }
+
+      // Show success message
+      setNotesSaved(true);
+
+      // Reset success message after 3 seconds
+      setTimeout(() => {
+        setNotesSaved(false);
+      }, 3000);
+    } catch (error) {
+      console.error('Error saving trade notes:', error);
+    } finally {
+      setSavingTradeNotes(false);
     }
   };
 
@@ -575,14 +777,53 @@ export default function TradeInfoModal({
 
               {/* Add Swing Plan section before the trade list */}
               <div className="bg-[#252525] rounded-lg p-4 mb-4">
-                <h3 className="text-lg font-semibold text-indigo-200 mb-2">Trade Notes</h3>
-                <textarea
-                  value={swingPlan}
-                  onChange={handleSwingPlanChange}
-                  placeholder="Enter your swing trading plan here (e.g., buy at $X, sell at $Y)..."
-                  className="w-full h-24 bg-[#1a1a1a] text-white rounded-md p-2 border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  aria-label="Swing trading plan"
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-indigo-200">Trade Notes</h3>
+                  <div className="flex items-center">
+                    {notesSaved && (
+                      <span className="text-green-400 mr-3 flex items-center">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Saved!
+                      </span>
+                    )}
+                    <button
+                      onClick={saveTradeNotes}
+                      disabled={savingTradeNotes}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white px-3 py-1 rounded text-sm flex items-center"
+                    >
+                      {savingTradeNotes ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {console.log('Rendering textarea with swingPlan:', swingPlan)}
+                {loadingTradeNotes ? (
+                  <div className="flex items-center justify-center h-24 bg-[#1a1a1a] rounded-md border border-gray-700">
+                    <svg className="animate-spin h-6 w-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                ) : (
+                  <textarea
+                    value={swingPlan}
+                    onChange={handleSwingPlanChange}
+                    placeholder="Enter your swing trading plan here (e.g., buy at $X, sell at $Y)..."
+                    className="w-full h-24 bg-[#1a1a1a] text-white rounded-md p-2 border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Swing trading plan"
+                  />
+                )}
               </div>
 
               {/* Position Management Notes - Available for all modes */}
@@ -762,8 +1003,8 @@ export default function TradeInfoModal({
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {(showAllTransactions ? sortTrades(tradeDetail.trades) : sortTrades(tradeDetail.trades).slice(0, 10)).map((trade) => (
-                    <div key={trade.signature} className="bg-[#1a1a1a] p-4 rounded-lg">
+                  {(showAllTransactions ? sortTrades(tradeDetail.trades) : sortTrades(tradeDetail.trades).slice(0, 10)).map((trade, index) => (
+                    <div key={trade.signature || `trade-${index}`} className="bg-[#1a1a1a] p-4 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-3">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -801,13 +1042,21 @@ export default function TradeInfoModal({
                                 className="w-full px-3 py-2 bg-[#23232b] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 rows={2}
                               />
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 items-center">
+                                {individualNoteSaved === trade.signature && (
+                                  <span className="text-green-400 mr-2 flex items-center">
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Saved!
+                                  </span>
+                                )}
                                 <button
                                   onClick={() => saveIndividualNote(trade.signature, individualNotes[trade.signature] || '')}
                                   disabled={savingNote}
                                   className="bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white px-3 py-1 rounded text-sm"
                                 >
-                                  Save
+                                  {savingNote && editingNote === trade.signature ? 'Saving...' : 'Save'}
                                 </button>
                                 <button
                                   onClick={() => setEditingNote(null)}

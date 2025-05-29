@@ -941,22 +941,46 @@ export class TradingHistoryService {
 
   /**
    * Update notes and tags for a trade
+   * @param walletId The wallet ID
+   * @param signature The signature of the trade (can be null)
+   * @param notes The notes to save
+   * @param tags Optional tags to save
+   * @param tokenAddress Optional token address to filter by
    */
-  async updateTradeNotes(walletId: string, signature: string, notes: string, tags?: string): Promise<void> {
+  async updateTradeNotes(walletId: string, signature: string | null, notes: string, tags?: string, tokenAddress?: string): Promise<void> {
     try {
-      const { error } = await supabase
+      console.log(`Updating trade notes for wallet ${walletId}, signature: ${signature}, tokenAddress: ${tokenAddress || 'not specified'}`);
+
+      let query = supabase
         .from('trading_history')
         .update({ 
           notes,
           tags: tags || ''
         })
-        .eq('wallet_id', walletId)
-        .eq('signature', signature);
+        .eq('wallet_id', walletId);
+
+      // Handle null signature case differently
+      if (signature === null) {
+        console.log('Handling null signature case');
+        query = query.is('signature', null);
+      } else {
+        query = query.eq('signature', signature);
+      }
+
+      // Filter by token address if provided
+      if (tokenAddress) {
+        console.log('Filtering by token address:', tokenAddress);
+        query = query.eq('token_address', tokenAddress);
+      }
+
+      const { error } = await query;
 
       if (error) {
         console.error('Error updating trade notes:', error);
         throw error;
       }
+
+      console.log(`Successfully updated notes for trade with signature: ${signature}`);
     } catch (error) {
       console.error('Error in updateTradeNotes:', error);
       throw error;
