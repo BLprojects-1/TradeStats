@@ -597,7 +597,7 @@ export default function Home() {
               <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
                 <h3 className="text-xl font-semibold mb-3 text-white">How far back does trade history go?</h3>
                 <p className="text-gray-300">
-                  Ryvu fetches your complete trading history from the beginning of your wallet's activity. There's no limit to how far back we can go—if it's on the Solana blockchain, we can track it.
+                  Ryvu fetches the last 24 hours of trading history of your wallet's activity. We aim to make major updates to enable complete trading history scans from the beginning of your wallet's activity.
                 </p>
               </div>
             </div>
