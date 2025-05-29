@@ -111,12 +111,8 @@ const DashboardLayout = ({
     : null;
 
   const handleCopyCA = () => {
-    // This will be updated when we have the actual CA
-    const contractAddress = 'Coming Soon';
-    
-    // When we have the actual address, uncomment this
-    // navigator.clipboard.writeText(contractAddress);
-    
+    const contractAddress = 'EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump';
+    navigator.clipboard.writeText(contractAddress);
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);
   };
@@ -452,7 +448,7 @@ const DashboardLayout = ({
                 <span className="text-white text-sm font-medium">CA</span>
                 {showCopied && (
                   <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-indigo-900 px-2 py-1 rounded text-xs font-medium">
-                    Coming Soon
+                    Copied!
                   </span>
                 )}
               </button>

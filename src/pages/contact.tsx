@@ -39,11 +39,29 @@ const Contact = () => {
               </svg>
             </a>
             <button 
-              onClick={() => {navigator.clipboard.writeText('Coming Soon')}}
+              onClick={() => {
+                navigator.clipboard.writeText('EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump');
+                // Show a temporary notification
+                const notification = document.createElement('div');
+                notification.textContent = 'Copied!';
+                notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 2000);
+              }}
               className="flex items-center space-x-1.5 px-2.5 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-md shadow-indigo-900/30 text-white text-sm transition-transform hover:scale-110 relative"
               aria-label="Copy Contract Address"
               tabIndex={0}
-              onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {navigator.clipboard.writeText('Coming Soon')}}}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  navigator.clipboard.writeText('EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump');
+                  // Show a temporary notification
+                  const notification = document.createElement('div');
+                  notification.textContent = 'Copied!';
+                  notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                  document.body.appendChild(notification);
+                  setTimeout(() => notification.remove(), 2000);
+                }
+              }}
             >
               <span>CA</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
