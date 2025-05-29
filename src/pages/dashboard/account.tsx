@@ -6,13 +6,15 @@ import { getUserProfile, UserProfile, updateUserProfile, deleteUserAccount, Trac
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import WalletList from '../../components/WalletList';
 import AddWalletModal from '../../components/AddWalletModal';
-import LoadingToast from '../../components/LoadingToast';
 import { ProcessedTrade } from '../../services/tradeProcessor';
 import { tradingHistoryService } from '../../services/tradingHistoryService';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
 import { supabase } from '../../utils/supabaseClient';
 import ScanTradesModal from '../../components/ScanTradesModal';
+import TrafficInfoModal from '../../components/TrafficInfoModal';
+import NotificationStack from '../../components/NotificationStack';
+import { useNotificationStack } from '../../hooks/useNotificationStack';
 
 export default function Account() {
   const { user, loading, signOut } = useAuth();
@@ -28,10 +30,12 @@ export default function Account() {
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
   const [cooldownTimeLeft, setCooldownTimeLeft] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [scanningWallet, setScanningWallet] = useState<string | null>(null);
   const [showScanModal, setShowScanModal] = useState(false);
   const [selectedWalletForScan, setSelectedWalletForScan] = useState<TrackedWallet | null>(null);
+
+  // Use the notification stack hook
+  const { notifications, addNotification, removeNotification } = useNotificationStack();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -123,8 +127,7 @@ export default function Account() {
   };
 
   const handleScanComplete = () => {
-    setRefreshMessage('Trading history analysis completed!');
-    setTimeout(() => setRefreshMessage(null), 5000);
+    addNotification('Trading history analysis completed!', 'success', 5000);
   };
 
   const handleRefresh = async () => {
@@ -138,26 +141,28 @@ export default function Account() {
     if (timeSinceLastRefresh < cooldownMs) {
       const timeLeft = Math.ceil((cooldownMs - timeSinceLastRefresh) / 1000);
       setCooldownTimeLeft(timeLeft);
-      setRefreshMessage(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`);
-      setTimeout(() => setRefreshMessage(null), 3000);
+      addNotification(`Please try again in ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`, 'info', 3000);
       return;
     }
     
     setRefreshing(true);
-    setRefreshMessage(null);
     setLastRefreshTime(now);
+    
+    // Add loading notification
+    const loadingId = addNotification('Refreshing account data...', 'loading', 0);
     
     try {
       // Simulate refresh - in a real scenario, you might refresh user data or wallets
       await new Promise(resolve => setTimeout(resolve, 1000));
-      setRefreshMessage("You're up to date!");
       
-      // Clear message after 5 seconds
-      setTimeout(() => setRefreshMessage(null), 5000);
+      // Remove loading notification and add success
+      removeNotification(loadingId);
+      addNotification("You're up to date!", 'success', 5000);
     } catch (error) {
       console.error('Error refreshing data:', error);
-      setRefreshMessage('Failed to refresh data. Please try again.');
-      setTimeout(() => setRefreshMessage(null), 5000);
+      // Remove loading notification and add error
+      removeNotification(loadingId);
+      addNotification('Failed to refresh data. Please try again.', 'error', 5000);
     } finally {
       setRefreshing(false);
     }
@@ -214,15 +219,6 @@ export default function Account() {
             </button>
           </div>
           <p className="text-gray-500">Manage your account information and connected wallets</p>
-          {refreshMessage && (
-            <div className={`mt-3 p-3 rounded-md text-sm ${
-              refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
-                ? 'bg-red-900/30 border border-red-500 text-red-200' 
-                : 'bg-green-900/30 border border-green-500 text-green-200'
-            }`}>
-              {refreshMessage}
-            </div>
-          )}
         </div>
 
         {error && (
@@ -350,6 +346,11 @@ export default function Account() {
           onScanComplete={handleScanComplete}
         />
       )}
+      <NotificationStack 
+        notifications={notifications}
+        onDismiss={removeNotification}
+      />
+      <TrafficInfoModal />
     </DashboardLayout>
   );
 }

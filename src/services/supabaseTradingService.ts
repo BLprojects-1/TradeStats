@@ -297,11 +297,12 @@ class SupabaseTradingService {
    */
   async getTradeLog(walletId: string): Promise<TradeLogEntry[]> {
     try {
-      // Fetch all trades for the wallet
+      // Fetch only starred trades for the wallet
       const { data, error } = await supabase
         .from('trading_history')
         .select('*')
-        .eq('wallet_id', walletId);
+        .eq('wallet_id', walletId)
+        .eq('starred', true);
 
       if (error) {
         console.error('Error fetching trades:', error);
@@ -387,14 +388,28 @@ class SupabaseTradingService {
    * @param walletId The wallet ID
    * @param signature The trade signature
    * @param starred The new starred status
+   * @param tokenAddress Optional token address to filter by
    */
-  async toggleStarredTrade(walletId: string, signature: string, starred: boolean): Promise<void> {
+  async toggleStarredTrade(walletId: string, signature: string | null, starred: boolean, tokenAddress?: string): Promise<void> {
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('trading_history')
         .update({ starred })
-        .eq('wallet_id', walletId)
-        .eq('signature', signature);
+        .eq('wallet_id', walletId);
+
+      // Handle null signature case
+      if (signature === null) {
+        query = query.is('signature', null);
+      } else {
+        query = query.eq('signature', signature);
+      }
+
+      // Filter by token_address if provided
+      if (tokenAddress) {
+        query = query.eq('token_address', tokenAddress);
+      }
+
+      const { error } = await query;
 
       if (error) {
         console.error('Error toggling starred trade:', error);

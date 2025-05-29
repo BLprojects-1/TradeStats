@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { ProcessedTrade } from '../services/tradeProcessor';
 import { tradingHistoryService } from '../services/tradingHistoryService';
-import { formatTokenAmount, formatSmallPrice, formatDate, formatTime } from '../utils/formatters';
+import { formatTokenAmount, formatSmallPrice, formatDate, formatTime, formatPriceWithTwoDecimals } from '../utils/formatters';
 import { useAuth } from '../contexts/AuthContext';
 import { jupiterApiService } from '../services/jupiterApiService';
+import { ChecklistItem, ChecklistItemType } from './TradeChecklist';
+import { supabase } from '../utils/supabaseClient';
 
 interface TradeInfoModalProps {
   isOpen: boolean;
@@ -24,8 +26,12 @@ interface SwingNote {
   sellPrice?: number;
   buyPrice?: number;
   amount?: number;
+  sellPercentage?: number;
+  targetProfit?: number;
+  stopLoss?: number;
   notes: string;
   createdAt: number;
+  status?: 'pending' | 'completed' | 'cancelled';
 }
 
 interface TokenTradeDetail {
@@ -38,6 +44,8 @@ interface TokenTradeDetail {
   realizedPL: number;
   currentPrice: number;
   trades: ProcessedTrade[];
+  averageEntryPrice?: number;
+  breakEvenPrice?: number;
 }
 
 export default function TradeInfoModal({ 
@@ -56,26 +64,35 @@ export default function TradeInfoModal({
   const [loading, setLoading] = useState(false);
   const [tradeDetail, setTradeDetail] = useState<TokenTradeDetail | null>(null);
   const [swingNotes, setSwingNotes] = useState<SwingNote[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistCompletions, setChecklistCompletions] = useState<{[itemId: string]: boolean}>({});
+  const [checklistTimestamps, setChecklistTimestamps] = useState<{[itemId: string]: string}>({});
   const [showSwingNotes, setShowSwingNotes] = useState(false);
   const [newSwingNote, setNewSwingNote] = useState({
     type: 'planned' as 'planned' | 'executed',
     sellPrice: '',
     buyPrice: '',
     amount: '',
-    notes: ''
+    sellPercentage: '',
+    targetProfit: '',
+    stopLoss: '',
+    notes: '',
+    status: 'pending' as 'pending' | 'completed' | 'cancelled'
   });
   const [individualNotes, setIndividualNotes] = useState<{ [signature: string]: string }>({});
   const [overallNotes, setOverallNotes] = useState('');
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [savingNote, setSavingNote] = useState(false);
   const [swingPlan, setSwingPlan] = useState(initialSwingPlan);
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
+  const [sortBy, setSortBy] = useState<'time' | 'value' | 'size'>('time');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     if (isOpen && tokenAddress) {
       loadTradeDetail();
-      if (mode === 'open-trades') {
-        loadSwingNotes();
-      }
+      loadSwingNotes();
+      loadChecklist();
       if (mode === 'trade-log') {
         loadTradeNotes();
       }
@@ -114,19 +131,30 @@ export default function TradeInfoModal({
       const buys = trades.filter((t: ProcessedTrade) => t.type === 'BUY');
       const sells = trades.filter((t: ProcessedTrade) => t.type === 'SELL');
 
-      const totalBought = buys.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.amount || 0), 0);
-      const totalSold = sells.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.amount || 0), 0);
+      // Ensure we're using absolute values for token amounts
+      const totalBought = buys.reduce((sum: number, trade: ProcessedTrade) => sum + Math.abs(trade.amount || 0), 0);
+      const totalSold = sells.reduce((sum: number, trade: ProcessedTrade) => sum + Math.abs(trade.amount || 0), 0);
       const remaining = totalBought - totalSold;
 
-      const totalBuyValue = buys.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.valueUSD || 0), 0);
-      const totalSellValue = sells.reduce((sum: number, trade: ProcessedTrade) => sum + (trade.valueUSD || 0), 0);
+      // Ensure we're using absolute values for USD values
+      const totalBuyValue = buys.reduce((sum: number, trade: ProcessedTrade) => sum + Math.abs(trade.valueUSD || 0), 0);
+      const totalSellValue = sells.reduce((sum: number, trade: ProcessedTrade) => sum + Math.abs(trade.valueUSD || 0), 0);
 
       // Get current price for unrealized P/L calculation
-      const currentPrice = trades.length > 0 ? (trades[0].priceUSD || 0) : 0;
+      const currentPrice = trades.length > 0 ? Math.abs(trades[0].priceUSD || 0) : 0;
       const currentValue = remaining * currentPrice;
 
-      const realizedPL = totalSellValue - (totalBuyValue * (totalSold / totalBought));
-      const unrealizedPL = currentValue - (totalBuyValue * (remaining / totalBought));
+      // Calculate cost basis for sold tokens
+      const soldCostBasis = totalBought > 0 ? totalBuyValue * (totalSold / totalBought) : 0;
+
+      // Calculate realized P/L (from sold tokens)
+      const realizedPL = totalSellValue - soldCostBasis;
+
+      // Calculate remaining cost basis
+      const remainingCostBasis = totalBuyValue - soldCostBasis;
+
+      // Calculate unrealized P/L (from remaining tokens)
+      const unrealizedPL = currentValue - remainingCostBasis;
 
       setTradeDetail({
         totalBought,
@@ -189,6 +217,158 @@ export default function TradeInfoModal({
     }
   };
 
+  const loadChecklist = async () => {
+    if (!user?.id) return;
+    try {
+      // Load checklist items (templates)
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('trade_checklist_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (itemsError) {
+        console.error('Error loading checklist items:', itemsError);
+        setChecklistItems([]);
+        return;
+      }
+
+      // Transform Supabase data to match our interface
+      const transformedItems: ChecklistItem[] = itemsData.map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type as ChecklistItemType,
+        value: item.value,
+        minValue: item.min_value,
+        maxValue: item.max_value,
+        textValue: item.text_values && item.text_values.length > 0 ? item.text_values[0] : undefined,
+        completed: false, // This will be set from completions
+        description: item.description,
+      }));
+
+      setChecklistItems(transformedItems);
+
+      // Load completion states for this specific token
+      const { data: completionsData, error: completionsError } = await supabase
+        .from('trade_checklist_completions')
+        .select('checklist_item_id, completed, completed_at')
+        .eq('user_id', user.id)
+        .eq('token_address', tokenAddress);
+
+      if (completionsError) {
+        console.error('Error loading checklist completions:', completionsError);
+        setChecklistCompletions({});
+        setChecklistTimestamps({});
+        return;
+      }
+
+      // Create completion state map and timestamp map
+      const completionMap: {[itemId: string]: boolean} = {};
+      const timestampMap: {[itemId: string]: string} = {};
+      completionsData.forEach(completion => {
+        completionMap[completion.checklist_item_id] = completion.completed;
+        if (completion.completed_at) {
+          timestampMap[completion.checklist_item_id] = completion.completed_at;
+        }
+      });
+
+      setChecklistCompletions(completionMap);
+      setChecklistTimestamps(timestampMap);
+    } catch (error) {
+      console.error('Error loading checklist:', error);
+      setChecklistItems([]);
+      setChecklistCompletions({});
+      setChecklistTimestamps({});
+    }
+  };
+
+  const toggleItemCompletion = async (id: string) => {
+    if (!user?.id) return;
+
+    const currentCompleted = checklistCompletions[id] || false;
+    const newCompleted = !currentCompleted;
+    const completedAt = newCompleted ? new Date().toISOString() : null;
+
+    try {
+      // Upsert completion record
+      const { error } = await supabase
+        .from('trade_checklist_completions')
+        .upsert({
+          user_id: user.id,
+          checklist_item_id: id,
+          token_address: tokenAddress,
+          completed: newCompleted,
+          completed_at: completedAt,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,checklist_item_id,token_address'
+        });
+
+      if (error) {
+        console.error('Error updating checklist completion:', error);
+        return;
+      }
+
+      // Update local state
+      setChecklistCompletions(prev => ({
+        ...prev,
+        [id]: newCompleted
+      }));
+
+      // Update timestamp state
+      setChecklistTimestamps(prev => {
+        if (newCompleted && completedAt) {
+          return { ...prev, [id]: completedAt };
+        } else {
+          const { [id]: removed, ...rest } = prev;
+          return rest;
+        }
+      });
+    } catch (error) {
+      console.error('Error updating checklist completion:', error);
+    }
+  };
+
+  const updateItemValue = async (id: string, value: any, field: 'value' | 'minValue' | 'maxValue' | 'textValue') => {
+    if (!user?.id) return;
+
+    try {
+      // Map React field names to database column names
+      const dbField = field === 'minValue' ? 'min_value' 
+                    : field === 'maxValue' ? 'max_value'
+                    : field === 'textValue' ? 'text_values'
+                    : field;
+
+      // For text values, we need to store as array
+      const dbValue = field === 'textValue' ? (value ? [value] : null) : value;
+
+      const { error } = await supabase
+        .from('trade_checklist_items')
+        .update({
+          [dbField]: dbValue,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error updating checklist item:', error);
+        return;
+      }
+
+      // Update local state
+      const updatedItems = checklistItems.map(item => {
+        if (item.id === id) {
+          return { ...item, [field]: value };
+        }
+        return item;
+      });
+      setChecklistItems(updatedItems);
+    } catch (error) {
+      console.error('Error updating checklist item:', error);
+    }
+  };
+
   const saveSwingNote = async () => {
     if (!user?.id || !newSwingNote.notes.trim()) return;
 
@@ -199,7 +379,8 @@ export default function TradeInfoModal({
       buyPrice: newSwingNote.buyPrice ? parseFloat(newSwingNote.buyPrice) : undefined,
       amount: newSwingNote.amount ? parseFloat(newSwingNote.amount) : undefined,
       notes: newSwingNote.notes,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      status: newSwingNote.status
     };
 
     const updatedNotes = [...swingNotes, note];
@@ -215,7 +396,11 @@ export default function TradeInfoModal({
       sellPrice: '',
       buyPrice: '',
       amount: '',
-      notes: ''
+      sellPercentage: '',
+      targetProfit: '',
+      stopLoss: '',
+      notes: '',
+      status: 'pending'
     });
   };
 
@@ -256,6 +441,57 @@ export default function TradeInfoModal({
     const sellValue = parseFloat(newSwingNote.sellPrice) * parseFloat(newSwingNote.amount);
     const tokensGained = sellValue / parseFloat(newSwingNote.buyPrice);
     return tokensGained - parseFloat(newSwingNote.amount);
+  };
+
+  const calculateProfitPercentage = () => {
+    if (!newSwingNote.sellPrice || !newSwingNote.buyPrice) return 0;
+    return ((parseFloat(newSwingNote.sellPrice) - parseFloat(newSwingNote.buyPrice)) / parseFloat(newSwingNote.buyPrice)) * 100;
+  };
+
+  const calculateSellAmount = () => {
+    if (!newSwingNote.sellPercentage || !tradeDetail?.remaining) return 0;
+    return (parseFloat(newSwingNote.sellPercentage) / 100) * tradeDetail.remaining;
+  };
+
+  const sortTrades = (trades: ProcessedTrade[]) => {
+    return [...trades].sort((a, b) => {
+      let valueA: number;
+      let valueB: number;
+
+      switch (sortBy) {
+        case 'time':
+          valueA = a.timestamp;
+          valueB = b.timestamp;
+          break;
+        case 'value':
+          valueA = Math.abs(a.valueUSD || 0);
+          valueB = Math.abs(b.valueUSD || 0);
+          break;
+        case 'size':
+          valueA = Math.abs(a.amount || 0);
+          valueB = Math.abs(b.amount || 0);
+          break;
+        default:
+          return 0;
+      }
+
+      if (sortOrder === 'asc') {
+        return valueA - valueB;
+      } else {
+        return valueB - valueA;
+      }
+    });
+  };
+
+  const handleSort = (newSortBy: 'time' | 'value' | 'size') => {
+    if (sortBy === newSortBy) {
+      // Toggle order if same field
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to desc for value/size, desc for time (newest first)
+      setSortBy(newSortBy);
+      setSortOrder(newSortBy === 'time' ? 'desc' : 'desc');
+    }
   };
 
   if (!isOpen) return null;
@@ -300,24 +536,24 @@ export default function TradeInfoModal({
                 <div className="bg-[#252525] p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-400 mb-2">Total Bought</h3>
                   <p className="text-lg font-semibold text-white">{formatTokenAmount(tradeDetail.totalBought)}</p>
-                  <p className="text-sm text-gray-400">{formatSmallPrice(tradeDetail.totalBuyValue)}</p>
+                  <p className="text-sm text-gray-400">{formatPriceWithTwoDecimals(tradeDetail.totalBuyValue)}</p>
                 </div>
                 <div className="bg-[#252525] p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-400 mb-2">Total Sold</h3>
                   <p className="text-lg font-semibold text-white">{formatTokenAmount(tradeDetail.totalSold)}</p>
-                  <p className="text-sm text-gray-400">{formatSmallPrice(tradeDetail.totalSellValue)}</p>
+                  <p className="text-sm text-gray-400">{formatPriceWithTwoDecimals(tradeDetail.totalSellValue)}</p>
                 </div>
                 <div className="bg-[#252525] p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-400 mb-2">Remaining</h3>
                   <p className="text-lg font-semibold text-white">{formatTokenAmount(tradeDetail.remaining)}</p>
-                  <p className="text-sm text-gray-400">{formatSmallPrice(tradeDetail.remaining * tradeDetail.currentPrice)}</p>
+                  <p className="text-sm text-gray-400">{formatPriceWithTwoDecimals(tradeDetail.remaining * tradeDetail.currentPrice)}</p>
                 </div>
                 <div className="bg-[#252525] p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-400 mb-2">
                     {mode === 'open-trades' ? 'Unrealized P/L' : 'Total P/L'}
                   </h3>
                   <p className={`text-lg font-semibold ${(tradeDetail.unrealizedPL + tradeDetail.realizedPL) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {formatSmallPrice(tradeDetail.unrealizedPL + tradeDetail.realizedPL)}
+                    {formatPriceWithTwoDecimals(tradeDetail.unrealizedPL + tradeDetail.realizedPL)}
                   </p>
                 </div>
               </div>
@@ -349,11 +585,184 @@ export default function TradeInfoModal({
                 />
               </div>
 
+              {/* Position Management Notes - Available for all modes */}
+              <div className="bg-[#252525] p-4 rounded-lg mb-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-white">Trade Checklist</h3>
+                  <button
+                    onClick={() => setShowSwingNotes(!showSwingNotes)}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    <svg 
+                      className={`w-5 h-5 transform transition-transform ${showSwingNotes ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+
+                {showSwingNotes && (
+                  <div className="mt-4 space-y-6">
+                    {/* Checklist Items */}
+                    <div className="space-y-4">
+                      {checklistItems.length === 0 ? (
+                        <div className="bg-[#1a1a1a] p-6 rounded-lg text-center">
+                          <div className="flex flex-col items-center space-y-3">
+                            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <div>
+                              <h4 className="text-lg font-medium text-white mb-1">No Checklist Items</h4>
+                              <p className="text-gray-400 text-sm mb-4">You haven't created any checklist items yet. Create your personalized trading criteria to maintain consistency in your trading decisions.</p>
+                              <button
+                                onClick={() => {
+                                  onClose();
+                                  // Navigate to trade checklist page
+                                  window.location.href = '/trade-checklist';
+                                }}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                              >
+                                Create Checklist Items
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        checklistItems.map((item) => (
+                          <div key={item.id} className="bg-[#1a1a1a] p-4 rounded-lg">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={checklistCompletions[item.id] || false}
+                                  onChange={() => toggleItemCompletion(item.id)}
+                                  className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+                                />
+                                <span className={`text-lg font-medium ${(checklistCompletions[item.id] || false) ? 'text-gray-500 line-through' : 'text-white'}`}>
+                                  {item.name}
+                                </span>
+                                {/* Show completion timestamp */}
+                                {checklistCompletions[item.id] && checklistTimestamps[item.id] && (
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    Completed {formatDate(new Date(checklistTimestamps[item.id]).getTime())} at {formatTime(new Date(checklistTimestamps[item.id]).getTime())}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 ml-8">
+                              {(item.type === 'yes' || item.type === 'no') && (
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-gray-400">Type:</span>
+                                  <span className={
+                                    item.type === 'yes'
+                                      ? 'inline-block px-3 py-1 rounded-full bg-green-900 text-green-400 text-sm font-semibold'
+                                      : 'inline-block px-3 py-1 rounded-full bg-red-900 text-red-400 text-sm font-semibold'
+                                  }>
+                                    {item.type === 'yes' ? 'Yes' : 'No'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {item.type === 'between' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-sm text-gray-400 mb-1">Min Value</label>
+                                    <input
+                                      type="number"
+                                      value={item.minValue || ''}
+                                      onChange={(e) => updateItemValue(item.id, parseFloat(e.target.value) || '', 'minValue')}
+                                      className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm text-gray-400 mb-1">Max Value</label>
+                                    <input
+                                      type="number"
+                                      value={item.maxValue || ''}
+                                      onChange={(e) => updateItemValue(item.id, parseFloat(e.target.value) || '', 'maxValue')}
+                                      className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {(item.type === 'more_than' || item.type === 'less_than') && (
+                                <div>
+                                  <label className="block text-sm text-gray-400 mb-1">Value</label>
+                                  <input
+                                    type="number"
+                                    value={item.value || ''}
+                                    onChange={(e) => updateItemValue(item.id, parseFloat(e.target.value) || '', 'value')}
+                                    className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                </div>
+                              )}
+
+                              {item.type === 'text' && (
+                                <div>
+                                  <label className="block text-sm text-gray-400 mb-1">Text Value</label>
+                                  <input
+                                    type="text"
+                                    value={item.textValue || ''}
+                                    onChange={(e) => updateItemValue(item.id, e.target.value, 'textValue')}
+                                    className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Transactions List */}
               <div className="bg-[#252525] p-4 rounded-lg">
-                <h3 className="text-lg font-medium text-white mb-4">All Transactions</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-white">All Transactions</h3>
+                  {/* Sorting Controls */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-400">Sort by:</span>
+                    <button
+                      onClick={() => handleSort('time')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        sortBy === 'time'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Time {sortBy === 'time' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </button>
+                    <button
+                      onClick={() => handleSort('value')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        sortBy === 'value'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Value {sortBy === 'value' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </button>
+                    <button
+                      onClick={() => handleSort('size')}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        sortBy === 'size'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Size {sortBy === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </button>
+                  </div>
+                </div>
                 <div className="space-y-3">
-                  {tradeDetail.trades.map((trade) => (
+                  {(showAllTransactions ? sortTrades(tradeDetail.trades) : sortTrades(tradeDetail.trades).slice(0, 10)).map((trade) => (
                     <div key={trade.signature} className="bg-[#1a1a1a] p-4 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-3">
@@ -366,11 +775,11 @@ export default function TradeInfoModal({
                             {formatTokenAmount(trade.amount || 0)} {tokenSymbol}
                           </span>
                           <span className="text-gray-400">
-                            @ {formatSmallPrice(trade.priceUSD || 0)}
+                            @ {formatPriceWithTwoDecimals(trade.priceUSD || 0)}
                           </span>
                         </div>
                         <div className="text-right">
-                          <div className="text-white font-medium">{formatSmallPrice(trade.valueUSD || 0)}</div>
+                          <div className="text-white font-medium">{formatPriceWithTwoDecimals(trade.valueUSD || 0)}</div>
                           <div className="text-xs text-gray-400">
                             {formatDate(trade.timestamp)} {formatTime(trade.timestamp)}
                           </div>
@@ -421,141 +830,18 @@ export default function TradeInfoModal({
                     </div>
                   ))}
                 </div>
+
+                {tradeDetail.trades.length > 10 && (
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      onClick={() => setShowAllTransactions(!showAllTransactions)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    >
+                      {showAllTransactions ? 'Show Less' : `See All (${tradeDetail.trades.length})`}
+                    </button>
+                  </div>
+                )}
               </div>
-
-              {/* Swing Notes Section for Open Trades */}
-              {mode === 'open-trades' && (
-                <div className="space-y-4">
-                  <button
-                    onClick={() => setShowSwingNotes(!showSwingNotes)}
-                    className="w-full bg-[#252525] p-4 rounded-lg text-left hover:bg-[#2a2a2a] transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-medium text-white">Position Management Notes</h3>
-                      <svg 
-                        className={`w-5 h-5 text-gray-400 transform transition-transform ${showSwingNotes ? 'rotate-180' : ''}`}
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </button>
-
-                  {showSwingNotes && (
-                    <div className="bg-[#252525] p-4 rounded-lg space-y-6">
-                      {/* Add New Note */}
-                      <div className="space-y-4">
-                        <h4 className="text-md font-medium text-white">Add Position Note</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm text-gray-400 mb-1">Type</label>
-                            <select
-                              value={newSwingNote.type}
-                              onChange={(e) => setNewSwingNote(prev => ({ ...prev, type: e.target.value as 'planned' | 'executed' }))}
-                              className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                              <option value="planned">Planned Trade</option>
-                              <option value="executed">Executed Trade</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-400 mb-1">Amount</label>
-                            <input
-                              type="number"
-                              value={newSwingNote.amount}
-                              onChange={(e) => setNewSwingNote(prev => ({ ...prev, amount: e.target.value }))}
-                              placeholder="Token amount"
-                              className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-400 mb-1">Sell Price</label>
-                            <input
-                              type="number"
-                              value={newSwingNote.sellPrice}
-                              onChange={(e) => setNewSwingNote(prev => ({ ...prev, sellPrice: e.target.value }))}
-                              placeholder="USD price"
-                              step="0.000001"
-                              className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm text-gray-400 mb-1">Buy Back Price</label>
-                            <input
-                              type="number"
-                              value={newSwingNote.buyPrice}
-                              onChange={(e) => setNewSwingNote(prev => ({ ...prev, buyPrice: e.target.value }))}
-                              placeholder="USD price"
-                              step="0.000001"
-                              className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Token Gain Calculator */}
-                        {newSwingNote.sellPrice && newSwingNote.buyPrice && newSwingNote.amount && (
-                          <div className="bg-[#1a1a1a] p-3 rounded-md">
-                            <div className="text-sm text-gray-400">Potential Tokens Gained:</div>
-                            <div className="text-lg font-semibold text-green-400">
-                              +{formatTokenAmount(calculateTokensGained())} {tokenSymbol}
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="block text-sm text-gray-400 mb-1">Notes</label>
-                          <textarea
-                            value={newSwingNote.notes}
-                            onChange={(e) => setNewSwingNote(prev => ({ ...prev, notes: e.target.value }))}
-                            placeholder="Strategy notes, reasoning, etc..."
-                            className="w-full px-3 py-2 bg-[#1a1a1a] text-white border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            rows={3}
-                          />
-                        </div>
-
-                        <button
-                          onClick={saveSwingNote}
-                          disabled={!newSwingNote.notes.trim()}
-                          className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md"
-                        >
-                          Save Note
-                        </button>
-                      </div>
-
-                      {/* Existing Notes */}
-                      {swingNotes.length > 0 && (
-                        <div className="space-y-3">
-                          <h4 className="text-md font-medium text-white">Previous Notes</h4>
-                          {swingNotes.map((note) => (
-                            <div key={note.id} className="bg-[#1a1a1a] p-3 rounded-md">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  note.type === 'planned' ? 'bg-blue-900 text-blue-200' : 'bg-green-900 text-green-200'
-                                }`}>
-                                  {note.type === 'planned' ? 'Planned' : 'Executed'}
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                  {formatDate(note.createdAt)} {formatTime(note.createdAt)}
-                                </span>
-                              </div>
-                              {(note.sellPrice || note.buyPrice || note.amount) && (
-                                <div className="text-sm text-gray-300 mb-2">
-                                  {note.amount && `${formatTokenAmount(note.amount)} ${tokenSymbol}`}
-                                  {note.sellPrice && ` @ $${note.sellPrice}`}
-                                  {note.buyPrice && ` → $${note.buyPrice}`}
-                                </div>
-                              )}
-                              <div className="text-sm text-white">{note.notes}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-400">

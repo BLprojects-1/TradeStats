@@ -5,21 +5,27 @@ import { useWalletSelection } from '../../contexts/WalletSelectionContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
-import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
+import { formatTokenAmount, formatSmallPrice, formatPriceWithTwoDecimals } from '../../utils/formatters';
 import TradeInfoModal from '../../components/TradeInfoModal';
-import { useRefreshButton } from '../../hooks/useRefreshButton';
-import NotificationToast from '../../components/NotificationToast';
 import { useProcessedTradingData } from '../../hooks/useProcessedTradingData';
 import { TokenHolding } from '../../utils/historicalTradeProcessing';
+import { tradingHistoryService } from '../../services/tradingHistoryService';
+import WalletScanModal from '../../components/WalletScanModal';
+import TrafficInfoModal from '../../components/TrafficInfoModal';
+import { useNotificationContext } from '../../contexts/NotificationContext';
+import { supabase } from '../../lib/supabase';
 
 export default function OpenTrades() {
   const { user, loading } = useAuth();
   const { selectedWalletId, wallets, isWalletScanning } = useWalletSelection();
   const router = useRouter();
 
-  // Use our processed trading data hook
+  // New unified notification system
+  const { showLoading, showSuccess, showError, replaceNotification } = useNotificationContext();
+
+  // Use our new processed trading data hook
   const {
-    data: initialWalletData,
+    data: walletData,
     loading: dataLoading,
     error,
     refreshData
@@ -28,19 +34,62 @@ export default function OpenTrades() {
     dataType: 'openTrades'
   });
 
-  // Create a local state to manage the wallet data
-  const [walletData, setWalletData] = useState<TokenHolding[]>([]);
+  // State for refresh functionality
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const [cooldownTimeLeft, setCooldownTimeLeft] = useState(0);
+  const [showWalletScanModal, setShowWalletScanModal] = useState(false);
 
-  // Update local state when data from the hook changes
+  // Cooldown management
+  const cooldownMs = 120000; // 2 minutes
+  const isOnCooldown = cooldownTimeLeft > 0;
+
+  // Update cooldown timer
   useEffect(() => {
-    if (initialWalletData) {
-      setWalletData(initialWalletData);
+    if (cooldownTimeLeft > 0) {
+      const timer = setInterval(() => {
+        const newTimeLeft = Math.max(0, cooldownMs - (Date.now() - lastRefreshTime));
+        setCooldownTimeLeft(newTimeLeft);
+      }, 1000);
+      return () => clearInterval(timer);
     }
-  }, [initialWalletData]);
+  }, [cooldownTimeLeft, lastRefreshTime, cooldownMs]);
+
+  // Enhanced refresh handler
+  const handleRefresh = async () => {
+    // Check if on cooldown
+    if (Date.now() - lastRefreshTime < cooldownMs) {
+      const timeLeft = Math.ceil((cooldownMs - (Date.now() - lastRefreshTime)) / 1000);
+      showError(`Please wait ${timeLeft} seconds before refreshing again.`);
+      return;
+    }
+
+    // Check if wallet is selected
+    if (!user?.id || !selectedWalletId) {
+      showError('Please select a wallet first.');
+      return;
+    }
+
+    // Show wallet scan modal
+    setShowWalletScanModal(true);
+  };
+
+  // Handle successful wallet scan
+  const handleWalletScanSuccess = (result: { newTradesCount: number, message: string }) => {
+    showSuccess(result.message);
+    setLastRefreshTime(Date.now());
+    setCooldownTimeLeft(cooldownMs);
+    setShowWalletScanModal(false);
+    refreshData(); // Refresh the data after successful scan
+  };
 
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
   const [swingPlans, setSwingPlans] = useState<Map<string, string>>(new Map());
+
+  // Add sorting state
+  const [sortField, setSortField] = useState<'time' | 'value' | 'size'>('value');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Modal state
   const [selectedTradeModal, setSelectedTradeModal] = useState<{
@@ -49,30 +98,9 @@ export default function OpenTrades() {
     tokenLogoURI?: string;
   } | null>(null);
 
-  const {
-    isLoading: isRefreshing,
-    isOnCooldown,
-    cooldownTimeLeft: refreshCooldownTimeLeft,
-    showNotification,
-    notificationType,
-    notificationMessage,
-    handleRefresh,
-    handleDismissNotification
-  } = useRefreshButton({
-    onRefresh: async () => {
-      if (!user?.id || !selectedWalletId) {
-        throw new Error('Please select a wallet first.');
-      }
-
-      await refreshData();
-
-      // Return the expected format
-      return {
-        newTradesCount: walletData?.length || 0,
-        message: 'Trading data refreshed successfully'
-      };
-    }
-  });
+  // Get the wallet address from the selected wallet
+  const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+  const walletAddress = selectedWallet?.wallet_address || '';
 
   useEffect(() => {
     if (!loading && !user) {
@@ -112,14 +140,52 @@ export default function OpenTrades() {
 
     setStarringTrade(tokenAddress);
     try {
-      // Update local state for now (could be enhanced to persist to backend)
-      setWalletData(prev => prev.map(token => 
-        token.tokenAddress === tokenAddress 
-          ? { ...token, starred: !token.starred }
-          : token
-      ));
+      // Find the token to check its current starred status
+      const token = walletData.find(t => t.tokenAddress === tokenAddress);
+      if (!token) return;
+
+      const isCurrentlyStarred = token.starred;
+      const newStarredStatus = !isCurrentlyStarred;
+
+      // Get the most recent trade for this token from the trading history
+      try {
+        // Fetch all trades for this token
+        const { data: tokenTrades } = await supabase
+          .from('trading_history')
+          .select('*')
+          .eq('wallet_id', selectedWalletId)
+          .eq('token_address', tokenAddress)
+          .order('timestamp', { ascending: false })
+          .limit(1);
+
+        if (tokenTrades && tokenTrades.length > 0) {
+          const mostRecentTrade = tokenTrades[0];
+
+          // Update the database
+          await tradingHistoryService.toggleStarredTrade(
+            selectedWalletId,
+            mostRecentTrade.signature,
+            newStarredStatus,
+            tokenAddress
+          );
+
+          // Refresh data to reflect the change
+          await refreshData();
+        }
+      } catch (dbError) {
+        console.error('Error updating starred status in database:', dbError);
+        showError('Failed to update starred status');
+        return;
+      }
+
+      // Show notification based on whether we're starring or unstarring
+      const message = newStarredStatus 
+        ? `Added ${token.tokenSymbol} trade to trade log` 
+        : `Removed ${token.tokenSymbol} from trade log`;
+      showSuccess(message);
     } catch (err) {
       console.error('Error starring trades for token:', err);
+      showError('Failed to update trade status');
     } finally {
       setStarringTrade(null);
     }
@@ -135,6 +201,52 @@ export default function OpenTrades() {
 
   const handleCloseModal = () => {
     setSelectedTradeModal(null);
+  };
+
+  const handleSortChange = (field: 'time' | 'value' | 'size') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Sort the trades based on current sort settings
+  const getSortedWalletData = () => {
+    // Filter out tokens with estimated value less than $1
+    const filteredData = walletData.filter(token => (token.totalValue || 0) >= 1);
+    
+    return [...filteredData].sort((a, b) => {
+      let aValue: number;
+      let bValue: number;
+
+      switch (sortField) {
+        case 'time':
+          // Since TokenHolding doesn't have timestamp info, we'll sort by tokenSymbol alphabetically as a fallback
+          // This could be enhanced if timestamp data becomes available
+          return sortDirection === 'asc' 
+            ? a.tokenSymbol.localeCompare(b.tokenSymbol)
+            : b.tokenSymbol.localeCompare(a.tokenSymbol);
+        case 'value':
+          aValue = a.totalValue || 0;
+          bValue = b.totalValue || 0;
+          break;
+        case 'size':
+          aValue = a.netPosition;
+          bValue = b.netPosition;
+          break;
+        default:
+          aValue = a.totalValue || 0;
+          bValue = b.totalValue || 0;
+      }
+
+      if (sortDirection === 'asc') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   };
 
   if (loading) {
@@ -190,7 +302,7 @@ export default function OpenTrades() {
                 {isRefreshing
                   ? 'Refreshing...'
                   : isOnCooldown
-                  ? `Wait ${Math.ceil(refreshCooldownTimeLeft / 1000)}s`
+                  ? `Wait ${Math.ceil(cooldownTimeLeft / 1000)}s`
                   : 'Refresh'
                 }
               </span>
@@ -218,7 +330,59 @@ export default function OpenTrades() {
         )}
 
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
-          <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200 mb-4 sm:mb-6">Active Positions</h2>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4 sm:mb-6">
+            <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Active Positions</h2>
+            
+            {/* Sorting Controls */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-400">Sort by:</span>
+              <button
+                onClick={() => handleSortChange('time')}
+                className={`px-3 py-1 rounded text-sm font-medium ${
+                  sortField === 'time'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-[#252525] text-gray-400 hover:text-white'
+                }`}
+              >
+                Time
+                {sortField === 'time' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => handleSortChange('value')}
+                className={`px-3 py-1 rounded text-sm font-medium ${
+                  sortField === 'value'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-[#252525] text-gray-400 hover:text-white'
+                }`}
+              >
+                Value
+                {sortField === 'value' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => handleSortChange('size')}
+                className={`px-3 py-1 rounded text-sm font-medium ${
+                  sortField === 'size'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-[#252525] text-gray-400 hover:text-white'
+                }`}
+              >
+                Size
+                {sortField === 'size' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
 
           {/* Desktop table - hidden on mobile */}
           <div className="hidden sm:block overflow-x-auto">
@@ -229,7 +393,7 @@ export default function OpenTrades() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Bought</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Sold</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Net Position</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Remaining Balance</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Unrealized P/L</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Est. Value ($)</th>
                 </tr>
@@ -241,14 +405,14 @@ export default function OpenTrades() {
                       <div className="flex items-center justify-center space-x-2">
                         <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         <span>{currentLoadingMessage || 'Loading open trades...'}</span>
                       </div>
                     </td>
                   </tr>
-                ) : walletData.length > 0 ? (
-                  walletData.map((token) => (
+                ) : getSortedWalletData().length > 0 ? (
+                  getSortedWalletData().map((token) => (
                     <tr 
                       key={token.tokenAddress}
                       onClick={() => handleTradeClick(token)}
@@ -300,17 +464,17 @@ export default function OpenTrades() {
                         {formatTokenAmount(token.netPosition)}
                       </td>
                       <td className={`px-6 py-4 whitespace-nowrap text-sm ${(token.profitLoss || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {formatSmallPrice(token.profitLoss || 0)}
+                        {formatPriceWithTwoDecimals(token.profitLoss || 0)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {formatSmallPrice(token.totalValue || 0)}
+                        {formatPriceWithTwoDecimals(token.totalValue || 0)}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td colSpan={7} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
-                      {selectedWalletId ? 'No open trades found for this wallet' : 'Select a wallet to view open trades'}
+                      {selectedWalletId ? 'No open trades with value ≥ $1 found for this wallet' : 'Select a wallet to view open trades'}
                     </td>
                   </tr>
                 )}
@@ -330,9 +494,9 @@ export default function OpenTrades() {
                   <span>{currentLoadingMessage || 'Loading open trades...'}</span>
                 </div>
               </div>
-            ) : walletData.length > 0 ? (
+            ) : getSortedWalletData().length > 0 ? (
               <div className="space-y-4">
-                {walletData.map((token) => (
+                {getSortedWalletData().map((token) => (
                   <div 
                     key={token.tokenAddress} 
                     onClick={() => handleTradeClick(token)}
@@ -382,13 +546,13 @@ export default function OpenTrades() {
                         <p className="text-gray-300">{formatTokenAmount(token.totalSold)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-400">Net Position</p>
+                        <p className="text-gray-400">Remaining Balance</p>
                         <p className="text-gray-300">{formatTokenAmount(token.netPosition)}</p>
                       </div>
                       <div>
                         <p className="text-gray-400">Unrealized P/L</p>
                         <p className={`${(token.profitLoss || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {formatSmallPrice(token.profitLoss || 0)}
+                          {formatPriceWithTwoDecimals(token.profitLoss || 0)}
                         </p>
                       </div>
                     </div>
@@ -397,7 +561,7 @@ export default function OpenTrades() {
               </div>
             ) : (
               <div className="text-sm text-gray-300 text-center py-4">
-                {selectedWalletId ? 'No open trades found for this wallet' : 'Select a wallet to view open trades'}
+                {selectedWalletId ? 'No open trades with value ≥ $1 found for this wallet' : 'Select a wallet to view open trades'}
               </div>
             )}
           </div>
@@ -409,20 +573,20 @@ export default function OpenTrades() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6">
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Open Positions</h3>
-              <p className="text-xl sm:text-2xl font-semibold text-white">{walletData.length}</p>
+              <p className="text-xl sm:text-2xl font-semibold text-white">{getSortedWalletData().length}</p>
             </div>
 
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Total Est. Value</h3>
               <p className="text-xl sm:text-2xl font-semibold text-white">
-                {formatSmallPrice(walletData.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
+                {formatPriceWithTwoDecimals(getSortedWalletData().reduce((sum, token) => sum + (token.totalValue || 0), 0))}
               </p>
             </div>
 
             <div className="bg-[#252525] p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Unrealized P/L</h3>
-              <p className="text-xl sm:text-2xl font-semibold text-white">
-                {formatSmallPrice(walletData.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
+              <p className={`text-xl sm:text-2xl font-semibold ${getSortedWalletData().reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {formatPriceWithTwoDecimals(getSortedWalletData().reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
               </p>
             </div>
           </div>
@@ -451,12 +615,17 @@ export default function OpenTrades() {
           />
         )}
 
-        <NotificationToast
-          isVisible={showNotification}
-          message={notificationMessage}
-          type={notificationType}
-          onDismiss={handleDismissNotification}
-        />
+        {/* Wallet Scan Modal */}
+        {user?.id && walletAddress && (
+          <WalletScanModal
+            isOpen={showWalletScanModal}
+            onClose={() => setShowWalletScanModal(false)}
+            onSuccess={handleWalletScanSuccess}
+            walletAddress={walletAddress}
+            userId={user.id}
+          />
+        )}
+        <TrafficInfoModal />
       </div>
     </DashboardLayout>
   );

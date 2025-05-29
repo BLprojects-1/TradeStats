@@ -2,36 +2,25 @@
 
 // Helper function to format token amounts with appropriate decimal places
 export const formatTokenAmount = (amount: number, decimals = 6) => {
-  // For very large numbers with many decimals, use appropriate formatting
-  if (amount > 1_000_000) {
-    return amount.toLocaleString(undefined, { 
-      maximumFractionDigits: 2 
-    });
+  // Handle zero or undefined
+  if (amount === 0 || amount === undefined) {
+    return '0.00';
   }
-  
-  // For large numbers, use fewer decimal places
-  if (amount > 1000) {
-    return amount.toLocaleString(undefined, { 
-      maximumFractionDigits: 2 
-    });
-  }
-  
-  // For medium amounts (1-1000), show more decimals
-  if (amount >= 1) {
-    return amount.toLocaleString(undefined, { 
-      maximumFractionDigits: 4 
-    });
-  }
-  
-  // For small amounts (<1), use decimals or significant digits based on size
-  if (amount < 0.000001) {
-    return amount.toExponential(4);
-  }
-  
-  // For other small amounts, show up to 8 decimal places
-  return amount.toLocaleString(undefined, { 
-    maximumFractionDigits: 8
+
+  // Get absolute value for formatting, we'll add sign back later
+  const isNegative = amount < 0;
+  const absAmount = Math.abs(amount);
+
+  let formattedAmount: string;
+
+  // For all numbers, use 2 decimal places
+  formattedAmount = absAmount.toLocaleString(undefined, { 
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2 
   });
+
+  // Add negative sign back if needed
+  return isNegative ? '-' + formattedAmount : formattedAmount;
 };
 
 // Helper function to format market cap values
@@ -39,7 +28,7 @@ export const formatMarketCap = (marketCap?: number) => {
   if (!marketCap || marketCap === 0) {
     return 'N/A';
   }
-  
+
   // Format large numbers with abbreviations
   if (marketCap >= 1_000_000_000) {
     return `$${(marketCap / 1_000_000_000).toLocaleString(undefined, { 
@@ -63,16 +52,16 @@ export const formatSmallPrice = (price?: number) => {
   if (!price || price === 0) {
     return 'N/A';
   }
-  
+
   // For normal-sized numbers, just format with $ sign
   if (price >= 0.01) {
     return `$${price.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
   }
-  
+
   // For very small numbers, format with leading zeros notation using superscript
   const priceStr = price.toString();
   const decimalParts = priceStr.split('.');
-  
+
   if (decimalParts.length === 2) {
     const decimalPart = decimalParts[1];
     // Count leading zeros
@@ -84,19 +73,19 @@ export const formatSmallPrice = (price?: number) => {
         break;
       }
     }
-    
+
     if (leadingZeros >= 3) {
       // Convert number to superscript using Unicode characters
       const superscriptMap: { [key: string]: string } = {
         '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
         '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'
       };
-      
+
       const superscriptZeros = leadingZeros.toString()
         .split('')
         .map(digit => superscriptMap[digit])
         .join('');
-      
+
       // Show digits after leading zeros
       const significantPart = decimalPart.substring(leadingZeros);
       // Try to get at least 2 digits after the zeros
@@ -104,9 +93,19 @@ export const formatSmallPrice = (price?: number) => {
       return `$0.0${superscriptZeros}${significantPart.substring(0, digitsToShow)}`;
     }
   }
-  
+
   // For other small numbers, use standard formatting
   return `$${price.toLocaleString(undefined, { maximumFractionDigits: 8 })}`;
+};
+
+// Formatter for price numbers with exactly 2 decimal places
+export const formatPriceWithTwoDecimals = (price?: number) => {
+  if (!price) {
+    return '$0.00';
+  }
+
+  // Format with exactly 2 decimal places
+  return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 // Date and time formatters
@@ -129,3 +128,27 @@ export const formatTime = (timestamp: number | string | Date) => {
     return 'Invalid Time';
   }
 }; 
+
+// Format time as "Xh Ym ago"
+export const formatTimeAgo = (timestamp: number | string | Date) => {
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+
+    // Convert to hours and minutes
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ago`;
+    } else if (minutes > 0) {
+      return `${minutes}m ago`;
+    } else {
+      return 'Just now';
+    }
+  } catch (err) {
+    console.error('Error formatting time ago:', err);
+    return 'Invalid Time';
+  }
+};

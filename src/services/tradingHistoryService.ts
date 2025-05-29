@@ -294,7 +294,7 @@ export class TradingHistoryService {
         return;
       }
 
-      console.log(`Caching ${trades.length} trades for wallet ${walletAddress}`);
+      console.log(`Checking ${trades.length} trades for duplicates for wallet ${walletAddress}`);
 
       // 1. Get wallet ID
       const { walletId, initialScanComplete } = await this.ensureWalletExists(userId, walletAddress);
@@ -305,8 +305,39 @@ export class TradingHistoryService {
         throw new Error('Wallet ID is required');
       }
 
+      // Get all signatures for existing trades to check for duplicates
+      const signatures = trades.map(trade => trade.signature);
+      const { data: existingTrades, error: existingTradesError } = await supabase
+        .from('trading_history')
+        .select('signature')
+        .eq('wallet_id', walletId)
+        .in('signature', signatures);
+
+      if (existingTradesError) {
+        console.error('Error checking for existing trades:', existingTradesError);
+        throw existingTradesError;
+      }
+
+      // Create a set of existing signatures for faster lookup
+      const existingSignatures = new Set<string>();
+      if (existingTrades) {
+        existingTrades.forEach(trade => {
+          existingSignatures.add(trade.signature);
+        });
+      }
+
+      // Filter out trades that already exist in the database
+      const newTrades = trades.filter(trade => !existingSignatures.has(trade.signature));
+
+      if (newTrades.length === 0) {
+        console.log('All trades already exist in the database, nothing to cache');
+        return;
+      }
+
+      console.log(`Caching ${newTrades.length} new trades for wallet ${walletAddress} (${trades.length - newTrades.length} duplicates filtered out)`);
+
       // Check if any trades with the same tokens are already starred
-      const tokenAddresses = [...new Set(trades.map(trade => trade.tokenAddress))];
+      const tokenAddresses = [...new Set(newTrades.map(trade => trade.tokenAddress))];
       const starredTokensQuery = await supabase
         .from('trading_history')
         .select('token_address, starred')
@@ -324,7 +355,7 @@ export class TradingHistoryService {
       }
 
       // 2. Convert to database records
-      const tradeRecords = trades.map(trade => ({
+      const tradeRecords = newTrades.map(trade => ({
         id: uuidv4(),
         wallet_id: walletId,
         wallet_address: walletAddress, // Add wallet_address field
@@ -336,7 +367,7 @@ export class TradingHistoryService {
         token_address: trade.tokenAddress,
         token_logo_uri: trade.tokenLogoURI || null,
         decimals: trade.decimals || 9,
-        amount: trade.amount,
+        amount: Math.abs(trade.amount),
         price_sol: trade.priceSOL || 0,
         price_usd: trade.priceUSD || 0,
         value_sol: trade.valueSOL || 0,
@@ -350,12 +381,10 @@ export class TradingHistoryService {
         tags: null
       }));
 
-      // 3. Upsert to database
+      // 3. Insert new trades to database (no need for upsert since we've filtered out duplicates)
       const { error } = await supabase
         .from('trading_history')
-        .upsert(tradeRecords, {
-          onConflict: 'id'
-        });
+        .insert(tradeRecords);
 
       if (error) {
         console.error('Error caching trades:', error);
@@ -877,13 +906,26 @@ export class TradingHistoryService {
   /**
    * Toggle starred status for a trade
    */
-  async toggleStarredTrade(walletId: string, signature: string, starred: boolean): Promise<void> {
+  async toggleStarredTrade(walletId: string, signature: string | null, starred: boolean, tokenAddress?: string): Promise<void> {
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('trading_history')
         .update({ starred })
-        .eq('wallet_id', walletId)
-        .eq('signature', signature);
+        .eq('wallet_id', walletId);
+
+      // Handle null signature case
+      if (signature === null) {
+        query = query.is('signature', null);
+      } else {
+        query = query.eq('signature', signature);
+      }
+
+      // Filter by token_address if provided
+      if (tokenAddress) {
+        query = query.eq('token_address', tokenAddress);
+      }
+
+      const { error } = await query;
 
       if (error) {
         console.error('Error toggling starred status:', error);

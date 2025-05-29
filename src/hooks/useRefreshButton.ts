@@ -3,6 +3,9 @@ import { useState, useCallback, useEffect } from 'react';
 interface UseRefreshButtonOptions {
   cooldownMs?: number;
   onRefresh: () => Promise<{ newTradesCount: number, message: string }>;
+  useWalletScanModal?: boolean;
+  walletAddress?: string;
+  userId?: string;
 }
 
 interface UseRefreshButtonReturn {
@@ -14,11 +17,17 @@ interface UseRefreshButtonReturn {
   notificationMessage: string;
   handleRefresh: () => Promise<void>;
   handleDismissNotification: () => void;
+  showWalletScanModal: boolean;
+  setShowWalletScanModal: (show: boolean) => void;
+  handleWalletScanSuccess: (result: { newTradesCount: number, message: string }) => void;
 }
 
 export function useRefreshButton({
   cooldownMs = 120000, // Default 2 minutes
-  onRefresh
+  onRefresh,
+  useWalletScanModal = false,
+  walletAddress,
+  userId
 }: UseRefreshButtonOptions): UseRefreshButtonReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
@@ -26,6 +35,7 @@ export function useRefreshButton({
   const [showNotification, setShowNotification] = useState(false);
   const [notificationType, setNotificationType] = useState<'success' | 'error' | 'info'>('success');
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [showWalletScanModal, setShowWalletScanModal] = useState(false);
 
   // Update cooldown timer
   useEffect(() => {
@@ -48,15 +58,30 @@ export function useRefreshButton({
       return;
     }
 
+    // If using wallet scan modal, show it instead of immediately refreshing
+    if (useWalletScanModal) {
+      if (!walletAddress || !userId) {
+        console.error('Wallet address or user ID is missing for wallet scan modal');
+        setNotificationType('error');
+        setNotificationMessage('Unable to refresh: wallet information is missing.');
+        setShowNotification(true);
+        return;
+      }
+
+      setShowWalletScanModal(true);
+      return;
+    }
+
+    // Regular refresh flow
     setIsLoading(true);
     setNotificationType('info');
     setNotificationMessage('Refresh in progress');
     setShowNotification(true);
-    
+
     try {
       const result = await onRefresh();
       setNotificationType('success');
-      setNotificationMessage('Successfully refreshed!');
+      setNotificationMessage(result.message || 'Successfully refreshed!');
       setShowNotification(true);
       setLastRefreshTime(Date.now());
       setCooldownTimeLeft(cooldownMs);
@@ -67,7 +92,16 @@ export function useRefreshButton({
     } finally {
       setIsLoading(false);
     }
-  }, [onRefresh, lastRefreshTime, cooldownMs]);
+  }, [onRefresh, lastRefreshTime, cooldownMs, useWalletScanModal, walletAddress, userId]);
+
+  // Handle successful wallet scan
+  const handleWalletScanSuccess = useCallback((result: { newTradesCount: number, message: string }) => {
+    setNotificationType('success');
+    setNotificationMessage(result.message);
+    setShowNotification(true);
+    setLastRefreshTime(Date.now());
+    setCooldownTimeLeft(cooldownMs);
+  }, [cooldownMs]);
 
   const handleDismissNotification = useCallback(() => {
     setShowNotification(false);
@@ -81,6 +115,9 @@ export function useRefreshButton({
     notificationType,
     notificationMessage,
     handleRefresh,
-    handleDismissNotification
+    handleDismissNotification,
+    showWalletScanModal,
+    setShowWalletScanModal,
+    handleWalletScanSuccess
   };
 } 

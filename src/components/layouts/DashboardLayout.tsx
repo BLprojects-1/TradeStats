@@ -29,6 +29,7 @@ const DashboardLayout = ({
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
   const [notificationVisible, setNotificationVisible] = useState(false);
@@ -115,6 +116,7 @@ const DashboardLayout = ({
     { name: 'Top Trades', href: '/dashboard/top-trades', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
     { name: 'Trading History', href: '/dashboard/trading-history', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
     { name: 'Trade Log', href: '/dashboard/trade-log', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z' },
+    { name: 'Trade Checklist', href: '/dashboard/trade-checklist', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
     { name: 'Account', href: '/dashboard/account', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
   ];
 
@@ -201,6 +203,17 @@ const DashboardLayout = ({
     }
   };
 
+  // Handle responsive layout
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    handleResize(); // Set initial value
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-black">
       <Head>
@@ -243,7 +256,7 @@ const DashboardLayout = ({
           ref={sidebarRef}
           className={`fixed md:relative bg-[#1a1a1a] h-full transition-all duration-300 ease-in-out z-40
             ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'} 
-            ${isMobileSidebarOpen ? 'w-64 left-0' : '-left-64 md:left-0'} 
+            ${isMobileSidebarOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full md:translate-x-0'} 
             flex flex-col border-r border-gray-800`}
         >
           {/* Logo/Platform Name and Toggle */}
@@ -377,6 +390,15 @@ const DashboardLayout = ({
                 )}
               </button>
             </div>
+            
+            {/* Disclaimer */}
+            {(!isSidebarCollapsed || isMobileSidebarOpen) && (
+              <div className="mt-3 text-center">
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Not financial advice. Some data may be inaccurate.
+                </p>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -386,16 +408,16 @@ const DashboardLayout = ({
           <div className="relative">
             {/* Completely redesigned header */}
             <header 
-              className="fixed top-0 right-0 z-20 w-full md:w-auto md:left-0 transition-all duration-300" 
+              className={`fixed top-0 right-0 z-20 transition-all duration-300 ${
+                isMobile ? 'left-0 w-full' : 'w-auto'
+              }`}
               style={{ 
-                marginLeft: `${isSidebarCollapsed ? '5rem' : '16rem'}`,
+                left: isMobile ? '0' : (isSidebarCollapsed ? '5rem' : '16rem'),
+                right: '0'
               }}
-              // Media query handled by CSS instead of inline style
-              // The mobile view will have marginLeft: 0 through responsive classes
-              
             >
               <div className="bg-[#1a1a1a] border-b border-gray-800 shadow-lg">
-                <div className="flex items-center justify-between h-[60px] p-9">
+                <div className="flex items-center justify-between h-[60px] px-4 sm:px-6 lg:px-9">
                   {/* Left side - Title and Mobile Menu */}
                   <div className="flex items-center gap-3">
                     <button
@@ -419,7 +441,7 @@ const DashboardLayout = ({
                       </svg>
                     </button>
 
-                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
+                    <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight truncate">
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-indigo-300">
                         {title}
                       </span>
@@ -657,14 +679,14 @@ const DashboardLayout = ({
             </header>
 
             {/* Content with adjusted padding to account for fixed header */}
-            <div className="container mx-auto px-4 sm:px-6 pt-44 sm:pt-32 md:pt-30 pb-6">
+            <div className="container mx-auto px-3 sm:px-4 lg:px-6 pt-32 sm:pt-20 md:pt-20 pb-6">
               {children}
             </div>
           </div>
         </main>
       </div>
       
-      {/* Notification Toast */}
+      {/* Legacy Notification Toast - keeping for backward compatibility */}
       <NotificationToast
         message={notificationMessage}
         isVisible={notificationVisible}

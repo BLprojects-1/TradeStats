@@ -19,7 +19,7 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
   const startWalletScan = async (walletId: string, address: string) => {
     try {
       console.log('🔄 Client: Starting wallet scan for:', { walletId, address });
-      
+
       const response = await fetch('/api/wallets/scan', {
         method: 'POST',
         headers: {
@@ -40,18 +40,18 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
       }
 
       console.log('✅ Client: Wallet scan completed:', data);
-      
+
       // Update scanning state in localStorage
       const scanningWallets = JSON.parse(localStorage.getItem('scanning_wallets') || '[]');
       const updatedWallets = scanningWallets.filter((w: string) => w !== address);
       localStorage.setItem('scanning_wallets', JSON.stringify(updatedWallets));
-      
+
       // Reload wallets to get updated status
       await reloadWallets();
 
       // Close scanning notification
       setShowScanning(false);
-      
+
       return data;
     } catch (error) {
       console.error('❌ Client: Error scanning wallet:', error);
@@ -59,7 +59,7 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
       const scanningWallets = JSON.parse(localStorage.getItem('scanning_wallets') || '[]');
       const updatedWallets = scanningWallets.filter((w: string) => w !== address);
       localStorage.setItem('scanning_wallets', JSON.stringify(updatedWallets));
-      
+
       // Show error in UI
       setError(error instanceof Error ? error.message : 'Failed to scan wallet');
       setSaving(false);
@@ -70,7 +70,7 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Check wallet limit
     if (wallets.length >= 3) {
       setError('Maximum of 3 wallets allowed');
@@ -86,8 +86,8 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
     setError(null);
 
     try {
-      // Add wallet with initial_scan_complete set to false
-      const { data: newWallet, error: walletError } = await supabase
+      // Try to add wallet with initial_scan_complete set to false
+      let { data: newWallet, error: walletError } = await supabase
         .from('tracked_wallets')
         .insert({
           user_id: userId,
@@ -97,7 +97,27 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
         .select()
         .single();
 
-      if (walletError) throw walletError;
+      // If we get a unique constraint violation, it means the wallet was previously added and deleted
+      // In this case, we'll use upsert to update the existing record
+      if (walletError && walletError.code === '23505') {
+        console.log('Wallet previously existed, attempting upsert operation');
+
+        // Use upsert operation to update the existing record
+        const { data: upsertedWallet, error: upsertError } = await supabase
+          .from('tracked_wallets')
+          .upsert({
+            user_id: userId,
+            wallet_address: walletAddress.trim(),
+            initial_scan_complete: false
+          })
+          .select()
+          .single();
+
+        if (upsertError) throw upsertError;
+        newWallet = upsertedWallet;
+      } else if (walletError) {
+        throw walletError;
+      }
 
       // Immediately reload wallets to show the new one
       await reloadWallets();
@@ -133,7 +153,7 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-[#1a1a1a] rounded-lg p-6 max-w-md w-full">
         <h2 className="text-xl font-semibold text-white mb-4">Add New Wallet</h2>
-        
+
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-300 text-sm font-medium mb-2">

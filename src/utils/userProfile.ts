@@ -276,8 +276,9 @@ export const addTrackedWallet = async (userId: string, walletAddress: string, la
       throw new Error('User ID validation failed. The provided ID does not match the authenticated user.');
     }
 
-    // First, insert the wallet
-    const { data: walletData, error: insertError } = await supabase
+    // Try to insert the wallet first
+    let walletData;
+    const { data: insertData, error: insertError } = await supabase
       .from('tracked_wallets')
       .insert([
         {
@@ -291,16 +292,37 @@ export const addTrackedWallet = async (userId: string, walletAddress: string, la
       .single();
 
     if (insertError) {
-      // Check for specific errors
+      // If we get a unique constraint violation, it means the wallet was previously added and deleted
+      // In this case, we'll use upsert to update the existing record
       if (insertError.code === '23505') {
-        throw new Error(`Wallet address already exists: ${walletAddress}`);
-      }
-      if (insertError.code === '23503') {
-        throw new Error(`Foreign key violation. User ID may not exist: ${userId}`);
-      }
+        console.log('Wallet previously existed, attempting upsert operation');
 
-      console.error('Error adding tracked wallet:', insertError);
-      throw insertError;
+        // Use upsert operation to update the existing record
+        const { data: upsertedData, error: upsertError } = await supabase
+          .from('tracked_wallets')
+          .upsert({
+            user_id: userId,
+            wallet_address: walletAddress,
+            label: label || 'My Wallet',
+            initial_scan_complete: false
+          })
+          .select('*')
+          .single();
+
+        if (upsertError) {
+          console.error('Error upserting tracked wallet:', upsertError);
+          throw upsertError;
+        }
+
+        walletData = upsertedData;
+      } else if (insertError.code === '23503') {
+        throw new Error(`Foreign key violation. User ID may not exist: ${userId}`);
+      } else {
+        console.error('Error adding tracked wallet:', insertError);
+        throw insertError;
+      }
+    } else {
+      walletData = insertData;
     }
 
     if (!walletData) {
@@ -364,6 +386,33 @@ export const removeTrackedWallet = async (walletId: string): Promise<boolean> =>
   try {
     console.log('Removing wallet with id:', walletId);
 
+    // First, delete all trading history for this wallet
+    const { error: tradingHistoryError } = await supabase
+      .from('trading_history')
+      .delete()
+      .eq('wallet_id', walletId);
+
+    if (tradingHistoryError) {
+      console.error('Error removing trading history for wallet:', tradingHistoryError);
+      // Continue with deletion even if there's an error with trading history
+    } else {
+      console.log('Trading history removed successfully for wallet:', walletId);
+    }
+
+    // Then, delete from wallets table if it exists
+    const { error: walletsError } = await supabase
+      .from('wallets')
+      .delete()
+      .eq('id', walletId);
+
+    if (walletsError) {
+      console.error('Error removing from wallets table:', walletsError);
+      // Continue with deletion even if there's an error with wallets table
+    } else {
+      console.log('Wallet removed from wallets table successfully');
+    }
+
+    // Finally, delete from tracked_wallets table
     const { error } = await supabase
       .from('tracked_wallets')
       .delete()
@@ -374,10 +423,32 @@ export const removeTrackedWallet = async (walletId: string): Promise<boolean> =>
       throw error;
     }
 
-    console.log('Wallet removed successfully');
+    console.log('Wallet removed successfully from all tables');
     return true;
   } catch (error) {
     console.error('Error in removeTrackedWallet:', error);
+    return false;
+  }
+};
+
+export const updateTrackedWallet = async (walletId: string, label: string): Promise<boolean> => {
+  try {
+    console.log('Updating wallet with id:', walletId, 'new label:', label);
+
+    const { error } = await supabase
+      .from('tracked_wallets')
+      .update({ label })
+      .eq('id', walletId);
+
+    if (error) {
+      console.error('Error updating tracked wallet:', error);
+      throw error;
+    }
+
+    console.log('Wallet updated successfully');
+    return true;
+  } catch (error) {
+    console.error('Error in updateTrackedWallet:', error);
     return false;
   }
 };
