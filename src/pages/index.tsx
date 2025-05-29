@@ -489,7 +489,7 @@ export default function Home() {
                   <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
                     <h3 className="text-2xl font-bold text-white mb-4">Add Your Wallet</h3>
                     <p className="text-gray-300 mb-6">
-                    Simply add your Solana wallet address for read-only tracking. We don’t store your private keys and you don't even need to connect a wallet.
+                    Simply add your Solana wallet address for read-only tracking. You don't even need to connect a wallet.
                     </p>
                     <div className="flex items-center justify-center space-x-2">
                       <div className="w-3 h-3 bg-green-400 rounded-full"></div>
@@ -576,7 +576,7 @@ export default function Home() {
               <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
                 <h3 className="text-xl font-semibold mb-3 text-white">Is my trading data secure and private?</h3>
                 <p className="text-gray-300">
-                  Absolutely. Ryvu only reads public blockchain data using your wallet addresses. Your private notes and checklist data are encrypted and stored securely. We never have access to your private keys or funds.
+                  Absolutely. Ryvu only reads public blockchain data using your wallet addresses. Your private notes and checklist data are encrypted and stored securely.
                 </p>
               </div>
               
@@ -588,9 +588,9 @@ export default function Home() {
               </div>
               
               <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
-                <h3 className="text-xl font-semibold mb-3 text-white">Can I connect multiple wallets?</h3>
+                <h3 className="text-xl font-semibold mb-3 text-white">Can I scan multiple wallets?</h3>
                 <p className="text-gray-300">
-                  Yes, you can connect up to 3 Solana wallets to your account. Ryvu will aggregate all your trading activity across wallets to give you a complete view of your performance.
+                  Yes, you can scan up to 3 Solana wallets to your account. Ryvu will aggregate all your trading activity across wallets to give you a complete view of your performance.
                 </p>
               </div>
               
