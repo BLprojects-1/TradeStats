@@ -9,47 +9,75 @@ import { formatTokenAmount, formatSmallPrice, formatPriceWithTwoDecimals, format
 import TradeInfoModal from '../../components/TradeInfoModal';
 import { useRefreshButton } from '../../hooks/useRefreshButton';
 import NotificationToast from '../../components/NotificationToast';
-import { useProcessedTradingData } from '../../hooks/useProcessedTradingData';
-import { TradeLogEntry } from '../../utils/historicalTradeProcessing';
-import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { supabase } from '../../utils/supabaseClient';
 import WalletScanModal from '../../components/WalletScanModal';
 import TrafficInfoModal from '../../components/TrafficInfoModal';
+
+// Simplified interface for trade data from Supabase
+interface TradeLogEntry {
+  signature: string;
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  tokenLogoURI: string | null;
+  type: 'BUY' | 'SELL';
+  amount: number;
+  totalVolume: number;
+  profitLoss: number;
+  timestamp: number;
+  starred: boolean;
+}
+
+// Interface for untracked tokens
+interface UntrackedToken {
+  id: number;
+  contract_address: string;
+  symbol: string;
+  wallet_address: string;
+  present_trades: boolean;
+  current_price?: number;
+  total_supply?: number;
+  token_uri?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Extended interface for merged token data
+interface MergedTokenData {
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  tokenLogoURI: string | null;
+  starred: boolean;
+  present_trades: boolean;
+  current_price?: number;
+  trades: TradeLogEntry[];
+}
 
 export default function TradeLog() {
   const { user, loading } = useAuth();
   const { selectedWalletId, wallets, isWalletScanning } = useWalletSelection();
   const router = useRouter();
 
-  // Use our processed trading data hook
-  const {
-    data: initialTradeLog,
-    loading: dataLoading,
-    error,
-    refreshData
-  } = useProcessedTradingData({
-    autoLoad: false, // Don't auto-load data to prevent historicalPriceService from running on refresh
-    dataType: 'tradeLog'
-  });
-
-  // Create a local state to manage the trade log data
+  // Simplified state management
   const [tradeLog, setTradeLog] = useState<TradeLogEntry[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Update local state when data from the hook changes
-  useEffect(() => {
-    if (initialTradeLog) {
-      setTradeLog(initialTradeLog);
-    }
-  }, [initialTradeLog]);
+  // State for untracked tokens
+  const [untrackedTokens, setUntrackedTokens] = useState<UntrackedToken[]>([]);
+  const [mergedTokenData, setMergedTokenData] = useState<MergedTokenData[]>([]);
 
-  const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
   const [starNotification, setStarNotification] = useState<{ show: boolean; tokenSymbol: string; isUnstarring?: boolean }>({ show: false, tokenSymbol: '' });
   const [swingPlans, setSwingPlans] = useState<Map<string, string>>(new Map());
 
   // Add sorting state
-  const [sortField, setSortField] = useState<'time' | 'value' | 'size'>('time');
+  const [sortField, setSortField] = useState<'time' | 'value' | 'size' | 'price'>('time');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Add tab state for switching between starred tokens and added tokens
+  const [activeTab, setActiveTab] = useState<'starred' | 'added'>('starred');
 
   // Modal state
   const [selectedTradeModal, setSelectedTradeModal] = useState<{
@@ -61,6 +89,67 @@ export default function TradeLog() {
   // Get the wallet address from the selected wallet
   const selectedWallet = wallets.find(w => w.id === selectedWalletId);
   const walletAddress = selectedWallet?.wallet_address || '';
+
+  /**
+   * Simplified direct Supabase data loading - much faster!
+   */
+  const loadTradeData = async () => {
+    if (!selectedWalletId) {
+      setTradeLog([]);
+      return;
+    }
+
+    console.log('🚀 Loading trade data directly from Supabase for wallet:', selectedWalletId);
+    setDataLoading(true);
+    setError(null);
+
+    try {
+      // Direct query to Supabase - no complex processing
+      const { data, error: supabaseError } = await supabase
+        .from('trading_history')
+        .select(`
+          signature,
+          token_address,
+          token_symbol,
+          token_logo_uri,
+          type,
+          amount,
+          value_usd,
+          timestamp,
+          starred
+        `)
+        .eq('wallet_id', selectedWalletId)
+        .eq('starred', true) // Only get starred trades for trade log
+        .order('timestamp', { ascending: false });
+
+      if (supabaseError) {
+        throw supabaseError;
+      }
+
+      // Simple transformation - no complex calculations
+      const transformedTrades: TradeLogEntry[] = (data || []).map(trade => ({
+        signature: trade.signature || '',
+        tokenAddress: trade.token_address,
+        tokenSymbol: trade.token_symbol,
+        tokenName: trade.token_symbol, // Use symbol as name
+        tokenLogoURI: trade.token_logo_uri,
+        type: trade.type as 'BUY' | 'SELL',
+        amount: Math.abs(trade.amount || 0),
+        totalVolume: trade.value_usd || 0,
+        profitLoss: trade.type === 'BUY' ? -(trade.value_usd || 0) : (trade.value_usd || 0),
+        timestamp: new Date(trade.timestamp).getTime(),
+        starred: trade.starred
+      }));
+
+      console.log('✅ Loaded', transformedTrades.length, 'starred trades');
+      setTradeLog(transformedTrades);
+    } catch (err) {
+      console.error('❌ Error loading trade data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load trading data');
+    } finally {
+      setDataLoading(false);
+    }
+  };
 
   const {
     isLoading: isRefreshing,
@@ -80,7 +169,8 @@ export default function TradeLog() {
         throw new Error('Please select a wallet first.');
       }
 
-      await refreshData();
+      await loadTradeData();
+      await fetchUntrackedTokens();
 
       // Return the expected format
       return {
@@ -99,6 +189,14 @@ export default function TradeLog() {
     }
   }, [user, loading, router]);
 
+  // Load data when wallet changes
+  useEffect(() => {
+    if (selectedWalletId) {
+      loadTradeData();
+    } else {
+      setTradeLog([]);
+    }
+  }, [selectedWalletId]);
 
   // Load swing plans from localStorage on mount
   useEffect(() => {
@@ -123,7 +221,7 @@ export default function TradeLog() {
   };
 
   const handleRetry = () => {
-    refreshData();
+    loadTradeData();
   };
 
   const handleStarTrade = async (tokenAddress: string) => {
@@ -131,42 +229,82 @@ export default function TradeLog() {
 
     setStarringTrade(tokenAddress);
     try {
-      // Find the trade to get its symbol and check its current starred status
-      const trade = tradeLog.find(t => t.tokenAddress === tokenAddress);
-      if (!trade) return;
+      // Find the token data in our current view
+      const currentTokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
+      const tokenData = currentTokens.find(t => t.tokenAddress === tokenAddress);
+      if (!tokenData) return;
 
-      const isCurrentlyStarred = trade.starred;
+      const isCurrentlyStarred = tokenData.starred;
       const newStarredStatus = !isCurrentlyStarred;
 
-      // Update local state
-      setTradeLog(prev => prev.map(trade => 
-        trade.tokenAddress === tokenAddress 
-          ? { ...trade, starred: newStarredStatus }
-          : trade
-      ));
+      // If the token has trades, handle trade starring
+      if (tokenData.present_trades && tokenData.trades.length > 0) {
+        // Update local state for trades
+        setTradeLog(prev => prev.map(t => 
+          t.tokenAddress === tokenAddress 
+            ? { ...t, starred: newStarredStatus }
+            : t
+        ));
 
-      // Update the database
-      // TradeLogEntry has a signature property, so we can use it directly
-      await tradingHistoryService.toggleStarredTrade(
-        selectedWalletId,
-        trade.signature,
-        newStarredStatus,
-        trade.tokenAddress
-      );
+        // Update the database for trades directly with Supabase
+        const { error: updateError } = await supabase
+          .from('trading_history')
+          .update({ starred: newStarredStatus })
+          .eq('wallet_id', selectedWalletId)
+          .eq('token_address', tokenAddress);
 
-      // Show notification based on whether we're starring or unstarring
-      setStarNotification({ 
-        show: true, 
-        tokenSymbol: trade.tokenSymbol,
-        isUnstarring: isCurrentlyStarred
-      });
+        if (updateError) {
+          console.error('❌ Error updating starred status:', updateError);
+          throw updateError;
+        }
+      }
+
+      // If we're unstarring and this token is only in untracked_tokens (no trades), remove it
+      if (!newStarredStatus && (!tokenData.present_trades || tokenData.trades.length === 0)) {
+        console.log(`🗑️ Removing untracked token ${tokenAddress} from untracked_tokens table`);
+        
+        const { error } = await supabase
+          .from('untracked_tokens')
+          .delete()
+          .eq('wallet_address', walletAddress)
+          .eq('contract_address', tokenAddress);
+
+        if (error) {
+          console.error('❌ Error removing untracked token:', error);
+          throw error;
+        }
+
+        // Remove from local state
+        setUntrackedTokens(prev => prev.filter(t => t.contract_address !== tokenAddress));
+        
+        // Show notification for removal
+        setStarNotification({ 
+          show: true, 
+          tokenSymbol: tokenData.tokenSymbol,
+          isUnstarring: true
+        });
+      } else {
+        // Show notification for normal starring/unstarring
+        setStarNotification({ 
+          show: true, 
+          tokenSymbol: tokenData.tokenSymbol,
+          isUnstarring: isCurrentlyStarred
+        });
+      }
 
       // Hide notification after 3 seconds
       setTimeout(() => {
         setStarNotification({ show: false, tokenSymbol: '', isUnstarring: false });
       }, 3000);
     } catch (err) {
-      console.error('Error starring trades for token:', err);
+      console.error('Error starring/unstarring token:', err);
+      
+      // Revert local state changes on error
+      setTradeLog(prev => prev.map(trade => 
+        trade.tokenAddress === tokenAddress 
+          ? { ...trade, starred: !trade.starred } // Revert the change
+          : trade
+      ));
     } finally {
       setStarringTrade(null);
     }
@@ -184,7 +322,7 @@ export default function TradeLog() {
     setSelectedTradeModal(null);
   };
 
-  const handleSortChange = (field: 'time' | 'value' | 'size') => {
+  const handleSortChange = (field: 'time' | 'value' | 'size' | 'price') => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -193,83 +331,143 @@ export default function TradeLog() {
     }
   };
 
-  // Filter trades based on starred status - only show starred trades
-  const filteredTrades = tradeLog.filter(trade => trade.starred);
+  /**
+   * Simplified data processing - no complex merging needed
+   */
+  const getStarredTokens = () => {
+    // Group starred trades by token address for "Starred Tokens" tab
+    const grouped = tradeLog.reduce((acc, trade) => {
+      if (!acc[trade.tokenAddress]) {
+        acc[trade.tokenAddress] = {
+          tokenAddress: trade.tokenAddress,
+          tokenSymbol: trade.tokenSymbol,
+          tokenName: trade.tokenName,
+          tokenLogoURI: trade.tokenLogoURI,
+          starred: true,
+          present_trades: true,
+          trades: []
+        };
+      }
+      acc[trade.tokenAddress].trades.push(trade);
+      return acc;
+    }, {} as Record<string, MergedTokenData>);
 
-  // Group trades by token address - only include tokens with starred trades
-  const groupedByToken = filteredTrades.reduce((acc, trade) => {
-    if (!acc[trade.tokenAddress]) {
-      acc[trade.tokenAddress] = {
-        tokenAddress: trade.tokenAddress,
-        tokenSymbol: trade.tokenSymbol,
-        tokenName: trade.tokenName,
-        tokenLogoURI: trade.tokenLogoURI,
-        starred: true, // All tokens in this filtered set are starred
-        trades: []
-      };
-    }
-    acc[trade.tokenAddress].trades.push(trade);
-    return acc;
-  }, {} as Record<string, { 
-    tokenAddress: string; 
-    tokenSymbol: string; 
-    tokenName: string; 
-    tokenLogoURI: string | null; 
-    starred: boolean;
-    trades: TradeLogEntry[];
-  }>);
+    return Object.values(grouped);
+  };
 
-  // Convert to array and sort
+  const getAddedTokens = () => {
+    // Return untracked tokens that have no trades (present_trades = false)
+    return untrackedTokens
+      .filter(token => !token.present_trades)
+      .map(token => ({
+        tokenAddress: token.contract_address,
+        tokenSymbol: token.symbol,
+        tokenName: token.symbol,
+        tokenLogoURI: token.token_uri || null,
+        starred: true, // All tracked tokens are considered "starred"
+        present_trades: false,
+        current_price: token.current_price,
+        trades: [] as TradeLogEntry[]
+      }));
+  };
+
   const getSortedTokenList = () => {
-    const tokenList = Object.values(groupedByToken);
-
-    return tokenList.sort((a, b) => {
+    const tokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
+    
+    return tokens.sort((a, b) => {
       let aValue: number;
       let bValue: number;
 
       switch (sortField) {
         case 'time':
-          // Sort by the most recent trade timestamp
-          const aLatestTrade = a.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
-          const bLatestTrade = b.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
-          aValue = aLatestTrade.timestamp;
-          bValue = bLatestTrade.timestamp;
+          if (activeTab === 'starred') {
+            // Sort by most recent trade timestamp
+            const aLatestTrade = a.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
+            const bLatestTrade = b.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
+            aValue = aLatestTrade?.timestamp || 0;
+            bValue = bLatestTrade?.timestamp || 0;
+          } else {
+            // Sort by created_at for added tokens
+            const aToken = untrackedTokens.find(t => t.contract_address === a.tokenAddress);
+            const bToken = untrackedTokens.find(t => t.contract_address === b.tokenAddress);
+            aValue = aToken ? new Date(aToken.created_at).getTime() : 0;
+            bValue = bToken ? new Date(bToken.created_at).getTime() : 0;
+          }
           break;
         case 'value':
-          // Sort by total P/L
-          const aTotalPnL = a.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-          const bTotalPnL = b.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-          aValue = aTotalPnL;
-          bValue = bTotalPnL;
+          // Sort by total P/L (only for starred tokens)
+          aValue = a.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
+          bValue = b.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
           break;
         case 'size':
-          // Sort by total volume
-          const aTotalVolume = a.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
-          const bTotalVolume = b.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
-          aValue = aTotalVolume;
-          bValue = bTotalVolume;
+          // Sort by total volume (only for starred tokens)
+          aValue = a.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
+          bValue = b.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
+          break;
+        case 'price':
+          // Sort by current price (only for starred tokens)
+          aValue = a.current_price || 0;
+          bValue = b.current_price || 0;
           break;
         default:
-          // Default to time sorting
-          const aDefaultLatest = a.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
-          const bDefaultLatest = b.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
-          aValue = aDefaultLatest.timestamp;
-          bValue = bDefaultLatest.timestamp;
+          aValue = 0;
+          bValue = 0;
       }
 
-      if (sortDirection === 'asc') {
-        return aValue - bValue;
-      } else {
-        return bValue - aValue;
-      }
+      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
     });
   };
 
-  // Calculate summary stats
-  const totalTokens = getSortedTokenList().length;
-  const starredTrades = tradeLog.filter(trade => trade.starred).length;
-  const totalVolume = filteredTrades.reduce((sum, trade) => sum + trade.totalVolume, 0);
-  const totalPnL = filteredTrades.reduce((sum, trade) => sum + trade.profitLoss, 0);
+  // Simplified stats calculation
+  const currentTokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
+  const totalTokens = currentTokens.length;
+  const totalVolume = currentTokens.reduce((sum, token) => 
+    sum + token.trades.reduce((tradeSum, trade) => tradeSum + trade.totalVolume, 0), 0
+  );
+  const totalPnL = currentTokens.reduce((sum, token) => 
+    sum + token.trades.reduce((tradeSum, trade) => tradeSum + trade.profitLoss, 0), 0
+  );
+
+  /**
+   * Fetch untracked tokens for the current wallet
+   */
+  const fetchUntrackedTokens = async () => {
+    if (!selectedWallet?.wallet_address) {
+      setUntrackedTokens([]);
+      return;
+    }
+
+    try {
+      console.log(`🔍 Fetching untracked tokens for wallet: ${selectedWallet.wallet_address}`);
+      
+      const { data, error } = await supabase
+        .from('untracked_tokens')
+        .select('*')
+        .eq('wallet_address', selectedWallet.wallet_address)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Error fetching untracked tokens:', error);
+        setUntrackedTokens([]);
+        return;
+      }
+
+      console.log(`✅ Found ${data?.length || 0} untracked tokens`);
+      setUntrackedTokens(data || []);
+    } catch (error) {
+      console.error('❌ Error in fetchUntrackedTokens:', error);
+      setUntrackedTokens([]);
+    }
+  };
+
+  // Effect to fetch untracked tokens when wallet changes
+  useEffect(() => {
+    if (selectedWallet?.wallet_address) {
+      fetchUntrackedTokens();
+    } else {
+      setUntrackedTokens([]);
+    }
+  }, [selectedWallet?.wallet_address]);
 
   if (loading) {
     return (
@@ -284,8 +482,7 @@ export default function TradeLog() {
   }
 
   const isLoading = dataLoading;
-  const currentLoadingMessage = loadingMessage || (dataLoading ? 'Loading comprehensive trading data...' : '');
-  const apiError = error;
+  const currentLoadingMessage = error || (dataLoading ? 'Loading comprehensive trading data...' : '');
 
   return (
     <DashboardLayout 
@@ -341,8 +538,8 @@ export default function TradeLog() {
           </div>
         )}
 
-        {apiError && <ApiErrorBanner 
-          message={apiError} 
+        {error && <ApiErrorBanner 
+          message={error} 
           onRetry={handleRetry} 
           errorType="general"
         />}
@@ -356,90 +553,183 @@ export default function TradeLog() {
         {/* Enhanced Analytics for Starred Trades */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Starred Tokens</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
+              {activeTab === 'starred' ? 'Starred Tokens' : 'Added Tokens'}
+            </h3>
             <p className="text-xl sm:text-2xl font-semibold text-yellow-400">{totalTokens}</p>
-            <p className="text-xs text-gray-500 mt-1">Tokens you've starred</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {activeTab === 'starred' ? 'Tokens you\'ve starred' : 'Tokens you\'ve added to track'}
+            </p>
           </div>
 
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Avg. Trade Size</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
+              {activeTab === 'starred' ? 'Avg. Trade Size' : 'Total Added'}
+            </h3>
             <p className="text-xl sm:text-2xl font-semibold text-white">
-              {totalTokens > 0 ? formatPriceWithTwoDecimals(totalVolume / totalTokens) : 'N/A'}
+              {activeTab === 'starred' ? (
+                totalTokens > 0 ? formatPriceWithTwoDecimals(totalVolume / totalTokens) : 'N/A'
+              ) : (
+                totalTokens
+              )}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Average volume per trade</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {activeTab === 'starred' ? 'Average volume per trade' : 'Number of tracked tokens'}
+            </p>
           </div>
 
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Total Volume</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
+              {activeTab === 'starred' ? 'Total Volume' : 'With Price Data'}
+            </h3>
             <p className="text-xl sm:text-2xl font-semibold text-white">
-              {totalTokens > 0 ? formatPriceWithTwoDecimals(totalVolume) : 'N/A'}
+              {activeTab === 'starred' ? (
+                totalTokens > 0 ? formatPriceWithTwoDecimals(totalVolume) : 'N/A'
+              ) : (
+                currentTokens.filter(token => token.current_price).length
+              )}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Combined trade value</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {activeTab === 'starred' ? 'Combined trade value' : 'Tokens with current price'}
+            </p>
           </div>
 
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Total P/L</h3>
-            <p className={`text-xl sm:text-2xl font-semibold ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {totalTokens > 0 ? (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)) : 'N/A'}
+            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
+              {activeTab === 'starred' ? 'Total P/L' : 'Avg. Price'}
+            </h3>
+            <p className={`text-xl sm:text-2xl font-semibold ${
+              activeTab === 'starred' ? (totalPnL >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'
+            }`}>
+              {activeTab === 'starred' ? (
+                totalTokens > 0 ? (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)) : 'N/A'
+              ) : (
+                (() => {
+                  const tokensWithPrices = currentTokens.filter(token => token.current_price);
+                  const avgPrice = tokensWithPrices.length > 0 
+                    ? tokensWithPrices.reduce((sum, token) => sum + (token.current_price || 0), 0) / tokensWithPrices.length
+                    : 0;
+                  return avgPrice > 0 ? formatPriceWithTwoDecimals(avgPrice) : 'N/A';
+                })()
+              )}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Profit/loss across all tokens</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {activeTab === 'starred' ? 'Profit/loss across all tokens' : 'Average current price'}
+            </p>
           </div>
         </div>
 
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4 sm:mb-6">
-            <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">
-              Starred Tokens
-            </h2>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setActiveTab('starred')}
+                className={`text-xl sm:text-2xl font-semibold transition-colors ${
+                  activeTab === 'starred' 
+                    ? 'text-indigo-200' 
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                Starred Tokens
+              </button>
+              <span className="text-xl sm:text-2xl font-semibold text-gray-500">|</span>
+              <button
+                onClick={() => setActiveTab('added')}
+                className={`text-xl sm:text-2xl font-semibold transition-colors ${
+                  activeTab === 'added' 
+                    ? 'text-indigo-200' 
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                Added Tokens
+              </button>
+            </div>
 
             {/* Sorting Controls */}
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-400">Sort by:</span>
-              <button
-                onClick={() => handleSortChange('time')}
-                className={`px-3 py-1 rounded text-sm font-medium ${
-                  sortField === 'time'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-[#252525] text-gray-400 hover:text-white'
-                }`}
-              >
-                Time
-                {sortField === 'time' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '↑' : '↓'}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => handleSortChange('value')}
-                className={`px-3 py-1 rounded text-sm font-medium ${
-                  sortField === 'value'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-[#252525] text-gray-400 hover:text-white'
-                }`}
-              >
-                Value
-                {sortField === 'value' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '↑' : '↓'}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => handleSortChange('size')}
-                className={`px-3 py-1 rounded text-sm font-medium ${
-                  sortField === 'size'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-[#252525] text-gray-400 hover:text-white'
-                }`}
-              >
-                Size
-                {sortField === 'size' && (
-                  <span className="ml-1">
-                    {sortDirection === 'asc' ? '↑' : '↓'}
-                  </span>
-                )}
-              </button>
+              {activeTab === 'starred' ? (
+                <>
+                  <button
+                    onClick={() => handleSortChange('time')}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      sortField === 'time'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-[#252525] text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Time
+                    {sortField === 'time' && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleSortChange('value')}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      sortField === 'value'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-[#252525] text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Value
+                    {sortField === 'value' && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleSortChange('size')}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      sortField === 'size'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-[#252525] text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Size
+                    {sortField === 'size' && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleSortChange('price')}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      sortField === 'price'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-[#252525] text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Price
+                    {sortField === 'price' && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleSortChange('time')}
+                    className={`px-3 py-1 rounded text-sm font-medium ${
+                      sortField === 'time'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-[#252525] text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Time
+                    {sortField === 'time' && (
+                      <span className="ml-1">
+                        {sortDirection === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -450,18 +740,27 @@ export default function TradeLog() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Star</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Trades</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total Volume</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total P/L</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Remaining Balance</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Est. Value ($)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Last Trade</th>
+                  {activeTab === 'starred' ? (
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Trades</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total Volume</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total P/L</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Remaining Balance</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Est. Value</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Last Trade</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Current Price</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Added</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
+                    <td colSpan={activeTab === 'starred' ? 8 : 4} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
                       <div className="flex items-center justify-center space-x-2">
                         <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -476,12 +775,29 @@ export default function TradeLog() {
                     // Calculate token-level metrics
                     const totalVolume = token.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
                     const totalPnL = token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-                    const latestTrade = token.trades.sort((a, b) => b.timestamp - a.timestamp)[0];
+                    const latestTrade = token.trades.length > 0 ? token.trades.sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+                    
+                    // For tokens without trades, we need to show N/A values but can show current price
+                    const hasNoTrades = !token.present_trades || token.trades.length === 0;
+                    
+                    // Create a mock trade object for tokens without trades to handle click events
+                    const mockTradeForClick = latestTrade || {
+                      tokenAddress: token.tokenAddress,
+                      tokenSymbol: token.tokenSymbol,
+                      tokenName: token.tokenName,
+                      tokenLogoURI: token.tokenLogoURI,
+                      timestamp: Date.now(),
+                      amount: 0,
+                      totalVolume: 0,
+                      profitLoss: 0,
+                      signature: '',
+                      starred: true
+                    } as TradeLogEntry;
 
                     return (
                       <tr 
                         key={token.tokenAddress}
-                        onClick={() => handleTradeClick(latestTrade)}
+                        onClick={() => handleTradeClick(mockTradeForClick)}
                         className="hover:bg-[#252525] cursor-pointer transition-colors"
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
@@ -518,35 +834,59 @@ export default function TradeLog() {
                               <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-5 h-5 rounded-full" />
                             )}
                             <span>{token.tokenSymbol}</span>
+                            {hasNoTrades && (
+                              <span className="text-xs bg-blue-900/30 text-blue-300 px-2 py-1 rounded-full">
+                                {activeTab === 'starred' ? 'Tracked' : 'Added'}
+                              </span>
+                            )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {token.trades.length}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatPriceWithTwoDecimals(totalVolume)}
-                        </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatTokenAmount(latestTrade.amount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatPriceWithTwoDecimals(latestTrade.totalVolume)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatTimeAgo(latestTrade.timestamp)}
-                        </td>
+                        {activeTab === 'starred' && (
+                          <>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {hasNoTrades ? 'N/A' : token.trades.length}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(totalVolume)}
+                            </td>
+                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${hasNoTrades ? 'text-gray-300' : (totalPnL >= 0 ? 'text-green-400' : 'text-red-400')}`}>
+                              {hasNoTrades ? 'N/A' : (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL))}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {hasNoTrades ? 'N/A' : formatTokenAmount(latestTrade!.amount)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(latestTrade!.totalVolume)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {hasNoTrades ? 'N/A' : formatTimeAgo(latestTrade!.timestamp)}
+                            </td>
+                          </>
+                        )}
+                        {activeTab === 'added' && (
+                          <>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {hasNoTrades ? 'N/A' : (token.current_price ? formatPriceWithTwoDecimals(token.current_price) : 'N/A')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {(() => {
+                                const untrackedToken = untrackedTokens.find(t => t.contract_address === token.tokenAddress);
+                                return untrackedToken ? formatTimeAgo(new Date(untrackedToken.created_at).getTime()) : 'N/A';
+                              })()}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
+                    <td colSpan={activeTab === 'starred' ? 8 : 4} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
                       {selectedWalletId 
-                        ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
-                        : 'Select a wallet to view your starred tokens'
+                        ? (activeTab === 'starred' 
+                            ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
+                            : 'No added tokens found. Add some tokens to track from other pages to see them here.')
+                        : 'Select a wallet to view your tokens'
                       }
                     </td>
                   </tr>
@@ -573,12 +913,29 @@ export default function TradeLog() {
                   // Calculate token-level metrics
                   const totalVolume = token.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
                   const totalPnL = token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-                  const latestTrade = token.trades.sort((a, b) => b.timestamp - a.timestamp)[0];
+                  const latestTrade = token.trades.length > 0 ? token.trades.sort((a, b) => b.timestamp - a.timestamp)[0] : null;
+                  
+                  // For tokens without trades, we need to show N/A values but can show current price
+                  const hasNoTrades = !token.present_trades || token.trades.length === 0;
+                  
+                  // Create a mock trade object for tokens without trades to handle click events
+                  const mockTradeForClick = latestTrade || {
+                    tokenAddress: token.tokenAddress,
+                    tokenSymbol: token.tokenSymbol,
+                    tokenName: token.tokenName,
+                    tokenLogoURI: token.tokenLogoURI,
+                    timestamp: Date.now(),
+                    amount: 0,
+                    totalVolume: 0,
+                    profitLoss: 0,
+                    signature: '',
+                    starred: true
+                  } as TradeLogEntry;
 
                   return (
                     <div 
                       key={token.tokenAddress} 
-                      onClick={() => handleTradeClick(latestTrade)}
+                      onClick={() => handleTradeClick(mockTradeForClick)}
                       className="bg-[#252525] p-4 rounded-lg cursor-pointer hover:bg-[#2a2a2a] transition-colors"
                     >
                       <div className="flex items-center justify-between mb-3">
@@ -587,6 +944,11 @@ export default function TradeLog() {
                             <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-6 h-6 rounded-full" />
                           )}
                           <span className="text-white font-medium">{token.tokenSymbol}</span>
+                          {hasNoTrades && (
+                            <span className="text-xs bg-blue-900/30 text-blue-300 px-2 py-1 rounded-full">
+                              {activeTab === 'starred' ? 'Tracked' : 'Added'}
+                            </span>
+                          )}
                         </div>
                         <button
                           onClick={(e) => {
@@ -616,32 +978,54 @@ export default function TradeLog() {
                         </button>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <p className="text-gray-400">Trades</p>
-                          <p className="text-gray-300">{token.trades.length}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Volume</p>
-                          <p className="text-gray-300">{formatPriceWithTwoDecimals(totalVolume)}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">P/L</p>
-                          <p className={totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            {totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Remaining Balance</p>
-                          <p className="text-gray-300">{formatTokenAmount(latestTrade.amount)}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Est. Value</p>
-                          <p className="text-gray-300">{formatPriceWithTwoDecimals(latestTrade.totalVolume)}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Last Trade</p>
-                          <p className="text-gray-300">{formatTimeAgo(latestTrade.timestamp)}</p>
-                        </div>
+                        {activeTab === 'starred' ? (
+                          <>
+                            <div>
+                              <p className="text-gray-400">Trades</p>
+                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : token.trades.length}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">Volume</p>
+                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(totalVolume)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">P/L</p>
+                              <p className={hasNoTrades ? 'text-gray-300' : (totalPnL >= 0 ? 'text-green-400' : 'text-red-400')}>
+                                {hasNoTrades ? 'N/A' : (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL))}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">Remaining Balance</p>
+                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : formatTokenAmount(latestTrade!.amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">Est. Value</p>
+                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(latestTrade!.totalVolume)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">Last Trade</p>
+                              <p className="text-gray-300">
+                                {hasNoTrades ? 'N/A' : formatTimeAgo(latestTrade!.timestamp)}
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <p className="text-gray-400">Current Price</p>
+                              <p className="text-gray-300">{token.current_price ? formatPriceWithTwoDecimals(token.current_price) : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">Added</p>
+                              <p className="text-gray-300">
+                                {(() => {
+                                  const untrackedToken = untrackedTokens.find(t => t.contract_address === token.tokenAddress);
+                                  return untrackedToken ? formatTimeAgo(new Date(untrackedToken.created_at).getTime()) : 'N/A';
+                                })()}
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -650,8 +1034,10 @@ export default function TradeLog() {
             ) : (
               <div className="text-sm text-gray-300 text-center py-4">
                 {selectedWalletId 
-                  ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
-                  : 'Select a wallet to view your starred tokens'
+                  ? (activeTab === 'starred' 
+                      ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
+                      : 'No added tokens found. Add some tokens to track from other pages to see them here.')
+                  : 'Select a wallet to view your tokens'
                 }
               </div>
             )}
@@ -691,8 +1077,8 @@ export default function TradeLog() {
         {/* Star notification */}
         <NotificationToast
           message={starNotification.isUnstarring 
-            ? `Removed ${starNotification.tokenSymbol} from starred tokens` 
-            : `Added ${starNotification.tokenSymbol} to starred tokens`}
+            ? `Removed ${starNotification.tokenSymbol} from tracked tokens` 
+            : `Added ${starNotification.tokenSymbol} to tracked tokens`}
           isVisible={starNotification.show}
           type="success"
           autoDismissMs={3000}

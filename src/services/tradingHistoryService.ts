@@ -348,7 +348,8 @@ export class TradingHistoryService {
         updated_at: new Date().toISOString(),
         starred: starredTokens.has(trade.tokenAddress), // Check if this token is already starred
         notes: null,
-        tags: null
+        tags: null,
+        total_supply: null // Adding total_supply field with null default value
       }));
 
       // 3. Insert trades to database - use a different approach to handle duplicates

@@ -130,7 +130,13 @@ const DashboardLayout = ({
   };
 
   const navigationItems: NavigationItem[] = [
-    { name: 'Add Token', href: '#', icon: 'M12 4v16m8-8H4', isAction: true, isComingSoon: true },
+    { 
+      name: 'Add Token', 
+      href: '#', 
+      icon: 'M12 4v16m8-8H4', 
+      isAction: true, 
+      onClick: handleAddTokenClick 
+    },
     { name: 'Dashboard', href: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { name: 'Open Trades', href: '/dashboard/open-trades', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     { name: 'Top Trades', href: '/dashboard/top-trades', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
@@ -346,11 +352,8 @@ const DashboardLayout = ({
                       // Action item (like Add Token) - button with special styling
                       <button
                         onClick={item.onClick}
-                        disabled={item.isComingSoon}
                         className={`w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200 group ${
-                          item.isComingSoon 
-                            ? 'text-gray-500 cursor-not-allowed opacity-50'
-                            : 'text-purple-300 hover:bg-gradient-to-r hover:from-purple-900/20 hover:to-indigo-800/20 hover:text-purple-100 border border-transparent hover:border-purple-500/30'
+                          'text-purple-300 hover:bg-gradient-to-r hover:from-purple-900/20 hover:to-indigo-800/20 hover:text-purple-100 border border-transparent hover:border-purple-500/30'
                         }`}
                       >
                         <div className="relative">
@@ -373,7 +376,7 @@ const DashboardLayout = ({
                         </div>
                         {(!isSidebarCollapsed || isMobileSidebarOpen) && (
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{item.name}</span>
+                            <span className="font-medium ml-3">{item.name}</span>
                             {item.isComingSoon && (
                               <span className="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded-full">Coming Soon</span>
                             )}

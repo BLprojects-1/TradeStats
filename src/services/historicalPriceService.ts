@@ -19,6 +19,158 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Helper function for delays
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// DRPC Circuit Breaker and Retry Configuration
+interface CircuitBreakerState {
+  failureCount: number;
+  lastFailureTime: number;
+  state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+  nextAttemptTime: number;
+}
+
+class DRPCCircuitBreaker {
+  private static instance: DRPCCircuitBreaker;
+  private circuitState: CircuitBreakerState = {
+    failureCount: 0,
+    lastFailureTime: 0,
+    state: 'CLOSED',
+    nextAttemptTime: 0
+  };
+  
+  private readonly maxFailures = 5;
+  private readonly cooldownPeriod = 60000;
+  private readonly timeout = 30000;
+
+  static getInstance(): DRPCCircuitBreaker {
+    if (!DRPCCircuitBreaker.instance) {
+      DRPCCircuitBreaker.instance = new DRPCCircuitBreaker();
+    }
+    return DRPCCircuitBreaker.instance;
+  }
+
+  private isCircuitOpen(): boolean {
+    if (this.circuitState.state === 'OPEN') {
+      if (Date.now() > this.circuitState.nextAttemptTime) {
+        this.circuitState.state = 'HALF_OPEN';
+        console.log('Circuit breaker moving to HALF_OPEN state');
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  private recordSuccess(): void {
+    this.circuitState.failureCount = 0;
+    this.circuitState.state = 'CLOSED';
+    if (this.circuitState.failureCount > 0) {
+      console.log('Circuit breaker reset to CLOSED state after successful request');
+    }
+  }
+
+  private recordFailure(): void {
+    this.circuitState.failureCount++;
+    this.circuitState.lastFailureTime = Date.now();
+    
+    if (this.circuitState.failureCount >= this.maxFailures) {
+      this.circuitState.state = 'OPEN';
+      this.circuitState.nextAttemptTime = Date.now() + this.cooldownPeriod;
+      console.warn(`🚨 DRPC Circuit breaker OPENED after ${this.maxFailures} failures. Cooling down for ${this.cooldownPeriod/1000}s`);
+    }
+  }
+
+  async makeRequest<T>(requestFn: () => Promise<T>, context: string): Promise<T> {
+    if (this.isCircuitOpen()) {
+      throw new Error(`DRPC Circuit breaker is OPEN. Service temporarily unavailable for ${context}. Try again in ${Math.ceil((this.circuitState.nextAttemptTime - Date.now()) / 1000)}s`);
+    }
+
+    const maxRetries = 4; // Increased retries
+    let lastError: any;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 DRPC Request attempt ${attempt}/${maxRetries} for ${context}`);
+        
+        const result = await requestFn();
+        this.recordSuccess();
+        console.log(`✅ DRPC Request successful for ${context}`);
+        return result;
+        
+      } catch (error: any) {
+        lastError = error;
+        
+        // Enhanced error classification
+        const is408Error = error.response?.status === 408 || error.code === 'ECONNABORTED';
+        const isNetworkError = error.code === 'ENOTFOUND' || 
+                              error.code === 'ECONNREFUSED' || 
+                              error.code === 'ECONNRESET' ||
+                              error.code === 'ETIMEDOUT';
+        const isTimeoutError = is408Error || 
+                              error.response?.status === 504 ||
+                              error.message?.includes('timeout') ||
+                              error.message?.includes('ETIMEDOUT') ||
+                              isNetworkError;
+        
+        const isRetryableError = isTimeoutError || 
+                               error.response?.status === 500 ||
+                               error.response?.status === 502 ||
+                               error.response?.status === 503 ||
+                               error.response?.status === 520 ||
+                               error.response?.status === 521 ||
+                               error.response?.status === 522 ||
+                               error.response?.status === 523 ||
+                               error.response?.status === 524;
+
+        // Special handling for different error types
+        if (is408Error) {
+          console.warn(`⏱️ 408 Timeout error for ${context} on attempt ${attempt}/${maxRetries}`);
+        } else if (isNetworkError) {
+          console.warn(`🌐 Network error (${error.code}) for ${context} on attempt ${attempt}/${maxRetries}`);
+        }
+
+        if (isRetryableError && attempt < maxRetries) {
+          // Longer backoff for timeout and network errors
+          const baseDelay = (is408Error || isNetworkError) ? 3000 : 1000;
+          const backoffDelay = Math.min(baseDelay * Math.pow(2, attempt - 1), 30000); // Max 30s for serious errors
+          const jitter = Math.random() * 1000; // Add jitter to prevent thundering herd
+          const waitTime = backoffDelay + jitter;
+          
+          const errorContext = is408Error ? 'Timeout detected.' : 
+                              isNetworkError ? 'Network issue detected.' : '';
+          
+          console.warn(`⚠️ DRPC Request failed for ${context} (attempt ${attempt}/${maxRetries}). ${errorContext} Retrying in ${Math.round(waitTime)}ms. Error: ${error.response?.status || error.code || error.message}`);
+          await delay(waitTime);
+          continue;
+        }
+
+        // Non-retryable error or max retries reached
+        console.error(`❌ DRPC Request failed permanently for ${context} after ${attempt} attempts:`, error.response?.status || error.code || error.message);
+        
+        // Only record failure for the circuit breaker if it's not a client-side error
+        if (!error.response || error.response.status >= 500 || isTimeoutError) {
+          this.recordFailure();
+        }
+        break;
+      }
+    }
+
+    throw lastError;
+  }
+
+  getAxiosConfig() {
+    return {
+      timeout: this.timeout,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // Add retry-specific axios configuration
+      validateStatus: (status: number) => {
+        // Don't throw for 4xx and 5xx errors, let our retry logic handle them
+        return status < 600;
+      }
+    };
+  }
+}
+
 // Type definitions
 interface TradeData {
   signature: string;
@@ -194,11 +346,18 @@ const checkRateLimit = async () => {
 export class HistoricalPriceService {
   private DRPC_API_URL = process.env.NEXT_PUBLIC_DRPC_API_URL
     || 'https://lb.drpc.org/ogrpc?network=solana&dkey=AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF';
+  private BACKUP_DRPC_URLS = [
+    'https://solana-mainnet.g.alchemy.com/v2/' + (process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || 'demo'),
+    'https://api.mainnet-beta.solana.com',
+    'https://rpc.ankr.com/solana'
+  ];
   private COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
   private JUPITER_TOKEN_API_BASE = 'https://lite-api.jup.ag/tokens/v1';
   private tokenAccountTracker = new TokenAccountTracker();
   private walletAddress: string = '';
   private scanStatusCallback?: (status: ScanStatus) => void;
+  private circuitBreaker = DRPCCircuitBreaker.getInstance();
+  private currentDRPCIndex = 0; // Track which DRPC endpoint we're using
 
   // Add scan status tracking
   private currentScanStatus: ScanStatus = {
@@ -206,14 +365,16 @@ export class HistoricalPriceService {
     processedSignatures: 0,
     uniqueTokens: 0,
     tradesFound: 0,
-    currentStep: '',
+    currentStep: 'Initializing...',
     isComplete: false
   };
 
   constructor() {
     if (process.env.NEXT_PUBLIC_DRPC_API_URL) {
       this.DRPC_API_URL = process.env.NEXT_PUBLIC_DRPC_API_URL;
+      console.log('🔧 Using custom DRPC API URL:', this.DRPC_API_URL);
     }
+    console.log('🚀 HistoricalPriceService initialized with enhanced timeout handling');
   }
 
   /**
@@ -245,12 +406,14 @@ export class HistoricalPriceService {
       }
 
       // Check if wallet exists on chain
-      const response = await axios.post(this.DRPC_API_URL, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [walletAddress]
-      });
+      const response = await this.circuitBreaker.makeRequest(async () => {
+        return await axios.post(this.DRPC_API_URL, {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getAccountInfo',
+          params: [walletAddress]
+        }, this.circuitBreaker.getAxiosConfig());
+      }, `validateWallet for ${walletAddress.slice(0, 8)}...`);
 
       const data = response.data as { error?: any; result?: any };
       if (data.error) {
@@ -618,33 +781,44 @@ export class HistoricalPriceService {
 
       console.log(`\n🔍 Deep scanning account: ${account}`);
 
-      // Get token accounts for this wallet
-      const response = await axios.post(this.DRPC_API_URL, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTokenAccountsByOwner',
-        params: [
-          account,
-          { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-          { encoding: 'jsonParsed' }
-        ]
-      });
+      try {
+        // Get token accounts for this wallet
+        const response = await this.circuitBreaker.makeRequest(async () => {
+          return await axios.post(this.DRPC_API_URL, {
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getTokenAccountsByOwner',
+            params: [
+              account,
+              { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+              { encoding: 'jsonParsed' }
+            ]
+          }, this.circuitBreaker.getAxiosConfig());
+        }, `getTokenAccountsByOwner for ${account.slice(0, 8)}...`);
 
-      if ((response.data as any)?.error) {
-        console.error('Error fetching token accounts:', (response.data as any).error);
-        continue;
-      }
-
-      const tokenAccounts = (response.data as any)?.result?.value || [];
-      console.log(`   Found ${tokenAccounts.length} token accounts`);
-
-      // Add each token account to discovered ATAs
-      for (const tokenAccount of tokenAccounts) {
-        const pubkey = tokenAccount.pubkey;
-        if (!discoveredATAs.has(pubkey)) {
-          discoveredATAs.add(pubkey);
-          console.log(`   📝 Found new ATA: ${pubkey}`);
+        if ((response.data as any)?.error) {
+          console.error('Error fetching token accounts:', (response.data as any).error);
+          continue;
         }
+
+        const tokenAccounts = (response.data as any)?.result?.value || [];
+        console.log(`   Found ${tokenAccounts.length} token accounts`);
+
+        // Add each token account to discovered ATAs
+        for (const tokenAccount of tokenAccounts) {
+          const pubkey = tokenAccount.pubkey;
+          if (!discoveredATAs.has(pubkey)) {
+            discoveredATAs.add(pubkey);
+            console.log(`   📝 Found new ATA: ${pubkey}`);
+          }
+        }
+      } catch (error) {
+        console.error(`Error scanning account ${account}:`, error);
+        // If circuit breaker is open, we should stop trying
+        if ((error as Error).message?.includes('Circuit breaker is OPEN')) {
+          throw error;
+        }
+        continue;
       }
     }
 
@@ -682,12 +856,14 @@ export class HistoricalPriceService {
       }
 
       try {
-        const response = await axios.post(this.DRPC_API_URL, {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getSignaturesForAddress',
-          params: params
-        });
+        const response = await this.circuitBreaker.makeRequest(async () => {
+          return await axios.post(this.DRPC_API_URL, {
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getSignaturesForAddress',
+            params: params
+          }, this.circuitBreaker.getAxiosConfig());
+        }, `getSignaturesForAddress for ${account.slice(0, 8)}...`);
 
         const data = response.data as DRPCResponse;
 
@@ -753,11 +929,15 @@ export class HistoricalPriceService {
           keepPaging = false;
         } else {
           beforeSignature = signatures[signatures.length - 1].signature;
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await delay(100); // Small delay between requests
         }
 
       } catch (error) {
-        console.error(`Error fetching signatures:`, error);
+        console.error(`Error fetching signatures for ${account}:`, error);
+        // If circuit breaker is open, we should stop trying
+        if ((error as Error).message?.includes('Circuit breaker is OPEN')) {
+          throw error;
+        }
         break;
       }
     }
@@ -769,42 +949,46 @@ export class HistoricalPriceService {
     try {
       console.log(`Fetching transaction ${signature}`);
 
-      const resp = await axios.post(this.DRPC_API_URL, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTransaction',
-        params: [
-          signature,
-          { 
-            encoding: 'jsonParsed', 
-            commitment: 'confirmed',
-            maxSupportedTransactionVersion: 0
-          }
-        ]
-      });
+      const response = await this.circuitBreaker.makeRequest(async () => {
+        return await axios.post(this.DRPC_API_URL, {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTransaction',
+          params: [
+            signature,
+            { 
+              encoding: 'jsonParsed', 
+              commitment: 'confirmed',
+              maxSupportedTransactionVersion: 0
+            }
+          ]
+        }, this.circuitBreaker.getAxiosConfig());
+      }, `getTransaction for ${signature.slice(0, 8)}...`);
 
-      const data = resp.data as { error?: any; result?: any };
+      const data = response.data as { error?: any; result?: any };
 
       if (data.error) {
         console.error('DRPC Error:', data.error);
         // If we get a 500 error, try again with a different encoding
         if (data.error.code === -32603) {
           console.log('Retrying with base64 encoding...');
-          const retryResp = await axios.post(this.DRPC_API_URL, {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getTransaction',
-            params: [
-              signature,
-              { 
-                encoding: 'base64', 
-                commitment: 'confirmed',
-                maxSupportedTransactionVersion: 0
-              }
-            ]
-          });
+          const retryResponse = await this.circuitBreaker.makeRequest(async () => {
+            return await axios.post(this.DRPC_API_URL, {
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getTransaction',
+              params: [
+                signature,
+                { 
+                  encoding: 'base64', 
+                  commitment: 'confirmed',
+                  maxSupportedTransactionVersion: 0
+                }
+              ]
+            }, this.circuitBreaker.getAxiosConfig());
+          }, `getTransaction retry for ${signature.slice(0, 8)}...`);
 
-          const retryData = retryResp.data as { error?: any; result?: any };
+          const retryData = retryResponse.data as { error?: any; result?: any };
           if (retryData.error) {
             throw new Error(`DRPC Error: ${JSON.stringify(retryData.error)}`);
           }
@@ -821,36 +1005,8 @@ export class HistoricalPriceService {
       return data.result;
     } catch (error) {
       console.error(`Error fetching transaction ${signature}:`, error);
-      // If we get a 500 error, wait a bit and try one more time
-      const axiosError = error as AxiosError;
-      if (axiosError.response?.status === 500) {
-        console.log('Got 500 error, waiting 1 second before retry...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        try {
-          const retryResp = await axios.post(this.DRPC_API_URL, {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getTransaction',
-            params: [
-              signature,
-              { 
-                encoding: 'base64', 
-                commitment: 'confirmed',
-                maxSupportedTransactionVersion: 0
-              }
-            ]
-          });
-
-          const retryData = retryResp.data as { error?: any; result?: any };
-          if (retryData.error) {
-            throw new Error(`DRPC Error: ${JSON.stringify(retryData.error)}`);
-          }
-          return retryData.result;
-        } catch (retryError) {
-          console.error(`Retry failed for transaction ${signature}:`, retryError);
-          throw retryError;
-        }
-      }
+      
+      // Remove the old retry logic since circuit breaker handles retries
       throw error;
     }
   }
@@ -1086,12 +1242,14 @@ export class HistoricalPriceService {
           }
 
           try {
-            const response = await axios.post(this.DRPC_API_URL, {
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getSignaturesForAddress',
-              params: params
-            });
+            const response = await this.circuitBreaker.makeRequest(async () => {
+              return await axios.post(this.DRPC_API_URL, {
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getSignaturesForAddress',
+                params: params
+              }, this.circuitBreaker.getAxiosConfig());
+            }, `getSignaturesForAddress historical for ${account.slice(0, 8)}...`);
 
             const data = response.data as DRPCResponse;
 
@@ -1228,16 +1386,18 @@ export class HistoricalPriceService {
    */
   private async getTokenAccountsForMint(walletAddress: string, tokenMint: string): Promise<string[]> {
     try {
-      const response = await axios.post(this.DRPC_API_URL, {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTokenAccountsByOwner',
-        params: [
-          walletAddress,
-          { mint: tokenMint },
-          { encoding: 'jsonParsed' }
-        ]
-      });
+      const response = await this.circuitBreaker.makeRequest(async () => {
+        return await axios.post(this.DRPC_API_URL, {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTokenAccountsByOwner',
+          params: [
+            walletAddress,
+            { mint: tokenMint },
+            { encoding: 'jsonParsed' }
+          ]
+        }, this.circuitBreaker.getAxiosConfig());
+      }, `getTokenAccountsByOwner for ${walletAddress.slice(0, 8)}... and ${tokenMint.slice(0, 8)}...`);
 
       if ((response.data as any)?.error) {
         console.error('Error fetching token accounts:', (response.data as any).error);
@@ -1467,7 +1627,8 @@ export class HistoricalPriceService {
         updated_at: new Date().toISOString(),
         starred: isStarred, // Set based on existing starred status
         notes: null,
-        tags: null
+        tags: null,
+        total_supply: null // Adding total_supply field with null default value
       };
 
       // Check if this trade already exists in the database
@@ -1596,6 +1757,55 @@ export class HistoricalPriceService {
     } catch (error) {
       console.error('❌ Error storing all trades:', error);
       return false;
+    }
+  }
+
+  /**
+   * Enhanced DRPC request wrapper with automatic backup switching
+   */
+  private async makeDRPCRequest<T>(requestData: any, context: string): Promise<T> {
+    try {
+      const response = await this.circuitBreaker.makeRequest(async () => {
+        return await axios.post(this.DRPC_API_URL, requestData, this.circuitBreaker.getAxiosConfig());
+      }, context);
+      return response as T;
+    } catch (error: any) {
+      // If circuit breaker fails or we get repeated 408s, try switching to backup
+      const is408Error = error.response?.status === 408 || error.code === 'ECONNABORTED';
+      const isCircuitOpen = error.message?.includes('Circuit breaker is OPEN');
+      
+      if (is408Error || isCircuitOpen) {
+        console.warn(`🔄 ${isCircuitOpen ? 'Circuit breaker is open' : '408 timeout error'}, attempting backup endpoint for ${context}`);
+        this.switchToBackupDRPC();
+        
+        // Single retry with new endpoint
+        try {
+          const backupResponse = await this.circuitBreaker.makeRequest(async () => {
+            return await axios.post(this.DRPC_API_URL, requestData, this.circuitBreaker.getAxiosConfig());
+          }, context + ' (backup)');
+          return backupResponse as T;
+        } catch (backupError: any) {
+          console.error(`❌ Backup endpoint also failed for ${context}:`, backupError.response?.status || backupError.code || backupError.message);
+          throw backupError;
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Try the next available DRPC endpoint if the current one is failing
+   */
+  private switchToBackupDRPC(): void {
+    if (this.currentDRPCIndex < this.BACKUP_DRPC_URLS.length) {
+      this.DRPC_API_URL = this.BACKUP_DRPC_URLS[this.currentDRPCIndex];
+      this.currentDRPCIndex++;
+      console.log(`🔄 Switching to backup DRPC endpoint: ${this.DRPC_API_URL}`);
+    } else {
+      console.warn('⚠️ All DRPC endpoints exhausted, resetting to primary');
+      this.currentDRPCIndex = 0;
+      this.DRPC_API_URL = process.env.NEXT_PUBLIC_DRPC_API_URL
+        || 'https://lb.drpc.org/ogrpc?network=solana&dkey=AkOKnudhf0RpkMOvshGdMo5E0I1BNf0R8KgybrRhIxXF';
     }
   }
 }
