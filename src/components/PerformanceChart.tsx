@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { PerformanceDataPoint } from '../services/performanceService';
 
 interface PerformanceChartProps {
@@ -13,22 +13,49 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   const chartId = React.useId();
   const [hoveredPointIndex, setHoveredPointIndex] = React.useState<number | null>(null);
   const [hoveredPoint, setHoveredPoint] = React.useState<PerformanceDataPoint | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [svgWidth, setSvgWidth] = useState(400);
+  const [svgHeight, setSvgHeight] = useState(160);
 
-  const { pathData, minValue, maxValue, isPositive } = useMemo(() => {
+  // Update SVG dimensions when the component mounts or window resizes
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        setSvgWidth(rect.width);
+        setSvgHeight(rect.height);
+      }
+    };
+
+    // Initial update
+    updateDimensions();
+
+    // Add resize listener
+    window.addEventListener('resize', updateDimensions);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+    };
+  }, []);
+
+  const { pathData, minValue, maxValue, isPositive, chartPadding, zeroY } = useMemo(() => {
     if (!dataPoints || dataPoints.length === 0) {
-      return { pathData: '', minValue: 0, maxValue: 0, isPositive: true };
+      return { pathData: '', minValue: 0, maxValue: 0, isPositive: true, chartPadding: 15, zeroY: 0 };
     }
 
     const values = dataPoints.map(point => point.cumulativePnL);
-    const minVal = Math.min(...values);
-    const maxVal = Math.max(...values);
+    const minVal = Math.min(...values, 0); // Ensure we include 0 in the range
+    const maxVal = Math.max(...values, 0); // Ensure we include 0 in the range
     const range = maxVal - minVal || 1; // Avoid division by zero
     const isPos = values[values.length - 1] >= values[0];
 
     // Create SVG path data
-    const width = 400;
-    const height = 160; // Increased height
     const padding = 15;
+
+    // Use actual SVG dimensions for calculations
+    const width = svgWidth || 400;
+    const height = svgHeight || 160;
 
     const points = dataPoints.map((point, index) => {
       const x = padding + (index / (dataPoints.length - 1)) * (width - 2 * padding);
@@ -39,16 +66,25 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
 
     const pathData = `M ${points.join(' L ')}`;
 
+    // Calculate the y-coordinate for the zero line
+    const zeroNormalized = (0 - minVal) / range;
+    const zeroYCoord = height - padding - zeroNormalized * (height - 2 * padding);
+
     return {
       pathData,
       minValue: minVal,
       maxValue: maxVal,
-      isPositive: isPos
+      isPositive: isPos,
+      chartPadding: padding,
+      zeroY: zeroYCoord
     };
-  }, [dataPoints]);
+  }, [dataPoints, svgWidth, svgHeight]);
 
-  const strokeColor = isPositive ? '#10B981' : '#EF4444'; // Green for positive, red for negative
-  const fillColor = isPositive ? '#10B98125' : '#EF444425'; // Semi-transparent fill
+  // Define colors for positive and negative values
+  const positiveColor = '#10B981'; // Green for positive
+  const negativeColor = '#EF4444'; // Red for negative
+  const positiveFillColor = '#10B98125'; // Semi-transparent green
+  const negativeFillColor = '#EF444425'; // Semi-transparent red
 
   if (!dataPoints || dataPoints.length === 0) {
     return (
@@ -78,11 +114,11 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           <div className={`text-lg font-bold ${
             hoveredPointIndex !== null 
               ? (dataPoints[hoveredPointIndex].cumulativePnL >= 0 ? 'text-green-400' : 'text-red-400')
-              : (isPositive ? 'text-green-400' : 'text-red-400')
+              : (dataPoints[dataPoints.length - 1]?.cumulativePnL >= 0 ? 'text-green-400' : 'text-red-400')
           }`}>
             {hoveredPointIndex !== null 
               ? `${dataPoints[hoveredPointIndex].cumulativePnL >= 0 ? '+' : ''}$${dataPoints[hoveredPointIndex].cumulativePnL.toFixed(2)}`
-              : `${isPositive ? '+' : ''}$${dataPoints[dataPoints.length - 1]?.cumulativePnL.toFixed(2) || '0.00'}`
+              : `${dataPoints[dataPoints.length - 1]?.cumulativePnL >= 0 ? '+' : ''}$${dataPoints[dataPoints.length - 1]?.cumulativePnL.toFixed(2) || '0.00'}`
             }
           </div>
           <div className="text-xs text-gray-500">
@@ -93,38 +129,71 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           </div>
         </div>
       </div>
-      
+
       <div className="relative bg-[#141414] rounded-lg border border-gray-700/50 p-3">
         <svg 
+          ref={svgRef}
           width="100%" 
           height="160" 
-          viewBox="0 0 400 160" 
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
           className="overflow-visible"
+          preserveAspectRatio="none"
           onMouseMove={(e) => {
             if (dataPoints.length === 0) return;
-            
+
             const svg = e.currentTarget;
             const rect = svg.getBoundingClientRect();
-            
+
             // Get actual mouse coordinates relative to SVG
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-            
+
             // Convert screen coordinates to viewBox coordinates
-            // Screen width maps to viewBox width (400), screen height maps to viewBox height (160)
-            const viewBoxX = (mouseX / rect.width) * 400;
-            const viewBoxY = (mouseY / rect.height) * 160;
-            
+            // Use the actual SVG dimensions for accurate conversion
+            const viewBoxX = (mouseX / rect.width) * svgWidth;
+            const viewBoxY = (mouseY / rect.height) * svgHeight;
+
+            // Check if mouse is directly over any data point pin
+            // This will take precedence over the general chart area hover
+            let foundPointIndex = null;
+
+            // Loop through data points to find if mouse is over any pin
+            for (let i = 0; i < dataPoints.length; i++) {
+              const x = chartPadding + (i / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding);
+              const normalizedValue = (dataPoints[i].cumulativePnL - minValue) / (maxValue - minValue || 1);
+              const y = (svgHeight - chartPadding) - normalizedValue * (svgHeight - 2 * chartPadding);
+
+              // Calculate distance from mouse to pin center
+              const distance = Math.sqrt(Math.pow(viewBoxX - x, 2) + Math.pow(viewBoxY - y, 2));
+
+              // If distance is less than pin radius plus some margin for easier hovering
+              // Pin radius is 3-4px, we'll use 10px for easier hovering
+              if (distance <= 10) {
+                foundPointIndex = i;
+                break;
+              }
+            }
+
+            // If mouse is over a pin, use that point
+            if (foundPointIndex !== null) {
+              if (foundPointIndex !== hoveredPointIndex) {
+                setHoveredPointIndex(foundPointIndex);
+                setHoveredPoint(dataPoints[foundPointIndex]);
+              }
+              return;
+            }
+
+            // Otherwise, use the general chart area hover logic
             // Only show hover if mouse is within the chart area (accounting for padding)
-            const chartPadding = 20;
-            if (viewBoxX >= chartPadding && viewBoxX <= (400 - chartPadding) && 
-                viewBoxY >= chartPadding && viewBoxY <= (160 - chartPadding)) {
-              
+            const hoverPadding = 20; // Slightly larger padding for hover area
+            if (viewBoxX >= hoverPadding && viewBoxX <= (svgWidth - hoverPadding) && 
+                viewBoxY >= hoverPadding && viewBoxY <= (svgHeight - hoverPadding)) {
+
               // Map viewBox X coordinate to data point index
-              const chartWidth = 400 - (2 * chartPadding);
-              const dataIndex = Math.round(((viewBoxX - chartPadding) / chartWidth) * (dataPoints.length - 1));
+              const chartWidth = svgWidth - (2 * hoverPadding);
+              const dataIndex = Math.round(((viewBoxX - hoverPadding) / chartWidth) * (dataPoints.length - 1));
               const clampedIndex = Math.max(0, Math.min(dataPoints.length - 1, dataIndex));
-              
+
               if (clampedIndex !== hoveredPointIndex) {
                 setHoveredPointIndex(clampedIndex);
                 setHoveredPoint(dataPoints[clampedIndex]);
@@ -159,63 +228,149 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
               />
             </pattern>
           </defs>
-          
+
           <rect 
             width="100%" 
             height="100%" 
             fill={`url(#grid-${chartId})`}
             rx="4"
           />
-          
-          {/* Area fill */}
-          {pathData && (
-            <path
-              d={`${pathData} L 385,145 L 15,145 Z`}
-              fill={fillColor}
-              stroke="none"
+
+          {/* Zero line */}
+          {minValue < 0 && maxValue > 0 && (
+            <line
+              x1={chartPadding}
+              y1={zeroY}
+              x2={svgWidth - chartPadding}
+              y2={zeroY}
+              stroke="#6B7280"
+              strokeWidth="1"
+              strokeDasharray="2,2"
+              className="opacity-70"
             />
           )}
-          
-          {/* Line */}
-          {pathData && (
-            <path
-              d={pathData}
-              fill="none"
-              stroke={strokeColor}
-              strokeWidth="2.5"
-              className="drop-shadow-sm"
-              style={{
-                filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))'
-              }}
+
+          {/* Area fills - separate for positive and negative values */}
+          {dataPoints.length > 0 && (
+            <>
+              {/* Positive area fill (above zero) */}
+              <path
+                d={`
+                  ${dataPoints.map((point, index) => {
+                    const x = chartPadding + (index / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding);
+                    const normalizedValue = (point.cumulativePnL - minValue) / (maxValue - minValue || 1);
+                    const y = (svgHeight - chartPadding) - normalizedValue * (svgHeight - 2 * chartPadding);
+                    // Use the minimum of the point's y-coordinate and the zero line
+                    const clippedY = Math.min(y, zeroY);
+                    return `${index === 0 ? 'M' : 'L'} ${x},${clippedY}`;
+                  }).join(' ')}
+                  L ${svgWidth - chartPadding},${zeroY}
+                  L ${chartPadding},${zeroY}
+                  Z
+                `}
+                fill={positiveFillColor}
+                stroke="none"
+              />
+
+              {/* Negative area fill (below zero) */}
+              <path
+                d={`
+                  ${dataPoints.map((point, index) => {
+                    const x = chartPadding + (index / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding);
+                    const normalizedValue = (point.cumulativePnL - minValue) / (maxValue - minValue || 1);
+                    const y = (svgHeight - chartPadding) - normalizedValue * (svgHeight - 2 * chartPadding);
+                    // Use the maximum of the point's y-coordinate and the zero line
+                    const clippedY = Math.max(y, zeroY);
+                    return `${index === 0 ? 'M' : 'L'} ${x},${clippedY}`;
+                  }).join(' ')}
+                  L ${svgWidth - chartPadding},${zeroY}
+                  L ${chartPadding},${zeroY}
+                  Z
+                `}
+                fill={negativeFillColor}
+                stroke="none"
+              />
+            </>
+          )}
+
+          {/* Line segments */}
+          {dataPoints.length > 1 && dataPoints.map((point, index) => {
+            if (index === 0) return null; // Skip first point as we need pairs
+
+            const prevPoint = dataPoints[index - 1];
+            const x1 = chartPadding + ((index - 1) / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding);
+            const x2 = chartPadding + (index / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding);
+
+            const normalizedValue1 = (prevPoint.cumulativePnL - minValue) / (maxValue - minValue || 1);
+            const normalizedValue2 = (point.cumulativePnL - minValue) / (maxValue - minValue || 1);
+
+            const y1 = (svgHeight - chartPadding) - normalizedValue1 * (svgHeight - 2 * chartPadding);
+            const y2 = (svgHeight - chartPadding) - normalizedValue2 * (svgHeight - 2 * chartPadding);
+
+            // Determine color based on whether both points are above or below zero
+            const color = (prevPoint.cumulativePnL >= 0 && point.cumulativePnL >= 0) ? positiveColor :
+                         (prevPoint.cumulativePnL < 0 && point.cumulativePnL < 0) ? negativeColor :
+                         // If crossing zero, use the color of the end point
+                         (point.cumulativePnL >= 0) ? positiveColor : negativeColor;
+
+            return (
+              <line
+                key={`line-${index}`}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={color}
+                strokeWidth="2.5"
+                className="drop-shadow-sm"
+                style={{
+                  filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))'
+                }}
+              />
+            );
+          })}
+
+          {/* Hover line */}
+          {hoveredPointIndex !== null && (
+            <line
+              x1={chartPadding + (hoveredPointIndex / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding)}
+              y1={chartPadding}
+              x2={chartPadding + (hoveredPointIndex / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding)}
+              y2={svgHeight - chartPadding}
+              stroke="#6B7280"
+              strokeWidth="1"
+              strokeDasharray="3,3"
+              className="opacity-70"
             />
           )}
-          
+
           {/* Data points */}
           {dataPoints.map((point, index) => {
-            const x = 15 + (index / (dataPoints.length - 1)) * 370;
+            const x = chartPadding + (index / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding);
             const normalizedValue = (point.cumulativePnL - minValue) / (maxValue - minValue || 1);
-            const y = 145 - normalizedValue * 130;
-            
+            const y = (svgHeight - chartPadding) - normalizedValue * (svgHeight - 2 * chartPadding);
+
             return (
               <g key={index}>
                 <circle
                   cx={x}
                   cy={y}
-                  r={hoveredPointIndex === index ? "4" : "3"}
-                  fill={strokeColor}
+                  r={hoveredPointIndex === index ? "5" : "3"}
+                  fill={point.cumulativePnL >= 0 ? positiveColor : negativeColor}
                   className={`${hoveredPointIndex === index ? 'opacity-100' : 'opacity-90'} drop-shadow-sm transition-all duration-200`}
                   stroke="#000"
                   strokeWidth="0.5"
+                  style={{ cursor: 'pointer' }}
                 />
-                
+
                 {/* Hover tooltip */}
                 {hoveredPointIndex === index && (
                   <g>
                     <rect
                       x={x - 45}
-                      y={y - 35}
+                      y={y - 40}
                       width="90"
-                      height="25"
+                      height="30"
                       fill="#1f2937"
                       stroke="#374151"
                       strokeWidth="1"
@@ -224,11 +379,19 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                     />
                     <text
                       x={x}
-                      y={y - 15}
+                      y={y - 25}
                       textAnchor="middle"
                       className="fill-white text-xs font-medium"
                     >
                       ${point.cumulativePnL.toFixed(2)}
+                    </text>
+                    <text
+                      x={x}
+                      y={y - 15}
+                      textAnchor="middle"
+                      className="fill-gray-400 text-[10px]"
+                    >
+                      {new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </text>
                   </g>
                 )}
