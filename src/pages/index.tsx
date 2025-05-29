@@ -489,11 +489,11 @@ export default function Home() {
                   <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
                     <h3 className="text-2xl font-bold text-white mb-4">Add Your Wallet</h3>
                     <p className="text-gray-300 mb-6">
-                      Securely link your Solana wallets using read-only access. We never see your private keys or have access to your funds.
+                    Simply add your Solana wallet address for read-only tracking. We don’t store your private keys and you don't even need to connect a wallet.
                     </p>
                     <div className="flex items-center justify-center space-x-2">
                       <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                      <span className="text-sm text-green-400 font-medium">100% Self-Custodial</span>
+                      <span className="text-sm text-green-400 font-medium">100% Self-Managed</span>
                     </div>
                   </div>
                 </div>

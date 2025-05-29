@@ -150,7 +150,7 @@ const PrivacyPolicy = () => {
                 If you have any questions about this Privacy Policy, please contact us at:
               </p>
               <p className="mt-2">
-                <a href="mailto:support@ryvu.xyz" className="text-indigo-400 hover:text-indigo-300 transition">support@ryvu.xyz</a>
+                <a href="mailto:ryvujournal@gmail.com" className="text-indigo-400 hover:text-indigo-300 transition">ryvujournal@gmail.com</a>
               </p>
 
               <p>The terms &quot;Personal Data&quot;, &quot;Data Subject&quot;, &quot;Controller&quot;, and &quot;Processor&quot; have the meanings given in the GDPR.</p>
