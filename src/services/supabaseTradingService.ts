@@ -40,6 +40,8 @@ export interface TradeLogEntry {
   profitLoss: number;
   timestamp: number;
   starred: boolean;
+  remainingBalance: number;
+  estimatedValue: number;
 }
 
 export interface ProcessedTrade {
@@ -64,6 +66,51 @@ class SupabaseTradingService {
   // Cache for token prices to avoid multiple API calls for the same token
   private tokenPriceCache: Map<string, { price: number, timestamp: number }> = new Map();
   private CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  /**
+   * Deduplicate trades based on signature
+   * @param trades The trades to deduplicate
+   * @returns An array of unique trades
+   */
+  private deduplicateTrades(trades: any[]): any[] {
+    console.log('🔄 Starting deduplication process...');
+
+    // First, let's see what the signature field looks like
+    const sampleTrade = trades[0];
+    if (sampleTrade) {
+      console.log('🔍 Sample trade signature field:', sampleTrade.signature);
+      console.log('🔍 Sample trade keys:', Object.keys(sampleTrade));
+    }
+
+    // Use a Map to keep only the first occurrence of each signature
+    const uniqueTradesMap = new Map();
+    let tradesWithSignature = 0;
+    let tradesWithoutSignature = 0;
+
+    for (const trade of trades) {
+      // Check if signature exists and is not null/empty
+      if (trade.signature && trade.signature !== null && trade.signature !== '') {
+        tradesWithSignature++;
+        if (!uniqueTradesMap.has(trade.signature)) {
+          uniqueTradesMap.set(trade.signature, trade);
+        }
+      } else {
+        tradesWithoutSignature++;
+        // For trades without signature, create a unique key using other fields
+        const uniqueKey = `${trade.token_address}_${trade.timestamp}_${trade.type}_${trade.amount}_${trade.value_usd}`;
+        if (!uniqueTradesMap.has(uniqueKey)) {
+          uniqueTradesMap.set(uniqueKey, trade);
+        }
+      }
+    }
+
+    console.log('📊 Deduplication stats:');
+    console.log('  - Trades with signature:', tradesWithSignature);
+    console.log('  - Trades without signature:', tradesWithoutSignature);
+    console.log('  - Unique trades after deduplication:', uniqueTradesMap.size);
+
+    return Array.from(uniqueTradesMap.values());
+  }
 
   /**
    * Get the current price of a token, using cache if available
@@ -100,6 +147,8 @@ class SupabaseTradingService {
    */
   async getOpenTrades(walletId: string): Promise<TokenHolding[]> {
     try {
+      console.log('🔍 getOpenTrades - Fetching trades for wallet:', walletId);
+
       // Fetch all trades for the wallet
       const { data, error } = await supabase
         .from('trading_history')
@@ -107,18 +156,25 @@ class SupabaseTradingService {
         .eq('wallet_id', walletId);
 
       if (error) {
-        console.error('Error fetching trades:', error);
+        console.error('❌ Error fetching trades:', error);
         throw error;
       }
 
+      console.log('📊 Raw data fetched:', data?.length || 0, 'records');
+
       if (!data || data.length === 0) {
+        console.log('⚠️ No data found for wallet');
         return [];
       }
+
+      // Deduplicate trades based on signature
+      const uniqueTrades = this.deduplicateTrades(data);
+      console.log('🔄 After deduplication:', uniqueTrades.length, 'unique trades');
 
       // Group trades by token
       const tokenMap = new Map<string, TokenHolding>();
 
-      for (const trade of data) {
+      for (const trade of uniqueTrades) {
         const key = trade.token_address;
 
         if (!tokenMap.has(key)) {
@@ -152,6 +208,8 @@ class SupabaseTradingService {
         }
       }
 
+      console.log('📋 Grouped by token:', tokenMap.size, 'unique tokens');
+
       // Calculate net positions and filter for open positions
       const openPositions: TokenHolding[] = [];
 
@@ -159,39 +217,59 @@ class SupabaseTradingService {
       for (const holding of tokenMap.values()) {
         holding.netPosition = holding.totalBought - holding.totalSold;
 
-        // Only include if there's a remaining position (threshold for dust)
-        if (Math.abs(holding.netPosition) > 0.001) {
+        console.log(`💰 ${holding.tokenSymbol}: bought=${holding.totalBought}, sold=${holding.totalSold}, net=${holding.netPosition}`);
+
+        // Reduce threshold to 0.000001 to include more positions and add value threshold
+        if (Math.abs(holding.netPosition) > 0.000001) {
           // Get the most recent trade for this token to get the historical price
-          const mostRecentTrade = data
+          const mostRecentTrade = uniqueTrades
             .filter(trade => trade.token_address === holding.tokenAddress)
             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
 
           // Get the historical price from the most recent trade
           const historicalPriceUSD = mostRecentTrade?.price_usd || 0;
 
-          // Get the current price from Jupiter API
-          const currentPriceUSD = await this.getCurrentTokenPrice(holding.tokenAddress);
+          try {
+            // Get the current price from Jupiter API
+            const currentPriceUSD = await this.getCurrentTokenPrice(holding.tokenAddress);
 
-          // Calculate the current value of the position
-          const currentValue = Math.abs(holding.netPosition) * currentPriceUSD;
-          holding.totalValue = currentValue;
+            // Calculate the current value of the position
+            const currentValue = Math.abs(holding.netPosition) * currentPriceUSD;
+            holding.totalValue = currentValue;
 
-          // Calculate the unrealized P/L
-          // This is (current value - cost basis)
-          // Cost basis is (totalBought * historicalPriceUSD - totalSold * historicalPriceUSD)
-          const costBasis = (holding.totalBought - holding.totalSold) * historicalPriceUSD;
-          const unrealizedPL = currentValue - costBasis;
+            // Calculate the unrealized P/L
+            // This is (current value - cost basis)
+            // Cost basis is (totalBought * historicalPriceUSD - totalSold * historicalPriceUSD)
+            const costBasis = (holding.totalBought - holding.totalSold) * historicalPriceUSD;
+            const unrealizedPL = currentValue - costBasis;
 
-          // Add the unrealized P/L to the existing P/L
-          holding.profitLoss = unrealizedPL;
+            // Add the unrealized P/L to the existing P/L
+            holding.profitLoss = unrealizedPL;
 
-          openPositions.push(holding);
+            console.log(`💎 ${holding.tokenSymbol}: currentPrice=$${currentPriceUSD}, value=$${currentValue}, P/L=$${unrealizedPL}`);
+
+            // Only filter out if value is less than $0.01 (1 cent)
+            if (currentValue >= 0.01) {
+              openPositions.push(holding);
+            } else {
+              console.log(`🚫 Filtered out ${holding.tokenSymbol} - value too low: $${currentValue}`);
+            }
+          } catch (priceError) {
+            console.error(`❌ Error getting price for ${holding.tokenSymbol}:`, priceError);
+            // Still add the position even if we can't get the price
+            holding.totalValue = 0;
+            holding.profitLoss = holding.profitLoss; // Keep the realized P/L
+            openPositions.push(holding);
+          }
+        } else {
+          console.log(`🚫 Filtered out ${holding.tokenSymbol} - net position too small: ${holding.netPosition}`);
         }
       }
 
+      console.log('✅ Final open positions:', openPositions.length);
       return openPositions.sort((a, b) => b.totalValue - a.totalValue);
     } catch (error) {
-      console.error('Error in getOpenTrades:', error);
+      console.error('❌ Error in getOpenTrades:', error);
       throw error;
     }
   }
@@ -203,6 +281,8 @@ class SupabaseTradingService {
    */
   async getTopTrades(walletId: string): Promise<TopTradeData[]> {
     try {
+      console.log('🔍 getTopTrades - Fetching trades for wallet:', walletId);
+
       // Fetch all trades for the wallet
       const { data, error } = await supabase
         .from('trading_history')
@@ -210,18 +290,25 @@ class SupabaseTradingService {
         .eq('wallet_id', walletId);
 
       if (error) {
-        console.error('Error fetching trades:', error);
+        console.error('❌ Error fetching trades:', error);
         throw error;
       }
 
+      console.log('📊 Raw data fetched:', data?.length || 0, 'records');
+
       if (!data || data.length === 0) {
+        console.log('⚠️ No data found for wallet');
         return [];
       }
+
+      // Deduplicate trades based on signature
+      const uniqueTrades = this.deduplicateTrades(data);
+      console.log('🔄 After deduplication:', uniqueTrades.length, 'unique trades');
 
       // Group trades by token
       const tokenPerformance = new Map<string, TopTradeData>();
 
-      for (const trade of data) {
+      for (const trade of uniqueTrades) {
         const key = trade.token_address;
 
         if (!tokenPerformance.has(key)) {
@@ -254,14 +341,19 @@ class SupabaseTradingService {
         }
       }
 
+      console.log('📋 Grouped by token:', tokenPerformance.size, 'unique tokens');
+
       // Calculate durations and filter completed trades
       const completedTrades: TopTradeData[] = [];
 
       for (const [tokenAddress, performance] of tokenPerformance.entries()) {
-        // Only include if both bought and sold (completed trade)
-        if (performance.totalBought > 0 && performance.totalSold > 0) {
+        console.log(`💰 ${performance.tokenSymbol}: bought=${performance.totalBought}, sold=${performance.totalSold}, P/L=$${performance.profitLoss}`);
+
+        // Include trades where user has at least partially sold OR if the trade is profitable
+        // This makes it more lenient than requiring both bought and sold
+        if (performance.totalBought > 0 && (performance.totalSold > 0 || Math.abs(performance.profitLoss) > 0.01)) {
           // Calculate duration
-          const tokenTrades = data
+          const tokenTrades = uniqueTrades
             .filter(trade => trade.token_address === tokenAddress)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
@@ -277,15 +369,21 @@ class SupabaseTradingService {
             if (days > 0) performance.duration = `${days}d`;
             else if (hours > 0) performance.duration = `${hours}h`;
             else performance.duration = `${minutes}m`;
+          } else {
+            performance.duration = '1m'; // Default for single trades
           }
 
+          console.log(`✅ Including ${performance.tokenSymbol} in top trades`);
           completedTrades.push(performance);
+        } else {
+          console.log(`🚫 Filtered out ${performance.tokenSymbol} - not enough trading activity`);
         }
       }
 
+      console.log('✅ Final top trades:', completedTrades.length);
       return completedTrades.sort((a, b) => b.profitLoss - a.profitLoss);
     } catch (error) {
-      console.error('Error in getTopTrades:', error);
+      console.error('❌ Error in getTopTrades:', error);
       throw error;
     }
   }
@@ -297,40 +395,98 @@ class SupabaseTradingService {
    */
   async getTradeLog(walletId: string): Promise<TradeLogEntry[]> {
     try {
-      // Fetch only starred trades for the wallet
+      console.log('🔍 getTradeLog - Fetching trades for wallet:', walletId);
+
+      // Fetch all trades for the wallet
       const { data, error } = await supabase
         .from('trading_history')
         .select('*')
-        .eq('wallet_id', walletId)
-        .eq('starred', true);
+        .eq('wallet_id', walletId);
 
       if (error) {
-        console.error('Error fetching trades:', error);
+        console.error('❌ Error fetching trades:', error);
         throw error;
       }
 
+      console.log('📊 Raw data fetched:', data?.length || 0, 'records');
+
       if (!data || data.length === 0) {
+        console.log('⚠️ No data found for wallet');
         return [];
       }
 
-      // Convert to TradeLogEntry objects
-      const logEntries: TradeLogEntry[] = data.map(trade => ({
-        signature: trade.signature,
-        tokenAddress: trade.token_address,
-        tokenSymbol: trade.token_symbol,
-        tokenName: trade.token_symbol, // Use symbol as name if not available
-        tokenLogoURI: trade.token_logo_uri,
-        type: trade.type as 'BUY' | 'SELL',
-        amount: Math.abs(trade.amount),
-        totalVolume: trade.value_usd || 0,
-        profitLoss: trade.type === 'BUY' ? -(trade.value_usd || 0) : (trade.value_usd || 0),
-        timestamp: new Date(trade.timestamp).getTime(),
-        starred: trade.starred
-      }));
+      // Deduplicate trades based on signature
+      const uniqueTrades = this.deduplicateTrades(data);
+      console.log('🔄 After deduplication:', uniqueTrades.length, 'unique trades');
 
+      // Group trades by token address
+      const tradesByToken = new Map<string, any[]>();
+      for (const trade of uniqueTrades) {
+        const tokenAddress = trade.token_address;
+        if (!tradesByToken.has(tokenAddress)) {
+          tradesByToken.set(tokenAddress, []);
+        }
+        tradesByToken.get(tokenAddress)!.push(trade);
+      }
+
+      // Process each token's trades to calculate remaining balance
+      const logEntries: TradeLogEntry[] = [];
+
+      for (const [tokenAddress, tokenTrades] of tradesByToken.entries()) {
+        // Sort trades by timestamp (oldest first)
+        tokenTrades.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        // Calculate cumulative balance
+        let cumulativeBalance = 0;
+
+        // Get current token price for estimated value calculation
+        const currentPrice = await this.getCurrentTokenPrice(tokenAddress);
+
+        // Process each trade
+        for (const trade of tokenTrades) {
+          const amount = Math.abs(trade.amount);
+          const type = trade.type as 'BUY' | 'SELL';
+
+          // Update cumulative balance
+          if (type === 'BUY') {
+            cumulativeBalance += amount;
+          } else if (type === 'SELL') {
+            // Ensure we don't sell more than we've bought
+            if (amount > cumulativeBalance) {
+              console.warn(`⚠️ Warning: Attempted to sell more than available balance for ${trade.token_symbol} (${tokenAddress})`);
+              console.warn(`   Sell amount: ${amount}, Available balance: ${cumulativeBalance}`);
+              // Adjust the sell amount to the available balance
+              trade.amount = cumulativeBalance;
+            }
+            cumulativeBalance -= Math.min(amount, cumulativeBalance);
+          }
+
+          // Calculate estimated value
+          const estimatedValue = cumulativeBalance * currentPrice;
+
+          // Create TradeLogEntry
+          logEntries.push({
+            signature: trade.signature,
+            tokenAddress: trade.token_address,
+            tokenSymbol: trade.token_symbol,
+            tokenName: trade.token_symbol, // Use symbol as name if not available
+            tokenLogoURI: trade.token_logo_uri,
+            type: type,
+            amount: Math.abs(trade.amount),
+            totalVolume: trade.value_usd || 0,
+            profitLoss: type === 'BUY' ? -(trade.value_usd || 0) : (trade.value_usd || 0),
+            timestamp: new Date(trade.timestamp).getTime(),
+            starred: trade.starred,
+            remainingBalance: cumulativeBalance,
+            estimatedValue: estimatedValue
+          });
+        }
+      }
+
+      console.log('✅ Final trade log entries:', logEntries.length);
       return logEntries.sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
-      console.error('Error in getTradeLog:', error);
+      console.error('❌ Error in getTradeLog:', error);
       throw error;
     }
   }
@@ -342,6 +498,8 @@ class SupabaseTradingService {
    */
   async getTradingHistory(walletId: string): Promise<ProcessedTrade[]> {
     try {
+      console.log('🔍 getTradingHistory - Fetching trades for wallet:', walletId);
+
       // Fetch all trades for the wallet
       const { data, error } = await supabase
         .from('trading_history')
@@ -349,16 +507,23 @@ class SupabaseTradingService {
         .eq('wallet_id', walletId);
 
       if (error) {
-        console.error('Error fetching trades:', error);
+        console.error('❌ Error fetching trades:', error);
         throw error;
       }
 
+      console.log('📊 Raw data fetched:', data?.length || 0, 'records');
+
       if (!data || data.length === 0) {
+        console.log('⚠️ No data found for wallet');
         return [];
       }
 
+      // Deduplicate trades based on signature
+      const uniqueTrades = this.deduplicateTrades(data);
+      console.log('🔄 After deduplication:', uniqueTrades.length, 'unique trades');
+
       // Convert to ProcessedTrade objects
-      const processedTrades: ProcessedTrade[] = data.map(trade => ({
+      const processedTrades: ProcessedTrade[] = uniqueTrades.map(trade => ({
         signature: trade.signature,
         timestamp: new Date(trade.timestamp).getTime(),
         type: trade.type as 'BUY' | 'SELL',
@@ -376,9 +541,10 @@ class SupabaseTradingService {
         starred: trade.starred
       }));
 
+      console.log('✅ Final processed trades:', processedTrades.length);
       return processedTrades.sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
-      console.error('Error in getTradingHistory:', error);
+      console.error('❌ Error in getTradingHistory:', error);
       throw error;
     }
   }
@@ -417,6 +583,40 @@ class SupabaseTradingService {
       }
     } catch (error) {
       console.error('Error in toggleStarredTrade:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Test method to verify database connection and data structure
+   * @param walletId The wallet ID to test
+   */
+  async testDatabaseConnection(walletId: string): Promise<void> {
+    try {
+      console.log('🧪 Testing database connection for wallet:', walletId);
+
+      const { data, error, count } = await supabase
+        .from('trading_history')
+        .select('*', { count: 'exact' })
+        .eq('wallet_id', walletId)
+        .limit(5);
+
+      if (error) {
+        console.error('❌ Database connection error:', error);
+        throw error;
+      }
+
+      console.log('✅ Database connection successful');
+      console.log('📊 Total records:', count);
+      console.log('📋 Sample data (first 5 records):', data);
+
+      if (data && data.length > 0) {
+        const sampleRecord = data[0];
+        console.log('🔍 Sample record structure:', Object.keys(sampleRecord));
+        console.log('🔍 Sample record values:', sampleRecord);
+      }
+    } catch (error) {
+      console.error('❌ Database test failed:', error);
       throw error;
     }
   }

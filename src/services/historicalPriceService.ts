@@ -501,8 +501,8 @@ export class HistoricalPriceService {
         }
       }
 
-      // Step 6: Compile results
-      this.updateScanStatus({ currentStep: 'Finalizing results...' });
+      // Step 6: Compile initial results
+      this.updateScanStatus({ currentStep: 'Compiling initial results...' });
 
       const historicalTrades = new Map<string, TradeData[]>();
       for (const trade of trades) {
@@ -512,10 +512,49 @@ export class HistoricalPriceService {
         historicalTrades.get(trade.tokenMint)!.push(trade);
       }
 
+      // Step 7: Second pass - fetch all historical trades for discovered tokens
+      // This excludes trades from the past 24 hours to avoid duplication with the first pass
+      console.log('\n🔍 Second pass: Fetching all historical trades for discovered tokens (excluding past 24 hours)...');
+      this.updateScanStatus({ 
+        currentStep: 'Starting historical trade discovery for detected tokens (excluding past 24 hours)...',
+        tradesFound: trades.length
+      });
+
+      // Get unique token mints from the trades we found
+      const tradedTokenMints = new Set<string>(trades.map(trade => trade.tokenMint));
+      console.log(`Found ${tradedTokenMints.size} tokens with trades in initial scan`);
+
+      // For each token mint, fetch all historical trades
+      let totalHistoricalTradesFound = 0;
+      for (const tokenMint of tradedTokenMints) {
+        this.updateScanStatus({ 
+          currentStep: `Fetching historical trades for token ${tokenMint}...`,
+        });
+
+        console.log(`\n🔍 Fetching all historical trades for token: ${tokenMint}`);
+        const tokenInfo = this.getTokenInfo(tokenMint);
+        console.log(`Token: ${tokenInfo.symbol} (${tokenMint})`);
+
+        const tokenHistoricalTrades = await this.fetchAllHistoricalTrades(walletAddress, tokenMint);
+        console.log(`✅ Found ${tokenHistoricalTrades.length} historical trades for token ${tokenMint}`);
+
+        // Add to historical trades map
+        historicalTrades.set(tokenMint, tokenHistoricalTrades);
+        totalHistoricalTradesFound += tokenHistoricalTrades.length;
+
+        this.updateScanStatus({ 
+          tradesFound: trades.length + totalHistoricalTradesFound,
+          currentStep: `Found ${tokenHistoricalTrades.length} historical trades for ${tokenInfo.symbol}`
+        });
+      }
+
+      // Step 8: Compile final results
+      this.updateScanStatus({ currentStep: 'Finalizing results...' });
+
       const result: AnalysisResult = {
         recentTrades: trades,
         historicalTrades,
-        totalTrades: trades.length,
+        totalTrades: trades.length + totalHistoricalTradesFound,
         totalVolume: trades.reduce((sum, trade) => sum + trade.usdValue, 0),
         uniqueTokens: uniqueTokenMints,
         totalValue: trades.reduce((sum, trade) => sum + trade.usdValue, 0),
@@ -532,9 +571,22 @@ export class HistoricalPriceService {
       });
 
       // Store all trades in Supabase if userId is provided
-      if (userId && trades.length > 0) {
-        console.log(`🔄 Storing ${trades.length} trades in Supabase for user ${userId}`);
-        await this.storeAllTrades(userId, trades);
+      if (userId) {
+        // Flatten all historical trades for storage
+        const allTradesToStore: TradeData[] = [];
+
+        // Add recent trades
+        allTradesToStore.push(...trades);
+
+        // Add historical trades
+        for (const [_, tokenTrades] of historicalTrades) {
+          allTradesToStore.push(...tokenTrades);
+        }
+
+        if (allTradesToStore.length > 0) {
+          console.log(`🔄 Storing ${allTradesToStore.length} trades in Supabase for user ${userId}`);
+          await this.storeAllTrades(userId, allTradesToStore);
+        }
       }
 
       return result;
@@ -979,10 +1031,15 @@ export class HistoricalPriceService {
 
   /**
    * Get all historical transactions for a specific token
+   * Excludes transactions from the past 24 hours to avoid duplication
    */
   private async fetchAllHistoricalTrades(wallet: string, mint: string): Promise<TradeData[]> {
     try {
       console.log(`\n🔍 Starting complete historical fetch for token: ${mint}`);
+
+      // Calculate cutoff time for 24 hours ago to avoid duplicating recent trades
+      const cutoffTime = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+      console.log(`📅 Using cutoff time: ${new Date(cutoffTime * 1000).toISOString()} to avoid duplicating recent trades`);
 
       // 1. Initialize account queue with currently active ATAs
       const accountQueue = new Set<string>(await this.getTokenAccountsForMint(wallet, mint));
@@ -1051,13 +1108,23 @@ export class HistoricalPriceService {
               break;
             }
 
-            // Add new signatures to our Set
+            // Add new signatures to our Set, filtering out those from the past 24 hours
             signatures.forEach((sig: { signature: string; blockTime: number }) => {
-              allSignatures.add(sig.signature);
+              // Only add signatures for transactions before our cutoff time
+              if (sig.blockTime < cutoffTime) {
+                allSignatures.add(sig.signature);
+              } else {
+                console.log(`⏭️ Skipping recent transaction from ${new Date(sig.blockTime * 1000).toISOString()} (after cutoff)`);
+              }
             });
 
-            // Process each transaction to discover new ATAs
+            // Process each transaction to discover new ATAs, but skip recent ones
             for (const sigInfo of signatures) {
+              // Skip transactions from the past 24 hours
+              if (sigInfo.blockTime >= cutoffTime) {
+                continue;
+              }
+
               try {
                 const tx = await this.fetchTransaction(sigInfo.signature);
                 if (!tx) continue;
@@ -1295,6 +1362,45 @@ export class HistoricalPriceService {
         return null;
       }
 
+      console.log(`📝 Checking if trade ${tradeData.signature} already exists`);
+
+      // Enhanced duplicate checking - check by signature across all wallets
+      const { data: existingTradeBySignature, error: existingTradeBySignatureError } = await supabase
+        .from('trading_history')
+        .select('id, wallet_address')
+        .eq('signature', tradeData.signature)
+        .limit(1);
+
+      // Also check by wallet address and signature for this specific wallet
+      const { data: existingTradeByWallet, error: existingTradeByWalletError } = await supabase
+        .from('trading_history')
+        .select('id')
+        .eq('wallet_address', this.walletAddress)
+        .eq('signature', tradeData.signature)
+        .limit(1);
+
+      // Combine the errors if any
+      const existingTradeError = existingTradeBySignatureError || existingTradeByWalletError;
+
+      // Use the wallet-specific result if available, otherwise use the signature-only result
+      const existingTradeCheck = existingTradeByWallet && existingTradeByWallet.length > 0 
+        ? existingTradeByWallet 
+        : existingTradeBySignature;
+
+      if (existingTradeError) {
+        console.error('❌ Error checking for existing trade:', existingTradeError);
+      } else if (existingTradeCheck && existingTradeCheck.length > 0) {
+        // Log more details about the duplicate trade
+        const duplicateWalletAddress = existingTradeBySignature && existingTradeBySignature.length > 0 
+          ? existingTradeBySignature[0].wallet_address 
+          : this.walletAddress;
+
+        console.log(`⚠️ Trade ${tradeData.signature} already exists in the database for wallet ${duplicateWalletAddress}, skipping`);
+        console.log(`⚠️ Duplicate trade details: Token=${tradeData.tokenMint}, Type=${tradeData.type}, Amount=${tradeData.tokenChange}`);
+
+        return existingTradeCheck[0];
+      }
+
       console.log(`📝 Storing trade ${tradeData.signature} for token ${tradeData.tokenMint}`);
 
       // Check if any trades with the same token are already starred
@@ -1364,13 +1470,34 @@ export class HistoricalPriceService {
         tags: null
       };
 
-      // Insert into Supabase
-      const { data, error } = await supabase
+      // Check if this trade already exists in the database
+      const { data: existingTradeRecord, error: checkError } = await supabase
         .from('trading_history')
-        .upsert(tradeRecord, { 
-          onConflict: 'id',
-          ignoreDuplicates: false
-        });
+        .select('id')
+        .eq('wallet_address', tradeRecord.wallet_address)
+        .eq('signature', tradeRecord.signature)
+        .eq('token_address', tradeRecord.token_address)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('❌ Error checking existing trade:', checkError);
+        return null;
+      }
+
+      // Only insert if the trade doesn't already exist
+      let data = null;
+      let error = null;
+
+      if (!existingTradeRecord) {
+        const result = await supabase
+          .from('trading_history')
+          .insert(tradeRecord);
+
+        data = result.data;
+        error = result.error;
+      } else {
+        console.log('✅ Trade already exists, skipping insert');
+      }
 
       if (error) {
         console.error('❌ Error storing trade:', error);
@@ -1408,7 +1535,8 @@ export class HistoricalPriceService {
         return true;
       }
 
-      console.log(`📝 Storing ${trades.length} trades for wallet ${this.walletAddress}`);
+      console.log(`📝 Processing ${trades.length} trades for wallet ${this.walletAddress}`);
+      console.log(`📝 Will rely on database's unique constraint to handle duplicates`);
 
       // Extract unique token mints
       const uniqueTokenMints = [...new Set(trades.map(trade => trade.tokenMint))];

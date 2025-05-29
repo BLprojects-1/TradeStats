@@ -46,8 +46,6 @@ export default function TradeLog() {
   const [starringTrade, setStarringTrade] = useState<string | null>(null);
   const [starNotification, setStarNotification] = useState<{ show: boolean; tokenSymbol: string; isUnstarring?: boolean }>({ show: false, tokenSymbol: '' });
   const [swingPlans, setSwingPlans] = useState<Map<string, string>>(new Map());
-  // Always show starred trades only
-  const showStarredOnly = true;
 
   // Add sorting state
   const [sortField, setSortField] = useState<'time' | 'value' | 'size'>('time');
@@ -195,12 +193,10 @@ export default function TradeLog() {
     }
   };
 
-  // Filter trades based on starred status
-  const filteredTrades = showStarredOnly 
-    ? tradeLog.filter(trade => trade.starred)
-    : tradeLog;
+  // Filter trades based on starred status - only show starred trades
+  const filteredTrades = tradeLog.filter(trade => trade.starred);
 
-  // Group trades by token address
+  // Group trades by token address - only include tokens with starred trades
   const groupedByToken = filteredTrades.reduce((acc, trade) => {
     if (!acc[trade.tokenAddress]) {
       acc[trade.tokenAddress] = {
@@ -208,7 +204,7 @@ export default function TradeLog() {
         tokenSymbol: trade.tokenSymbol,
         tokenName: trade.tokenName,
         tokenLogoURI: trade.tokenLogoURI,
-        starred: trade.starred,
+        starred: true, // All tokens in this filtered set are starred
         trades: []
       };
     }
@@ -226,7 +222,7 @@ export default function TradeLog() {
   // Convert to array and sort
   const getSortedTokenList = () => {
     const tokenList = Object.values(groupedByToken);
-    
+
     return tokenList.sort((a, b) => {
       let aValue: number;
       let bValue: number;
@@ -336,7 +332,7 @@ export default function TradeLog() {
               </button>
             </div>
           </div>
-          <p className="text-gray-500">View and analyze your manually saved tokens for deeper insights</p>
+          <p className="text-gray-500">View and analyze your starred tokens for deeper insights</p>
         </div>
 
         {error && (
@@ -353,16 +349,16 @@ export default function TradeLog() {
 
         {!selectedWalletId && (
           <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-4 sm:mb-6">
-            Please select a wallet from the dropdown menu to view your trade log.
+            Please select a wallet from the dropdown menu to view your starred tokens.
           </div>
         )}
 
         {/* Enhanced Analytics for Starred Trades */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Saved Tokens</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Starred Tokens</h3>
             <p className="text-xl sm:text-2xl font-semibold text-yellow-400">{totalTokens}</p>
-            <p className="text-xs text-gray-500 mt-1">Manually starred tokens</p>
+            <p className="text-xs text-gray-500 mt-1">Tokens you've starred</p>
           </div>
 
           <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
@@ -386,16 +382,16 @@ export default function TradeLog() {
             <p className={`text-xl sm:text-2xl font-semibold ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {totalTokens > 0 ? (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)) : 'N/A'}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Profit/loss across saved tokens</p>
+            <p className="text-xs text-gray-500 mt-1">Profit/loss across all tokens</p>
           </div>
         </div>
 
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4 sm:mb-6">
             <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">
-              Saved Tokens
+              Starred Tokens
             </h2>
-            
+
             {/* Sorting Controls */}
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-400">Sort by:</span>
@@ -534,10 +530,10 @@ export default function TradeLog() {
                           {totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          0
+                          {formatTokenAmount(latestTrade.amount)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          {formatPriceWithTwoDecimals(0)}
+                          {formatPriceWithTwoDecimals(latestTrade.totalVolume)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                           {formatTimeAgo(latestTrade.timestamp)}
@@ -549,8 +545,8 @@ export default function TradeLog() {
                   <tr>
                     <td colSpan={9} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
                       {selectedWalletId 
-                        ? 'Star tokens from your history to analyze them here' 
-                        : 'Select a wallet to view your saved tokens'
+                        ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
+                        : 'Select a wallet to view your starred tokens'
                       }
                     </td>
                   </tr>
@@ -636,11 +632,11 @@ export default function TradeLog() {
                         </div>
                         <div>
                           <p className="text-gray-400">Remaining Balance</p>
-                          <p className="text-gray-300">0</p>
+                          <p className="text-gray-300">{formatTokenAmount(latestTrade.amount)}</p>
                         </div>
                         <div>
                           <p className="text-gray-400">Est. Value</p>
-                          <p className="text-gray-300">{formatPriceWithTwoDecimals(0)}</p>
+                          <p className="text-gray-300">{formatPriceWithTwoDecimals(latestTrade.totalVolume)}</p>
                         </div>
                         <div>
                           <p className="text-gray-400">Last Trade</p>
@@ -654,8 +650,8 @@ export default function TradeLog() {
             ) : (
               <div className="text-sm text-gray-300 text-center py-4">
                 {selectedWalletId 
-                  ? 'Star tokens from your history to analyze them here' 
-                  : 'Select a wallet to view your saved tokens'
+                  ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
+                  : 'Select a wallet to view your starred tokens'
                 }
               </div>
             )}
@@ -695,8 +691,8 @@ export default function TradeLog() {
         {/* Star notification */}
         <NotificationToast
           message={starNotification.isUnstarring 
-            ? `Removed ${starNotification.tokenSymbol} from saved tokens` 
-            : `Added ${starNotification.tokenSymbol} to saved tokens`}
+            ? `Removed ${starNotification.tokenSymbol} from starred tokens` 
+            : `Added ${starNotification.tokenSymbol} to starred tokens`}
           isVisible={starNotification.show}
           type="success"
           autoDismissMs={3000}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { refreshWalletService } from '../services/refreshWallet';
 
 interface WalletScanModalProps {
@@ -16,22 +16,20 @@ const WalletScanModal: React.FC<WalletScanModalProps> = ({
   walletAddress,
   userId
 }) => {
-  const [isScanning, setIsScanning] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
-  const handleStartScan = async () => {
+  const handleStartScan = useCallback(async () => {
     try {
       setIsScanning(true);
       setError(null);
-      
+
       // Call the refreshWalletService to scan the wallet
       const result = await refreshWalletService.refreshWalletTrades(walletAddress, userId);
-      
+
       // Calculate the number of new trades found
       const newTradesCount = result.recentTrades.length;
-      
+
       // Call onSuccess with the result
       onSuccess({
         newTradesCount,
@@ -39,7 +37,7 @@ const WalletScanModal: React.FC<WalletScanModalProps> = ({
           ? `Found ${newTradesCount} new trades!` 
           : "You're up to date!"
       });
-      
+
       // Close the modal
       onClose();
     } catch (err) {
@@ -48,39 +46,41 @@ const WalletScanModal: React.FC<WalletScanModalProps> = ({
     } finally {
       setIsScanning(false);
     }
-  };
+  }, [walletAddress, userId, onSuccess, onClose]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-[#1a1a1a] rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-700">
         <h2 className="text-xl font-semibold text-white mb-4">Wallet Scan Required</h2>
-        
+
         <p className="text-gray-300 mb-4">
           To provide you with accurate trading history and portfolio performance, we need to scan your wallet address:
         </p>
-        
+
         <div className="bg-gray-800 p-2 rounded mb-4 font-mono text-sm text-yellow-400 break-all">
           {walletAddress}
         </div>
-        
+
         <p className="text-gray-300 mb-2">This scan will:</p>
-        
+
         <ul className="list-disc pl-5 mb-4 text-gray-300 space-y-1">
           <li>Find all trades for tokens you've interacted with since your last scan</li>
           <li>Calculate your portfolio performance</li>
           <li>Enable automatic trade tracking</li>
         </ul>
-        
+
         <p className="text-gray-400 text-sm mb-6">
           The scan may take up to 2 minutes. Without this scan, we won't be able to automatically track your trading history.
         </p>
-        
+
         {error && (
           <div className="bg-red-900 bg-opacity-30 border border-red-700 text-red-300 p-3 rounded mb-4">
             {error}
           </div>
         )}
-        
+
         <div className="flex justify-end space-x-3">
           <button
             onClick={onClose}
@@ -89,7 +89,7 @@ const WalletScanModal: React.FC<WalletScanModalProps> = ({
           >
             Cancel
           </button>
-          
+
           <button
             onClick={handleStartScan}
             disabled={isScanning}

@@ -67,7 +67,7 @@ export default function Home() {
       <Head>
         <title>ryvu | Solana Trading Journal</title>
         <meta name="description" content="Track your Solana trades with ease and gain actionable insights." />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.png" />
       </Head>
 
       {/* Background Elements */}
@@ -80,7 +80,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex justify-between items-center">
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
-              <img src="/logo.png" alt="Journi Logo" className="h-8 w-auto" />
+              <img src="/logo.png" alt="Journi Logo" className="h-6 sm:h-10 w-auto" />
             </Link>
           </div>
           <div className="flex gap-3 sm:gap-6 items-center">
@@ -144,282 +144,522 @@ export default function Home() {
 
       <main className="flex-grow relative z-10">
         {/* Hero Section */}
-        <section className="relative min-h-[90vh] flex items-center py-20 px-4 sm:px-6 lg:px-8 mx-auto">
-          <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+        <section className="relative min-h-[95vh] flex items-center py-20 px-4 sm:px-6 lg:px-8 mx-auto">
+          <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
             <div className="space-y-8">
-              <h1 className="text-5xl sm:text-6xl font-bold leading-tight">
-                <span className="text-white">Master Your</span>
-                <br />
-                <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Solana Trades</span>
-              </h1>
-              <p className="text-xl text-gray-300 leading-relaxed">
-                Turn complex blockchain activity into clear, actionable insights so you can focus on strategy, not spreadsheets with ryvu.
-              </p>
-              <div className="pt-4">
+              <div className="space-y-4">
+                <div className="inline-flex items-center px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-300 text-sm font-medium">
+                  <span className="w-2 h-2 bg-indigo-400 rounded-full mr-2 animate-pulse"></span>
+                  Self-Custodial Solana Trading Dashboard
+                </div>
+                <h1 className="text-6xl sm:text-7xl font-bold leading-tight">
+                  <span className="text-white">Meet </span>
+                  <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Ryvu</span>
+                </h1>
+                <p className="text-xl text-gray-300 leading-relaxed max-w-2xl">
+                  Real-time portfolio views, automated trade tracking, deep performance analytics, and trade-discipline tools—all in one self-custodial platform.
+                </p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4">
                 <button 
                   onClick={handleOpenSignUp}
-                  className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-md hover:from-indigo-500 hover:to-indigo-400 shadow-lg shadow-indigo-900/30 transition-all duration-300 text-lg font-medium flex items-center gap-2 group"
-                  aria-label="Start your free journal"
+                  className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-md hover:from-indigo-500 hover:to-indigo-400 shadow-lg shadow-indigo-900/30 transition-all duration-300 text-lg font-medium flex items-center justify-center gap-2 group"
+                  aria-label="Get started for free"
                 >
-                  <span>Start Your Free Journal</span>
+                  <span>Get Started Free</span>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </button>
               </div>
             </div>
+            
             <div className="relative">
-              <div className="w-full h-[400px] bg-gradient-to-br from-indigo-800/20 via-purple-800/20 to-indigo-900/20 rounded-2xl border border-indigo-500/20 backdrop-blur-sm shadow-2xl shadow-indigo-900/20 overflow-hidden relative">
-                {/* Background SVG styling */}
-                <div className="absolute inset-0 z-[5] opacity-20 pointer-events-none">
-                  <svg className="w-full h-full" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#6366F1" />
-                        <stop offset="100%" stopColor="#A855F7" />
-                      </linearGradient>
-                      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="4" result="blur" />
-                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                      </filter>
-                    </defs>
+              <div className="w-full h-[500px] bg-gradient-to-br from-indigo-800/20 via-purple-800/20 to-indigo-900/20 rounded-2xl border border-indigo-500/20 backdrop-blur-sm shadow-2xl shadow-indigo-900/20 overflow-hidden relative">
+                {/* Dashboard Preview Mock */}
+                <div className="absolute inset-4 bg-[#0a0a0f]/90 rounded-xl border border-indigo-500/10 overflow-hidden">
+                  {/* Header */}
+                  <div className="h-12 bg-gradient-to-r from-indigo-900/30 to-purple-900/30 border-b border-indigo-500/10 flex items-center px-4">
+                    <div className="flex space-x-2">
+                      <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                      <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                    </div>
+                    <div className="ml-4 text-xs text-gray-400">ryvu.app/dashboard</div>
+                  </div>
+                  
+                  {/* Dashboard Content */}
+                  <div className="p-4 space-y-4">
+                    {/* Stats Row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-indigo-900/20 rounded-lg p-3 border border-indigo-500/10">
+                        <div className="text-xs text-gray-400">24h P/L</div>
+                        <div className="text-lg font-bold text-green-400">+$1,247</div>
+                      </div>
+                      <div className="bg-indigo-900/20 rounded-lg p-3 border border-indigo-500/10">
+                        <div className="text-xs text-gray-400">Win Rate</div>
+                        <div className="text-lg font-bold text-indigo-300">73%</div>
+                      </div>
+                      <div className="bg-indigo-900/20 rounded-lg p-3 border border-indigo-500/10">
+                        <div className="text-xs text-gray-400">Open Positions</div>
+                        <div className="text-lg font-bold text-purple-300">12</div>
+                      </div>
+                    </div>
                     
-                    {/* Abstract wave patterns */}
-                    <path d="M0,150 C100,120 200,180 300,150 C400,120 500,180 600,150 C700,120 800,180 900,150" 
-                      stroke="url(#grad1)" strokeWidth="1" fill="none" opacity="0.4" />
-                    <path d="M0,190 C150,160 250,220 400,190 C550,160 650,220 800,190" 
-                      stroke="url(#grad1)" strokeWidth="1" fill="none" opacity="0.3" />
+                    {/* Chart Area */}
+                    <div className="bg-indigo-900/10 rounded-lg h-32 border border-indigo-500/10 flex items-center justify-center">
+                      <svg className="w-full h-full p-4" viewBox="0 0 300 100">
+                        <path d="M20,80 L50,60 L80,45 L110,30 L140,35 L170,25 L200,15 L230,20 L260,10 L280,5" 
+                              stroke="url(#heroGrad)" strokeWidth="2" fill="none" />
+                        <defs>
+                          <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#6366F1" />
+                            <stop offset="100%" stopColor="#A855F7" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
                     
-                    {/* Hexagonal grid pattern - subtle blockchain reference */}
-                    <g opacity="0.5">
-                      <path d="M200,100 L215,85 L235,85 L250,100 L235,115 L215,115 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                      <path d="M250,100 L265,85 L285,85 L300,100 L285,115 L265,115 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                      <path d="M300,100 L315,85 L335,85 L350,100 L335,115 L315,115 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                      <path d="M175,130 L190,115 L210,115 L225,130 L210,145 L190,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                      <path d="M225,130 L240,115 L260,115 L275,130 L260,145 L240,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                      <path d="M275,130 L290,115 L310,115 L325,130 L310,145 L290,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                      <path d="M325,130 L340,115 L360,115 L375,130 L360,145 L340,145 Z" stroke="url(#grad1)" strokeWidth="1" fill="none" />
-                    </g>
-                    
-                    {/* Simplified price chart line */}
-                    <path d="M100,280 L150,250 L200,290 L250,270 L300,310 L350,260 L400,280 L450,240 L500,260 L550,230 L600,270 L650,240 L700,280" 
-                      stroke="url(#grad1)" strokeWidth="2" fill="none" filter="url(#glow)" />
-                    
-                    {/* Node points with connections */}
-                    <g opacity="0.7">
-                      <circle cx="200" cy="200" r="5" fill="url(#grad1)" />
-                      <circle cx="350" cy="220" r="4" fill="url(#grad1)" />
-                      <circle cx="450" cy="180" r="6" fill="url(#grad1)" />
-                      <circle cx="580" cy="210" r="5" fill="url(#grad1)" />
-                      
-                      <line x1="200" y1="200" x2="350" y2="220" stroke="url(#grad1)" strokeWidth="0.8" />
-                      <line x1="350" y1="220" x2="450" y2="180" stroke="url(#grad1)" strokeWidth="0.8" />
-                      <line x1="450" y1="180" x2="580" y2="210" stroke="url(#grad1)" strokeWidth="0.8" />
-                    </g>
-                  </svg>
-                </div>
-                
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-8">
-                  <h2 className="text-4xl md:text-4xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-6">Your Trades, Your Results.</h2>
-                  <div className="flex items-center justify-center">
-                    <p className="text-xl md:text-2xl text-white font-medium mr-3">Made for</p>
-                    <div className="h-5 md:h-6">
-                      <Image 
-                        src="/SOLANA.png" 
-                        alt="SOLANA" 
-                        width={120} 
-                        height={30} 
-                        className="h-full w-auto"
-                      />
+                    {/* Trading List */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">Recent Trades</span>
+                        <span className="text-indigo-400">View All</span>
+                      </div>
+                      {[1,2,3].map(i => (
+                        <div key={i} className="flex justify-between items-center py-1.5 px-2 bg-indigo-900/10 rounded border border-indigo-500/5">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full"></div>
+                            <span className="text-xs text-gray-300">TOKEN{i}</span>
+                          </div>
+                          <div className="text-xs text-green-400">+{(Math.random() * 100).toFixed(0)}%</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
                 
-                <div className="absolute top-0 left-0 w-full h-full bg-[url('/dashboard-preview.jpg')] bg-cover bg-center opacity-60 mix-blend-luminosity"></div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-transparent to-transparent"></div>
+                {/* Floating elements */}
+                <div className="absolute top-4 right-4 w-20 h-20 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full blur-xl"></div>
+                <div className="absolute bottom-4 left-4 w-16 h-16 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-full blur-xl"></div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Features Section */}
-        <section className="py-24 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] via-[#0f0f1a] to-[#0a0a0f] pointer-events-none"></div>
+        {/* Key Features Showcase */}
+        <section className="py-32 relative">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] pointer-events-none"></div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-4 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
-                Turn On-Chain Activity Into Trading Wisdom
+              <h2 className="text-4xl sm:text-5xl font-bold mb-6 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+                Everything You Need to Master Solana Trading
               </h2>
-              <div className="w-24 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full"></div>
+              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+                From real-time portfolio tracking to advanced analytics and trade discipline tools—Ryvu gives you complete visibility into your trading performance.
+              </p>
             </div>
             
-            <div className="grid md:grid-cols-3 gap-8">
-              {/* Feature 1 */}
+            {/* Feature Grid */}
+            <div className="grid lg:grid-cols-2 gap-12 mb-20">
+              {/* Dashboard Feature */}
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 blur transition-all duration-300 rounded-xl"></div>
-                <div className="relative bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] hover:from-[#1a1a34] hover:to-[#1a1a30] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 transition-all duration-300 h-full flex flex-col">
-                  <div className="mb-6">
-                    <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-900/30 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-7 h-7 text-white">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 opacity-0 group-hover:opacity-100 blur-xl transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 transition-all duration-300 hover:border-indigo-400/40">
+                  <div className="flex items-start space-x-6">
+                    <div className="flex-shrink-0">
+                      <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/30">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-8 h-8 text-white">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2 text-white">Seamless Onboarding</h3>
+                    <div className="flex-grow">
+                      <h3 className="text-2xl font-bold text-white mb-4">Real-Time Dashboard</h3>
+                      <p className="text-gray-300 mb-6">
+                        Get instant visibility into your open positions, 24h performance metrics, realized P/L, and win rates. Your complete trading scoreboard at a glance.
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Open positions with unrealized P/L</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">24h performance overview & charts</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Getting started checklist for new users</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-gray-300 flex-grow">
-                    Sign up in seconds and connect your Solana wallets to instantly view your trading history.
-                  </p>
                 </div>
               </div>
 
-              {/* Feature 2 */}
+              {/* Trading History Feature */}
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 blur transition-all duration-300 rounded-xl"></div>
-                <div className="relative bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] hover:from-[#1a1a34] hover:to-[#1a1a30] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 transition-all duration-300 h-full flex flex-col">
-                  <div className="mb-6">
-                    <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-900/30 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-7 h-7 text-white">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-pink-600/20 opacity-0 group-hover:opacity-100 blur-xl transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 transition-all duration-300 hover:border-indigo-400/40">
+                  <div className="flex items-start space-x-6">
+                    <div className="flex-shrink-0">
+                      <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-900/30">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-8 h-8 text-white">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C20.832 18.477 19.246 18 17.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                      </div>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2 text-white">Actionable Analytics</h3>
+                    <div className="flex-grow">
+                      <h3 className="text-2xl font-bold text-white mb-4">Complete Trading History</h3>
+                      <p className="text-gray-300 mb-6">
+                        The ability to add every buy and sell transaction, timestamped and filterable. Star trades, add notes, and build your personalized trading journal.
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Paginated, filterable trade feed</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Star, note, and tag any trade</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Search by token or date range</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-gray-300 flex-grow">
-                    Dedicated views for trading history, top trades, and open positions to identify your best strategies.
-                  </p>
                 </div>
               </div>
 
-              {/* Feature 3 */}
+              {/* Performance Analytics Feature */}
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 blur transition-all duration-300 rounded-xl"></div>
-                <div className="relative bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] hover:from-[#1a1a34] hover:to-[#1a1a30] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 transition-all duration-300 h-full flex flex-col">
-                  <div className="mb-6">
-                    <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-900/30 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-7 h-7 text-white">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
+                <div className="absolute inset-0 bg-gradient-to-r from-green-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 blur-xl transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 transition-all duration-300 hover:border-indigo-400/40">
+                  <div className="flex items-start space-x-6">
+                    <div className="flex-shrink-0">
+                      <div className="w-16 h-16 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-900/30">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-8 h-8 text-white">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </div>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2 text-white">Personalized Notes</h3>
+                    <div className="flex-grow">
+                      <h3 className="text-2xl font-bold text-white mb-4">Deep Performance Analytics</h3>
+                      <p className="text-gray-300 mb-6">
+                        Analyze your best and worst trades, track win rates, identify "faded runners," and discover patterns in your trading behavior.
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Win rate & profit factor analysis</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Best/worst trades identification</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Faded runners & missed opportunities</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-gray-300 flex-grow">
-                    Attach private notes to any trade, turning raw blockchain data into a personalized learning resource.
-                  </p>
                 </div>
+              </div>
+
+              {/* Trade Checklist Feature */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-600/20 to-red-600/20 opacity-0 group-hover:opacity-100 blur-xl transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 transition-all duration-300 hover:border-indigo-400/40">
+                  <div className="flex items-start space-x-6">
+                    <div className="flex-shrink-0">
+                      <div className="w-16 h-16 bg-gradient-to-br from-orange-600 to-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-900/30">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-8 h-8 text-white">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="flex-grow">
+                      <h3 className="text-2xl font-bold text-white mb-4">Custom Trade Checklist</h3>
+                      <p className="text-gray-300 mb-6">
+                        Build your own trading criteria with Yes/No questions, numeric thresholds, and custom rules. Enforce discipline and eliminate emotional trading.
+                      </p>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Custom criteria builder</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Numeric & text-based rules</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                          <span className="text-sm text-gray-300">Pre-trade discipline enforcement</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Technical Highlights */}
+        <section className="py-32 relative">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] pointer-events-none"></div>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl sm:text-5xl font-bold mb-6 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+                Built for Performance & Security
+              </h2>
+              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+                Enterprise-grade infrastructure meets user-friendly design. Self-custodial, fast, and reliable.
+              </p>
+            </div>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="text-center group">
+                <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">Self-Custodial</h3>
+                <p className="text-gray-300">Your keys, your crypto. We never have access to your funds or private keys.</p>
+              </div>
+              
+              <div className="text-center group">
+                <div className="w-20 h-20 bg-gradient-to-br from-green-600 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-900/30 group-hover:scale-110 transition-transform duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">DRPC & Helius</h3>
+                <p className="text-gray-300">Ultra-fast Solana RPC connections with reliable Jupiter price feeds.</p>
+              </div>
+              
+              <div className="text-center group">
+                <div className="w-20 h-20 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-purple-900/30 group-hover:scale-110 transition-transform duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">Supabase Backend</h3>
+                <p className="text-gray-300">Scalable PostgreSQL database with real-time subscriptions and auth.</p>
+              </div>
+              
+              <div className="text-center group">
+                <div className="w-20 h-20 bg-gradient-to-br from-orange-600 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-900/30 group-hover:scale-110 transition-transform duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">Smart Caching</h3>
+                <p className="text-gray-300">Optimized data flow that only fetches new trades since your last scan.</p>
               </div>
             </div>
           </div>
         </section>
 
         {/* How It Works Section */}
-        <section className="py-24 relative">
+        <section className="py-32 relative">
           <div className="absolute inset-0 bg-[#0a0a0f] pointer-events-none"></div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-4 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
-                How It Works
+            <div className="text-center mb-20">
+              <h2 className="text-4xl sm:text-5xl font-bold mb-6 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+                From Wallet to Wisdom in Minutes
               </h2>
-              <div className="w-24 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full"></div>
+              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+                Get started with Ryvu in three simple steps. No API keys, no complex setup-just add your wallets and go.
+              </p>
             </div>
             
             <div className="relative">
-              {/* Connection Line */}
-              <div className="absolute top-24 left-1/2 h-[calc(100%-130px)] w-1 bg-gradient-to-b from-indigo-600 to-indigo-800 rounded-full hidden md:block"></div>
-              
-              <div className="grid md:grid-cols-3 gap-16 relative">
-                <div className="flex flex-col items-center text-center relative">
-                  <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-indigo-900/30 z-10">
+              <div className="grid lg:grid-cols-3 gap-16 relative">
+                <div className="text-center relative">
+                  <div className="w-24 h-24 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mb-8 shadow-xl shadow-indigo-900/30 mx-auto relative z-10">
                     1
                   </div>
-                  <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 h-full w-full">
-                    <h3 className="text-xl font-semibold mb-4 text-white">Connect Your Wallets</h3>
-                    <p className="text-gray-300">
-                      Securely link your Solana wallets to view your complete trading history.
+                  <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
+                    <h3 className="text-2xl font-bold text-white mb-4">Add Your Wallet</h3>
+                    <p className="text-gray-300 mb-6">
+                      Securely link your Solana wallets using read-only access. We never see your private keys or have access to your funds.
                     </p>
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                      <span className="text-sm text-green-400 font-medium">100% Self-Custodial</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col items-center text-center relative">
-                  <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-indigo-900/30 z-10">
+                <div className="text-center relative">
+                  <div className="w-24 h-24 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mb-8 shadow-xl shadow-purple-900/30 mx-auto relative z-10">
                     2
                   </div>
-                  <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 h-full w-full">
-                    <h3 className="text-xl font-semibold mb-4 text-white">Analyze Your Trades</h3>
-                    <p className="text-gray-300">
-                      Gain instant insights into profit/loss, open positions, and top-performing trades.
+                  <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
+                    <h3 className="text-2xl font-bold text-white mb-4">Auto-Import Trades</h3>
+                    <p className="text-gray-300 mb-6">
+                      Ryvu automatically imports your last 24h of transactions, then backfills your complete trading history in the background.
                     </p>
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-blue-400 font-medium">Real-Time Sync</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col items-center text-center relative">
-                  <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-indigo-900/30 z-10">
+                <div className="text-center relative">
+                  <div className="w-24 h-24 bg-gradient-to-r from-pink-600 to-orange-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mb-8 shadow-xl shadow-pink-900/30 mx-auto relative z-10">
                     3
                   </div>
-                  <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 h-full w-full">
-                    <h3 className="text-xl font-semibold mb-4 text-white">Improve Your Strategy</h3>
-                    <p className="text-gray-300">
-                      Add notes, track performance, and refine your approach based on real data.
+                  <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
+                    <h3 className="text-2xl font-bold text-white mb-4">Analyze & Improve</h3>
+                    <p className="text-gray-300 mb-6">
+                      Explore your dashboard, star favorite trades, build your checklist, and start making data-driven trading decisions.
                     </p>
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-3 h-3 bg-purple-400 rounded-full"></div>
+                      <span className="text-sm text-purple-400 font-medium">Actionable Insights</span>
+                    </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div className="mt-20 grid md:grid-cols-4 gap-8 text-center">
+              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
+                <div className="text-3xl font-bold text-indigo-400 mb-2">&lt;30s</div>
+                <div className="text-sm text-gray-400">Setup Time</div>
+              </div>
+              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
+                <div className="text-3xl font-bold text-purple-400 mb-2">3</div>
+                <div className="text-sm text-gray-400">Wallets Supported</div>
+              </div>
+              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
+                <div className="text-3xl font-bold text-green-400 mb-2">24/7</div>
+                <div className="text-sm text-gray-400">Real-Time Updates</div>
+              </div>
+              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
+                <div className="text-3xl font-bold text-orange-400 mb-2">$0</div>
+                <div className="text-sm text-gray-400">Forever Free</div>
               </div>
             </div>
           </div>
         </section>
 
         {/* FAQ Section */}
-        <section className="py-24 relative">
+        <section className="py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] via-[#0f0f1a] to-[#0a0a0f] pointer-events-none"></div>
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-4 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+              <h2 className="text-4xl sm:text-5xl font-bold mb-6 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
                 Frequently Asked Questions
               </h2>
               <div className="w-24 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full"></div>
             </div>
             
             <div className="space-y-6">
-              <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
-                <h3 className="text-xl font-semibold mb-3 text-white">Is ryvu really free?</h3>
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
+                <h3 className="text-xl font-semibold mb-3 text-white">How is Ryvu different from other portfolio trackers?</h3>
                 <p className="text-gray-300">
-                  Yes, ryvu is completely free to use. We believe that every trader should have access to tools that help them improve.
+                  Ryvu is built specifically for Solana traders and focuses on actionable insights, not just portfolio tracking. Our trade checklist, performance analytics, and trade journaling features help you become a better trader, not just track your P/L.
                 </p>
               </div>
-              <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
-                <h3 className="text-xl font-semibold mb-3 text-white">Is my data secure?</h3>
+              
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
+                <h3 className="text-xl font-semibold mb-3 text-white">Is my trading data secure and private?</h3>
                 <p className="text-gray-300">
-                  Absolutely. ryvu only reads public blockchain data. Your private notes are securely stored and only visible to you.
+                  Absolutely. Ryvu only reads public blockchain data using your wallet addresses. Your private notes and checklist data are encrypted and stored securely. We never have access to your private keys or funds.
                 </p>
               </div>
-              <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
-                <h3 className="text-xl font-semibold mb-3 text-white">How many wallets can I connect?</h3>
+              
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
+                <h3 className="text-xl font-semibold mb-3 text-white">Does Ryvu support all Solana DEXs and tokens?</h3>
                 <p className="text-gray-300">
-                  You can connect as many Solana wallets as you need, making it easy to track all your trading activity in one place.
+                  Yes! Ryvu tracks trades from all major Solana DEXs including Jupiter, Raydium, Orca, and more. We support all SPL tokens and automatically fetch price data and metadata from Jupiter's API.
+                </p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
+                <h3 className="text-xl font-semibold mb-3 text-white">Can I connect multiple wallets?</h3>
+                <p className="text-gray-300">
+                  Yes, you can connect up to 3 Solana wallets to your account. Ryvu will aggregate all your trading activity across wallets to give you a complete view of your performance.
+                </p>
+              </div>
+              
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5 hover:shadow-indigo-900/10 hover:border-indigo-500/30 transition-all duration-300">
+                <h3 className="text-xl font-semibold mb-3 text-white">How far back does trade history go?</h3>
+                <p className="text-gray-300">
+                  Ryvu fetches your complete trading history from the beginning of your wallet's activity. There's no limit to how far back we can go—if it's on the Solana blockchain, we can track it.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="py-24 relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/40 to-purple-900/40 pointer-events-none"></div>
+        {/* Enhanced CTA Section */}
+        <section className="py-32 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/40 via-purple-900/40 to-pink-900/40 pointer-events-none"></div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-12 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/20">
-              <div className="max-w-3xl mx-auto text-center">
-                <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
-                  Ready to Master Your Solana Trading?
+            <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-sm p-16 rounded-3xl border border-indigo-500/20 shadow-2xl shadow-indigo-900/20 relative overflow-hidden">
+              {/* Background Pattern */}
+              <div className="absolute inset-0 opacity-10">
+                <svg className="w-full h-full" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="ctaPattern" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+                      <circle cx="50" cy="50" r="2" fill="currentColor" className="text-indigo-400" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#ctaPattern)" />
+                </svg>
+              </div>
+              
+              <div className="max-w-4xl mx-auto text-center relative z-10">
+                <h2 className="text-4xl sm:text-6xl font-bold text-white mb-8">
+                  Ready to Master Your
+                  <span className="block bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                    Solana Trading?
+                  </span>
                 </h2>
-                <p className="text-xl text-indigo-100 mb-10">
-                  Join ryvu today and turn blockchain complexity into clear, actionable insights.
+                <p className="text-xl text-indigo-100 mb-12 max-w-2xl mx-auto">
+                  Join thousands of traders who use Ryvu to turn blockchain complexity into clear, actionable insights. Start your journey to better trading today.
                 </p>
-                <button 
-                  onClick={handleOpenSignUp}
-                  className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-md hover:from-indigo-500 hover:to-indigo-400 shadow-lg shadow-indigo-900/30 transform transition-all duration-300 text-lg font-medium hover:scale-105"
-                  aria-label="Get started for free"
-                >
-                  Get Started For Free
-                </button>
+                
+                <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+                  <button 
+                    onClick={handleOpenSignUp}
+                    className="px-10 py-5 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-xl hover:from-indigo-500 hover:to-indigo-400 shadow-xl shadow-indigo-900/30 transform transition-all duration-300 text-lg font-semibold hover:scale-105 flex items-center gap-3 group"
+                    aria-label="Get started for free"
+                  >
+                    <span>Get Started For Free</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                  
+                  <div className="flex items-center space-x-4 text-indigo-200">
+                    <div className="flex items-center space-x-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>No credit card required</span>
+                    </div>
+                    <div className="w-1 h-1 bg-indigo-400 rounded-full"></div>
+                    <div className="flex items-center space-x-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span>Self-custodial</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -87,7 +87,7 @@ export default function ResetPassword() {
       <Head>
         <title>Reset Password | ryvu</title>
         <meta name="description" content="Reset your ryvu account password" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.png" />
       </Head>
 
       <header className="bg-gradient-to-r from-[#0c0c0f] to-[#1a1a1a] shadow-md border-b border-gray-800">

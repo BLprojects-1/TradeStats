@@ -136,11 +136,8 @@ export default function AddWalletModal({ userId, onClose, onSuccess }: AddWallet
       onSuccess(newWallet);
       onClose();
 
-      // Start the scan process in the background
-      startWalletScan(newWallet.id, walletAddress.trim()).catch(error => {
-        console.error('Background scan error:', error);
-        // The error will be handled by the startWalletScan function
-      });
+      // We no longer start the scan process in the background
+      // The user will explicitly start it by clicking "Start Scan" in the ScanTradesModal
 
     } catch (err: any) {
       console.error('Error adding wallet:', err);

@@ -13,7 +13,7 @@ import { tradingHistoryService } from '../../services/tradingHistoryService';
 import WalletScanModal from '../../components/WalletScanModal';
 import TrafficInfoModal from '../../components/TrafficInfoModal';
 import { useNotificationContext } from '../../contexts/NotificationContext';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../utils/supabaseClient';
 
 export default function OpenTrades() {
   const { user, loading } = useAuth();
@@ -216,7 +216,7 @@ export default function OpenTrades() {
   const getSortedWalletData = () => {
     // Filter out tokens with estimated value less than $1
     const filteredData = walletData.filter(token => (token.totalValue || 0) >= 1);
-    
+
     return [...filteredData].sort((a, b) => {
       let aValue: number;
       let bValue: number;
@@ -332,7 +332,7 @@ export default function OpenTrades() {
         <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4 sm:mb-6">
             <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Active Positions</h2>
-            
+
             {/* Sorting Controls */}
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-400">Sort by:</span>

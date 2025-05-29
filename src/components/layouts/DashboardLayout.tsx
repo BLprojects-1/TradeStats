@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { TrackedWallet } from '../../utils/userProfile';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
 import NotificationToast from '../NotificationToast';
+import AddTokenModal from '../AddTokenModal';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -15,6 +16,15 @@ interface DashboardLayoutProps {
   wallets?: TrackedWallet[];
   selectedWalletId?: string | null;
   onWalletChange?: (walletId: string | null) => void;
+}
+
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: string;
+  isAction?: boolean;
+  isComingSoon?: boolean;
+  onClick?: () => void;
 }
 
 const DashboardLayout = ({
@@ -35,6 +45,7 @@ const DashboardLayout = ({
   const [notificationVisible, setNotificationVisible] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [showCopied, setShowCopied] = useState(false);
+  const [isAddTokenModalOpen, setIsAddTokenModalOpen] = useState(false);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -110,7 +121,20 @@ const DashboardLayout = ({
     setTimeout(() => setShowCopied(false), 2000);
   };
 
-  const navigationItems = [
+  const handleAddTokenClick = () => {
+    setIsAddTokenModalOpen(true);
+    // Close mobile sidebar if open
+    setIsMobileSidebarOpen(false);
+  };
+
+  const handleAddToken = (contractAddress: string) => {
+    // This is where the user will implement their token scanning logic
+    console.log('Add token with CA:', contractAddress);
+    // You can add your token scanning implementation here
+  };
+
+  const navigationItems: NavigationItem[] = [
+    { name: 'Add Token', href: '#', icon: 'M12 4v16m8-8H4', isAction: true, isComingSoon: true },
     { name: 'Dashboard', href: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { name: 'Open Trades', href: '/dashboard/open-trades', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     { name: 'Top Trades', href: '/dashboard/top-trades', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
@@ -219,7 +243,7 @@ const DashboardLayout = ({
       <Head>
         <title>{title} | ryvu</title>
         <meta name="description" content={description} />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.png" />
         <style jsx>{`
           @keyframes slideDownFadeIn {
             0% {
@@ -317,35 +341,78 @@ const DashboardLayout = ({
           <nav className="flex-1 overflow-y-auto py-4">
             <ul className="space-y-2 px-2">
               {navigationItems.map((item) => {
-                const isActive = router.pathname === item.href;
+                const isActive = router.pathname === item.href && !item.isAction;
+                const isActionItem = item.isAction;
+                
                 return (
                   <li key={item.name}>
-                    <Link
-                      href={item.href}
-                      className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                      }`}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-6 w-6"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                    {isActionItem ? (
+                      // Action item (like Add Token) - button with special styling
+                      <button
+                        onClick={item.onClick}
+                        disabled={item.isComingSoon}
+                        className={`w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200 group ${
+                          item.isComingSoon 
+                            ? 'text-gray-500 cursor-not-allowed opacity-50'
+                            : 'text-purple-300 hover:bg-gradient-to-r hover:from-purple-900/20 hover:to-indigo-800/20 hover:text-purple-100 border border-transparent hover:border-purple-500/30'
+                        }`}
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d={item.icon}
-                        />
-                      </svg>
-                      {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-                        <span className="ml-3">{item.name}</span>
-                      )}
-                    </Link>
+                        <div className="relative">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-6 w-6 group-hover:scale-110 transition-transform duration-200"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d={item.icon}
+                            />
+                          </svg>
+                          {/* Small indicator dot to show it's an action */}
+                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full opacity-80"></div>
+                        </div>
+                        {(!isSidebarCollapsed || isMobileSidebarOpen) && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{item.name}</span>
+                            {item.isComingSoon && (
+                              <span className="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded-full">Coming Soon</span>
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    ) : (
+                      // Regular navigation item - Link with normal styling
+                      <Link
+                        href={item.href}
+                        className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
+                          isActive
+                            ? 'bg-indigo-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        }`}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-6 w-6"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d={item.icon}
+                          />
+                        </svg>
+                        {(!isSidebarCollapsed || isMobileSidebarOpen) && (
+                          <span className="ml-3">{item.name}</span>
+                        )}
+                      </Link>
+                    )}
                   </li>
                 );
               })}
@@ -693,6 +760,13 @@ const DashboardLayout = ({
         type="success"
         autoDismissMs={3000}
         onDismiss={() => setNotificationVisible(false)}
+      />
+
+      {/* Add Token Modal */}
+      <AddTokenModal
+        isOpen={isAddTokenModalOpen}
+        onClose={() => setIsAddTokenModalOpen(false)}
+        onAddToken={handleAddToken}
       />
     </div>
   );

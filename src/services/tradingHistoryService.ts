@@ -294,7 +294,8 @@ export class TradingHistoryService {
         return;
       }
 
-      console.log(`Checking ${trades.length} trades for duplicates for wallet ${walletAddress}`);
+      console.log(`Processing ${trades.length} trades for wallet ${walletAddress}`);
+      console.log(`Will rely on database's unique constraint to handle duplicates`);
 
       // 1. Get wallet ID
       const { walletId, initialScanComplete } = await this.ensureWalletExists(userId, walletAddress);
@@ -305,39 +306,8 @@ export class TradingHistoryService {
         throw new Error('Wallet ID is required');
       }
 
-      // Get all signatures for existing trades to check for duplicates
-      const signatures = trades.map(trade => trade.signature);
-      const { data: existingTrades, error: existingTradesError } = await supabase
-        .from('trading_history')
-        .select('signature')
-        .eq('wallet_id', walletId)
-        .in('signature', signatures);
-
-      if (existingTradesError) {
-        console.error('Error checking for existing trades:', existingTradesError);
-        throw existingTradesError;
-      }
-
-      // Create a set of existing signatures for faster lookup
-      const existingSignatures = new Set<string>();
-      if (existingTrades) {
-        existingTrades.forEach(trade => {
-          existingSignatures.add(trade.signature);
-        });
-      }
-
-      // Filter out trades that already exist in the database
-      const newTrades = trades.filter(trade => !existingSignatures.has(trade.signature));
-
-      if (newTrades.length === 0) {
-        console.log('All trades already exist in the database, nothing to cache');
-        return;
-      }
-
-      console.log(`Caching ${newTrades.length} new trades for wallet ${walletAddress} (${trades.length - newTrades.length} duplicates filtered out)`);
-
       // Check if any trades with the same tokens are already starred
-      const tokenAddresses = [...new Set(newTrades.map(trade => trade.tokenAddress))];
+      const tokenAddresses = [...new Set(trades.map(trade => trade.tokenAddress))];
       const starredTokensQuery = await supabase
         .from('trading_history')
         .select('token_address, starred')
@@ -355,7 +325,7 @@ export class TradingHistoryService {
       }
 
       // 2. Convert to database records
-      const tradeRecords = newTrades.map(trade => ({
+      const tradeRecords = trades.map(trade => ({
         id: uuidv4(),
         wallet_id: walletId,
         wallet_address: walletAddress, // Add wallet_address field
@@ -381,10 +351,42 @@ export class TradingHistoryService {
         tags: null
       }));
 
-      // 3. Insert new trades to database (no need for upsert since we've filtered out duplicates)
-      const { error } = await supabase
+      // 3. Insert trades to database - use a different approach to handle duplicates
+      // First, check which trades already exist in the database
+      const signatures = tradeRecords.map(record => record.signature);
+      const tokenAddressesForCheck = tradeRecords.map(record => record.token_address);
+
+      const { data: existingTrades, error: checkError } = await supabase
         .from('trading_history')
-        .insert(tradeRecords);
+        .select('signature, token_address')
+        .eq('wallet_address', walletAddress)
+        .in('signature', signatures)
+        .in('token_address', tokenAddressesForCheck);
+
+      if (checkError) {
+        console.error('Error checking existing trades:', checkError);
+        throw checkError;
+      }
+
+      // Create a set of existing signature+token_address combinations
+      const existingTradeKeys = new Set();
+      if (existingTrades) {
+        existingTrades.forEach(trade => {
+          existingTradeKeys.add(`${trade.signature}:${trade.token_address}`);
+        });
+      }
+
+      // Filter out trades that already exist
+      const newTradeRecords = tradeRecords.filter(record => 
+        !existingTradeKeys.has(`${record.signature}:${record.token_address}`)
+      );
+
+      console.log(`Filtered out ${tradeRecords.length - newTradeRecords.length} existing trades, inserting ${newTradeRecords.length} new trades`);
+
+      // Only insert new trades
+      const { error } = newTradeRecords.length > 0 
+        ? await supabase.from('trading_history').insert(newTradeRecords)
+        : { error: null };
 
       if (error) {
         console.error('Error caching trades:', error);
@@ -1240,14 +1242,15 @@ export class TradingHistoryService {
         // Get all trades for this specific token from DRPC
         const allTokenTrades = await this.getAllTokenTrades(userId, walletAddress, tokenAddress);
 
-        // Merge with cached trades, avoiding duplicates
-        const existingSignatures = new Set(tradesByToken[tokenAddress].map((t: ProcessedTrade) => t.signature));
-        const newTrades = allTokenTrades.trades.filter((t: ProcessedTrade) => !existingSignatures.has(t.signature));
+        if (allTokenTrades.trades.length > 0) {
+          // Cache all trades - rely on the database's unique constraint to handle duplicates
+          console.log(`Caching ${allTokenTrades.trades.length} trades for token ${tokenAddress} - will rely on database's unique constraint to handle duplicates`);
+          await this.cacheTrades(userId, walletAddress, allTokenTrades.trades);
 
-        if (newTrades.length > 0) {
-          // Cache the new trades
-          await this.cacheTrades(userId, walletAddress, newTrades);
-          tradesByToken[tokenAddress] = [...tradesByToken[tokenAddress], ...newTrades];
+          // Merge with cached trades
+          const existingSignatures = new Set(tradesByToken[tokenAddress].map((t: ProcessedTrade) => t.signature));
+          const newTradesToMemory = allTokenTrades.trades.filter((t: ProcessedTrade) => !existingSignatures.has(t.signature));
+          tradesByToken[tokenAddress] = [...tradesByToken[tokenAddress], ...newTradesToMemory];
         }
       }
 
