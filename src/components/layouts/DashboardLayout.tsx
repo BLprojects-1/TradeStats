@@ -417,7 +417,7 @@ const DashboardLayout = ({
               }}
             >
               <div className="bg-[#1a1a1a] border-b border-gray-800 shadow-lg">
-                <div className="flex items-center justify-between h-[60px] px-4 sm:px-6 lg:px-9">
+                <div className="flex items-center justify-between h-[72px] px-4 sm:px-6 lg:px-9">
                   {/* Left side - Title and Mobile Menu */}
                   <div className="flex items-center gap-3">
                     <button
@@ -441,7 +441,7 @@ const DashboardLayout = ({
                       </svg>
                     </button>
 
-                    <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight truncate">
+                    <h1 className="text-lg sm:text-xl lg:text-3xl font-bold tracking-tight truncate">
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-indigo-300">
                         {title}
                       </span>
@@ -679,7 +679,7 @@ const DashboardLayout = ({
             </header>
 
             {/* Content with adjusted padding to account for fixed header */}
-            <div className="container mx-auto px-3 sm:px-4 lg:px-6 pt-32 sm:pt-20 md:pt-20 pb-6">
+            <div className="container mx-auto px-3 sm:px-4 lg:px-6 pt-48 sm:pt-32 md:pt-26 pb-6">
               {children}
             </div>
           </div>
