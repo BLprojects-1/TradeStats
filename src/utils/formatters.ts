@@ -88,14 +88,14 @@ export const formatSmallPrice = (price?: number) => {
 
       // Show digits after leading zeros
       const significantPart = decimalPart.substring(leadingZeros);
-      // Try to get at least 2 digits after the zeros
-      const digitsToShow = Math.min(2, significantPart.length);
+      // Show 3 digits after the zeros (increased from 2)
+      const digitsToShow = Math.min(3, significantPart.length);
       return `$0.0${superscriptZeros}${significantPart.substring(0, digitsToShow)}`;
     }
   }
 
-  // For other small numbers, use standard formatting
-  return `$${price.toLocaleString(undefined, { maximumFractionDigits: 8 })}`;
+  // For other small numbers, use standard formatting with fewer decimal places
+  return `$${price.toLocaleString(undefined, { maximumFractionDigits: 5 })}`;
 };
 
 // Formatter for price numbers with exactly 2 decimal places

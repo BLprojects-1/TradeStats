@@ -7,6 +7,7 @@ import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatSmallPrice, formatPriceWithTwoDecimals, formatTimeAgo } from '../../utils/formatters';
 import TradeInfoModal from '../../components/TradeInfoModal';
+import AddedTokenModal from '../../components/AddedTokenModal';
 import { useRefreshButton } from '../../hooks/useRefreshButton';
 import NotificationToast from '../../components/NotificationToast';
 import { supabase } from '../../utils/supabaseClient';
@@ -81,6 +82,13 @@ export default function TradeLog() {
 
   // Modal state
   const [selectedTradeModal, setSelectedTradeModal] = useState<{
+    tokenAddress: string;
+    tokenSymbol: string;
+    tokenLogoURI?: string;
+  } | null>(null);
+
+  // Modal state for added tokens
+  const [selectedAddedTokenModal, setSelectedAddedTokenModal] = useState<{
     tokenAddress: string;
     tokenSymbol: string;
     tokenLogoURI?: string;
@@ -311,15 +319,28 @@ export default function TradeLog() {
   };
 
   const handleTradeClick = (trade: TradeLogEntry) => {
-    setSelectedTradeModal({
-      tokenAddress: trade.tokenAddress,
-      tokenSymbol: trade.tokenSymbol,
-      tokenLogoURI: trade.tokenLogoURI || undefined
-    });
+    if (activeTab === 'starred') {
+      setSelectedTradeModal({
+        tokenAddress: trade.tokenAddress,
+        tokenSymbol: trade.tokenSymbol,
+        tokenLogoURI: trade.tokenLogoURI || undefined
+      });
+    } else {
+      // For added tokens, use the AddedTokenModal
+      setSelectedAddedTokenModal({
+        tokenAddress: trade.tokenAddress,
+        tokenSymbol: trade.tokenSymbol,
+        tokenLogoURI: trade.tokenLogoURI || undefined
+      });
+    }
   };
 
   const handleCloseModal = () => {
     setSelectedTradeModal(null);
+  };
+
+  const handleCloseAddedTokenModal = () => {
+    setSelectedAddedTokenModal(null);
   };
 
   const handleSortChange = (field: 'time' | 'value' | 'size' | 'price') => {
@@ -866,7 +887,7 @@ export default function TradeLog() {
                         {activeTab === 'added' && (
                           <>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {hasNoTrades ? 'N/A' : (token.current_price ? formatPriceWithTwoDecimals(token.current_price) : 'N/A')}
+                              {token.current_price ? formatSmallPrice(token.current_price) : 'N/A'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                               {(() => {
@@ -1013,7 +1034,7 @@ export default function TradeLog() {
                           <>
                             <div>
                               <p className="text-gray-400">Current Price</p>
-                              <p className="text-gray-300">{token.current_price ? formatPriceWithTwoDecimals(token.current_price) : 'N/A'}</p>
+                              <p className="text-gray-300">{token.current_price ? formatSmallPrice(token.current_price) : 'N/A'}</p>
                             </div>
                             <div>
                               <p className="text-gray-400">Added</p>
@@ -1064,6 +1085,17 @@ export default function TradeLog() {
             mode="trade-log"
             initialSwingPlan={swingPlans.get(selectedTradeModal.tokenAddress) || ''}
             onSwingPlanChange={(plan) => handleSwingPlanChange(selectedTradeModal.tokenAddress, plan)}
+          />
+        )}
+
+        {/* Added Token Modal */}
+        {selectedAddedTokenModal && (
+          <AddedTokenModal
+            isOpen={!!selectedAddedTokenModal}
+            onClose={handleCloseAddedTokenModal}
+            tokenAddress={selectedAddedTokenModal.tokenAddress}
+            tokenSymbol={selectedAddedTokenModal.tokenSymbol}
+            tokenLogoURI={selectedAddedTokenModal.tokenLogoURI}
           />
         )}
 

@@ -127,7 +127,8 @@ export class AddNewTokenService {
             updated_at: new Date().toISOString()
           },
           {
-            onConflict: 'wallet_address,contract_address'
+            onConflict: 'wallet_address,contract_address',
+            ignoreDuplicates: false
           }
         );
 

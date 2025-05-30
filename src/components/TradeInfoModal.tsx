@@ -763,7 +763,7 @@ export default function TradeInfoModal({
               {/* Trade Log Mode - Overall Notes */}
               {mode === 'trade-log' && (
                 <div className="bg-[#252525] p-4 rounded-lg">
-                  <h3 className="text-lg font-medium text-white mb-3">Overall Token Notes</h3>
+                  <h3 className="text-lg font-medium text-white mb-3">Token Notes</h3>
                   <textarea
                     value={overallNotes}
                     onChange={(e) => setOverallNotes(e.target.value)}
