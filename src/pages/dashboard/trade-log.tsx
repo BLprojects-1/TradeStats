@@ -31,14 +31,14 @@ interface TradeLogEntry {
 
 // Interface for untracked tokens
 interface UntrackedToken {
-  id: number;
+  id: string;
   contract_address: string;
   symbol: string;
   wallet_address: string;
   present_trades: boolean;
   current_price?: number;
   total_supply?: number;
-  token_uri?: string;
+  token_uri?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +53,8 @@ interface MergedTokenData {
   present_trades: boolean;
   current_price?: number;
   trades: TradeLogEntry[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export default function TradeLog() {
@@ -377,19 +379,19 @@ export default function TradeLog() {
   };
 
   const getAddedTokens = () => {
-    // Return untracked tokens that have no trades (present_trades = false)
-    return untrackedTokens
-      .filter(token => !token.present_trades)
-      .map(token => ({
-        tokenAddress: token.contract_address,
-        tokenSymbol: token.symbol,
-        tokenName: token.symbol,
-        tokenLogoURI: token.token_uri || null,
-        starred: true, // All tracked tokens are considered "starred"
-        present_trades: false,
-        current_price: token.current_price,
-        trades: [] as TradeLogEntry[]
-      }));
+    // Return all untracked tokens, regardless of present_trades status
+    return untrackedTokens.map(token => ({
+      tokenAddress: token.contract_address,
+      tokenSymbol: token.symbol,
+      tokenName: token.symbol,
+      tokenLogoURI: token.token_uri || null,
+      starred: true, // All tracked tokens are considered "starred"
+      present_trades: token.present_trades,
+      current_price: token.current_price,
+      trades: [] as TradeLogEntry[],
+      created_at: token.created_at,
+      updated_at: token.updated_at
+    }));
   };
 
   const getSortedTokenList = () => {
@@ -463,7 +465,18 @@ export default function TradeLog() {
       
       const { data, error } = await supabase
         .from('untracked_tokens')
-        .select('*')
+        .select(`
+          id,
+          contract_address,
+          symbol,
+          wallet_address,
+          present_trades,
+          current_price,
+          total_supply,
+          token_uri,
+          created_at,
+          updated_at
+        `)
         .eq('wallet_address', selectedWallet.wallet_address)
         .order('updated_at', { ascending: false });
 
@@ -473,8 +486,22 @@ export default function TradeLog() {
         return;
       }
 
-      console.log(`✅ Found ${data?.length || 0} untracked tokens`);
-      setUntrackedTokens(data || []);
+      // Transform the data to match our interface
+      const transformedData = data?.map(token => ({
+        id: token.id,
+        contract_address: token.contract_address,
+        symbol: token.symbol,
+        wallet_address: token.wallet_address,
+        present_trades: token.present_trades || false,
+        current_price: token.current_price ? parseFloat(token.current_price) : undefined,
+        total_supply: token.total_supply ? parseFloat(token.total_supply) : undefined,
+        token_uri: token.token_uri || null,
+        created_at: token.created_at,
+        updated_at: token.updated_at
+      })) || [];
+
+      console.log(`✅ Found ${transformedData.length} untracked tokens`);
+      setUntrackedTokens(transformedData);
     } catch (error) {
       console.error('❌ Error in fetchUntrackedTokens:', error);
       setUntrackedTokens([]);

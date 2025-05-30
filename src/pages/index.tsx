@@ -96,6 +96,28 @@ export default function Home() {
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                 </svg>
               </a>
+              <a 
+                href="https://t.me/+Jq_SuZsXYlI3NWNk" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110"
+                aria-label="Join our Telegram channel"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                </svg>
+              </a>
+              <a 
+                href="https://discord.gg/6q7UrFsy" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110"
+                aria-label="Join our Discord server"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
+                </svg>
+              </a>
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText('EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump');
@@ -426,7 +448,7 @@ export default function Home() {
 
         {/* Technical Highlights */}
         <section className="py-32 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] pointer-events-none"></div>
+          <div className="absolute inset-0 bg-[#0a0a0f] pointer-events-none"></div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center mb-16">
               <h2 className="text-4xl sm:text-5xl font-bold mb-6 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
@@ -440,8 +462,8 @@ export default function Home() {
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
               <div className="text-center group">
                 <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3">Self-Custodial</h3>
@@ -450,8 +472,8 @@ export default function Home() {
               
               <div className="text-center group">
                 <div className="w-20 h-20 bg-gradient-to-br from-green-600 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-900/30 group-hover:scale-110 transition-transform duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3">DRPC & Helius</h3>
@@ -460,8 +482,8 @@ export default function Home() {
               
               <div className="text-center group">
                 <div className="w-20 h-20 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-purple-900/30 group-hover:scale-110 transition-transform duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3">Supabase Backend</h3>
@@ -470,8 +492,8 @@ export default function Home() {
               
               <div className="text-center group">
                 <div className="w-20 h-20 bg-gradient-to-br from-orange-600 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-900/30 group-hover:scale-110 transition-transform duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-10 h-10 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3">Smart Caching</h3>
@@ -481,88 +503,87 @@ export default function Home() {
           </div>
         </section>
 
-        {/* How It Works Section */}
+        {/* Community Section */}
         <section className="py-32 relative">
-          <div className="absolute inset-0 bg-[#0a0a0f] pointer-events-none"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] via-[#0f0f1a] to-[#0a0a0f] pointer-events-none"></div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="text-center mb-20">
+            <div className="text-center mb-16">
               <h2 className="text-4xl sm:text-5xl font-bold mb-6 bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent">
-                From Wallet to Wisdom in Minutes
+                Join the Revolution
               </h2>
               <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-                Get started with Ryvu in three simple steps. No API keys, no complex setup-just add your wallets and go.
+                Be part of the community that's shaping the future of Solana trading analytics.
               </p>
             </div>
             
-            <div className="relative">
-              <div className="grid lg:grid-cols-3 gap-16 relative">
-                <div className="text-center relative">
-                  <div className="w-24 h-24 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mb-8 shadow-xl shadow-indigo-900/30 mx-auto relative z-10">
-                    1
-                  </div>
-                  <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
-                    <h3 className="text-2xl font-bold text-white mb-4">Add Your Wallet</h3>
-                    <p className="text-gray-300 mb-6">
-                    Simply add your Solana wallet address for read-only tracking. You don't even need to connect a wallet.
-                    </p>
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                      <span className="text-sm text-green-400 font-medium">100% Self-Managed</span>
-                    </div>
-                  </div>
+            <div className="grid md:grid-cols-2 gap-12 max-w-4xl mx-auto">
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 text-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-900/30">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
                 </div>
+                <h3 className="text-2xl font-bold text-white mb-4">Follow Updates</h3>
+                <p className="text-gray-300 mb-6">
+                  Stay updated with the latest development progress, feature releases, and community news.
+                </p>
+                <a 
+                  href="https://x.com/Ryvujournal" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-lg hover:from-indigo-500 hover:to-indigo-400 shadow-lg shadow-indigo-900/30 transition-all duration-300 font-medium"
+                >
+                  <span>Follow @Ryvujournal</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
 
-                <div className="text-center relative">
-                  <div className="w-24 h-24 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mb-8 shadow-xl shadow-purple-900/30 mx-auto relative z-10">
-                    2
-                  </div>
-                  <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
-                    <h3 className="text-2xl font-bold text-white mb-4">Auto-Import Trades</h3>
-                    <p className="text-gray-300 mb-6">
-                      Ryvu automatically imports your last 24h of transactions, then backfills your complete trading history in the background.
-                    </p>
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
-                      <span className="text-sm text-blue-400 font-medium">Real-Time Sync</span>
-                    </div>
-                  </div>
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 text-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-purple-900/30">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
+                  </svg>
                 </div>
+                <h3 className="text-2xl font-bold text-white mb-4">Join Our Discord</h3>
+                <p className="text-gray-300 mb-6">
+                  Connect with other traders, get support, and stay updated with the latest developments in our Discord server.
+                </p>
+                <a 
+                  href="https://discord.com/invite/6q7UrFsy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-500 text-white rounded-lg hover:from-purple-500 hover:to-purple-400 shadow-lg shadow-purple-900/30 transition-all duration-300 font-medium"
+                >
+                  <span>Join Discord</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
 
-                <div className="text-center relative">
-                  <div className="w-24 h-24 bg-gradient-to-r from-pink-600 to-orange-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mb-8 shadow-xl shadow-pink-900/30 mx-auto relative z-10">
-                    3
-                  </div>
-                  <div className="bg-gradient-to-b from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10">
-                    <h3 className="text-2xl font-bold text-white mb-4">Analyze & Improve</h3>
-                    <p className="text-gray-300 mb-6">
-                      Explore your dashboard, star favorite trades, build your checklist, and start making data-driven trading decisions.
-                    </p>
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="w-3 h-3 bg-purple-400 rounded-full"></div>
-                      <span className="text-sm text-purple-400 font-medium">Actionable Insights</span>
-                    </div>
-                  </div>
+              <div className="bg-gradient-to-br from-[#1a1a2e]/80 to-[#1a1a28]/80 backdrop-blur-sm p-8 rounded-2xl border border-indigo-500/20 shadow-xl shadow-indigo-900/10 text-center md:col-span-2">
+                <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                  </svg>
                 </div>
-              </div>
-            </div>
-
-            {/* Stats Section */}
-            <div className="mt-20 grid md:grid-cols-4 gap-8 text-center">
-              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
-                <div className="text-3xl font-bold text-indigo-400 mb-2">&lt;30s</div>
-                <div className="text-sm text-gray-400">Setup Time</div>
-              </div>
-              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
-                <div className="text-3xl font-bold text-purple-400 mb-2">3</div>
-                <div className="text-sm text-gray-400">Wallets Supported</div>
-              </div>
-              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
-                <div className="text-3xl font-bold text-green-400 mb-2">24/7</div>
-                <div className="text-sm text-gray-400">Real-Time Updates</div>
-              </div>
-              <div className="bg-gradient-to-b from-[#1a1a2e]/60 to-[#1a1a28]/60 backdrop-blur-sm p-6 rounded-xl border border-indigo-500/10">
-                <div className="text-3xl font-bold text-orange-400 mb-2">$0</div>
-                <div className="text-sm text-gray-400">Forever Free</div>
+                <h3 className="text-2xl font-bold text-white mb-4">Join Our Community Telegram</h3>
+                <p className="text-gray-300 mb-6">
+                  Join our vibrant Telegram community for real-time updates, trading discussions, and exclusive announcements.
+                </p>
+                <a 
+                  href="https://t.me/+Jq_SuZsXYlI3NWNk" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-lg hover:from-blue-500 hover:to-cyan-400 shadow-lg shadow-blue-900/30 transition-all duration-300 font-medium"
+                >
+                  <span>Join Telegram</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
               </div>
             </div>
           </div>
