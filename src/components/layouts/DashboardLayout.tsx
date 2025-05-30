@@ -375,10 +375,17 @@ const DashboardLayout = ({
                           <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full opacity-80"></div>
                         </div>
                         {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium ml-3">{item.name}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium ml-3 truncate opacity-0 transition-all duration-300" style={{ 
+                              width: isSidebarCollapsed ? '0' : 'auto',
+                              opacity: isSidebarCollapsed ? '0' : '1',
+                              visibility: isSidebarCollapsed ? 'hidden' : 'visible'
+                            }}>{item.name}</span>
                             {item.isComingSoon && (
-                              <span className="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded-full">Coming Soon</span>
+                              <span className="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded-full opacity-0 transition-all duration-300" style={{
+                                opacity: isSidebarCollapsed ? '0' : '1',
+                                visibility: isSidebarCollapsed ? 'hidden' : 'visible'
+                              }}>Coming Soon</span>
                             )}
                           </div>
                         )}
@@ -387,7 +394,7 @@ const DashboardLayout = ({
                       // Regular navigation item - Link with normal styling
                       <Link
                         href={item.href}
-                        className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
+                        className={`flex items-center px-4 py-3 rounded-lg transition-all duration-300 ${
                           isActive
                             ? 'bg-indigo-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
@@ -395,7 +402,7 @@ const DashboardLayout = ({
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className="h-6 w-6"
+                          className="h-6 w-6 flex-shrink-0"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -408,7 +415,12 @@ const DashboardLayout = ({
                           />
                         </svg>
                         {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-                          <span className="ml-3">{item.name}</span>
+                          <span className="ml-3 truncate opacity-0 transition-all duration-300" style={{ 
+                            width: isSidebarCollapsed ? '0' : 'auto',
+                            opacity: isSidebarCollapsed ? '0' : '1',
+                            visibility: isSidebarCollapsed ? 'hidden' : 'visible',
+                            whiteSpace: 'nowrap'
+                          }}>{item.name}</span>
                         )}
                       </Link>
                     )}
@@ -420,12 +432,12 @@ const DashboardLayout = ({
 
           {/* Social Links */}
           <div className="p-4 border-t border-gray-800">
-            <div className="flex items-center justify-center space-x-3">
+            <div className={`flex items-center justify-center ${isSidebarCollapsed ? 'flex-col space-y-3' : 'space-x-3'} transition-all duration-300`}>
               <a 
                 href="https://x.com/Ryvujournal" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110"
+                className={`w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-all duration-300 hover:scale-110 ${isSidebarCollapsed ? 'hover:translate-x-1' : ''}`}
                 aria-label="Follow us on X (Twitter)"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
@@ -436,7 +448,7 @@ const DashboardLayout = ({
                 href="https://discord.gg/6q7UrFsy" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110"
+                className={`w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-all duration-300 hover:scale-110 ${isSidebarCollapsed ? 'hover:translate-x-1' : ''}`}
                 aria-label="Join our Discord server"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
@@ -445,12 +457,12 @@ const DashboardLayout = ({
               </a>
               <button 
                 onClick={handleCopyCA}
-                className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110 relative group"
+                className={`w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-all duration-300 hover:scale-110 relative group ${isSidebarCollapsed ? 'hover:translate-x-1' : ''}`}
                 aria-label="Copy Contract Address"
               >
                 <span className="text-white text-sm font-medium">CA</span>
                 {showCopied && (
-                  <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-indigo-900 px-2 py-1 rounded text-xs font-medium">
+                  <span className={`absolute ${isSidebarCollapsed ? 'left-full ml-2 -translate-x-0' : '-top-8 left-1/2 -translate-x-1/2'} bg-white text-indigo-900 px-2 py-1 rounded text-xs font-medium whitespace-nowrap transition-all duration-300`}>
                     Copied!
                   </span>
                 )}
@@ -459,8 +471,14 @@ const DashboardLayout = ({
             
             {/* Disclaimer */}
             {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-              <div className="mt-3 text-center">
-                <p className="text-xs text-gray-500 leading-relaxed">
+              <div className="mt-3 text-center overflow-hidden">
+                <p className="text-xs text-gray-500 leading-relaxed opacity-0 transition-all duration-300 truncate" style={{ 
+                  width: isSidebarCollapsed ? '0' : 'auto',
+                  opacity: isSidebarCollapsed ? '0' : '1',
+                  visibility: isSidebarCollapsed ? 'hidden' : 'visible',
+                  whiteSpace: 'nowrap',
+                  transform: isSidebarCollapsed ? 'translateX(-20px)' : 'translateX(0)'
+                }}>
                   Not financial advice. Some data may be inaccurate.
                 </p>
               </div>
