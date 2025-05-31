@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
-import DashboardLayout from '../../components/layouts/DashboardLayout';
+import NewDashboardLayout from '../../components/layouts/NewDashboardLayout';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatSmallPrice, formatPriceWithTwoDecimals, formatTimeAgo } from '../../utils/formatters';
@@ -503,8 +503,8 @@ export default function TradeLog() {
         <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <DashboardLayout title="Trade Log">
-        <div className="relative z-10 space-y-4 sm:space-y-6">
+      <NewDashboardLayout title="Trade Log">
+        <div className="relative z-10 space-y-6 sm:space-y-8">
           {/* Enhanced Header Section */}
           <div className="relative">
             <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
@@ -514,187 +514,6 @@ export default function TradeLog() {
                     Trade Log
                   </h1>
                   <p className="text-gray-300">Record and track your trading decisions and observations</p>
-                </div>
-                <div className="flex gap-2">
-                  {/* Debug button */}
-                  <button
-                    onClick={async () => {
-                      if (!selectedWalletId) {
-                        alert('Please select a wallet first');
-                        return;
-                      }
-
-                      try {
-                        console.log('🧪 Testing database access...');
-
-                        // Test 1: Check auth session
-                        const { data: { session } } = await supabase.auth.getSession();
-                        console.log('Session:', session ? 'Active' : 'None');
-
-                        // Test 2: Check if wallet exists and belongs to user
-                        const { data: wallet, error: walletError } = await supabase
-                          .from('tracked_wallets')
-                          .select('id, user_id, wallet_address')
-                          .eq('id', selectedWalletId)
-                          .single();
-
-                        if (walletError) {
-                          console.error('Wallet error:', walletError);
-                          alert(`Wallet error: ${walletError.message}`);
-                          return;
-                        }
-
-                        console.log('Wallet found:', wallet);
-
-                        // Test 3: Count total trades for this wallet
-                        const { count: totalTrades, error: countError } = await supabase
-                          .from('trading_history')
-                          .select('*', { count: 'exact', head: true })
-                          .eq('wallet_id', selectedWalletId);
-
-                        if (countError) {
-                          console.error('Count error:', countError);
-                          alert(`Count error: ${countError.message}`);
-                          return;
-                        }
-
-                        // Test 4: Count starred trades with boolean true
-                        const { count: starredTradesBoolean, error: starredErrorBoolean } = await supabase
-                          .from('trading_history')
-                          .select('*', { count: 'exact', head: true })
-                          .eq('wallet_id', selectedWalletId)
-                          .eq('starred', true);
-
-                        if (starredErrorBoolean) {
-                          console.error('Starred count error (boolean):', starredErrorBoolean);
-                          alert(`Starred count error (boolean): ${starredErrorBoolean.message}`);
-                          return;
-                        }
-
-                        // Test 4b: Count starred trades with string 'TRUE'
-                        const { count: starredTradesString, error: starredErrorString } = await supabase
-                          .from('trading_history')
-                          .select('*', { count: 'exact', head: true })
-                          .eq('wallet_id', selectedWalletId)
-                          .eq('starred', 'TRUE');
-
-                        if (starredErrorString) {
-                          console.error('Starred count error (string):', starredErrorString);
-                          alert(`Starred count error (string): ${starredErrorString.message}`);
-                          return;
-                        }
-
-                        // Test 4c: Count starred trades with OR condition
-                        const { count: starredTradesTotal, error: starredErrorTotal } = await supabase
-                          .from('trading_history')
-                          .select('*', { count: 'exact', head: true })
-                          .eq('wallet_id', selectedWalletId)
-                          .or('starred.eq.true,starred.eq.TRUE');
-
-                        if (starredErrorTotal) {
-                          console.error('Starred count error (total):', starredErrorTotal);
-                          alert(`Starred count error (total): ${starredErrorTotal.message}`);
-                          return;
-                        }
-
-                        // Test 5: Get sample trades
-                        const { data: sampleTrades, error: sampleError } = await supabase
-                          .from('trading_history')
-                          .select('signature, token_symbol, starred, type, value_usd')
-                          .eq('wallet_id', selectedWalletId)
-                          .limit(3);
-
-                        if (sampleError) {
-                          console.error('Sample error:', sampleError);
-                          alert(`Sample error: ${sampleError.message}`);
-                          return;
-                        }
-
-                        alert(`✅ Database Test Results:
-📊 Total trades: ${totalTrades || 0}
-⭐ Starred trades (boolean true): ${starredTradesBoolean || 0}
-⭐ Starred trades (string 'TRUE'): ${starredTradesString || 0}
-⭐ Starred trades (total): ${starredTradesTotal || 0}
-🎯 Sample trades: ${sampleTrades?.length || 0}
-👤 User ID: ${user?.id}
-🗂️ Wallet ID: ${selectedWalletId}
-📍 Wallet Address: ${wallet.wallet_address}
-💰 Wallet belongs to user: ${wallet.user_id === user?.id ? 'Yes' : 'No'}`);
-
-                      } catch (error) {
-                        console.error('Test error:', error);
-                        alert(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                      }
-                    }}
-                    className="px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-sm rounded-xl hover:from-blue-500 hover:to-blue-400 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-blue-900/15"
-                  >
-                    🧪 Test DB
-                  </button>
-
-                  {/* Star test button */}
-                  <button
-                    onClick={async () => {
-                      if (!selectedWalletId) {
-                        alert('Please select a wallet first');
-                        return;
-                      }
-
-                      try {
-                        // Get first trade to star it
-                        const { data: firstTrade, error: tradeError } = await supabase
-                          .from('trading_history')
-                          .select('signature, token_symbol, token_address, starred')
-                          .eq('wallet_id', selectedWalletId)
-                          .limit(1)
-                          .single();
-
-                        if (tradeError) {
-                          alert(`No trades found: ${tradeError.message}`);
-                          return;
-                        }
-
-                        if (!firstTrade) {
-                          alert('No trades found for this wallet');
-                          return;
-                        }
-
-                        // Toggle its starred status
-                        const currentStarred = firstTrade.starred === true || 
-                                              String(firstTrade.starred).toUpperCase() === 'TRUE';
-                        const newStarred = !currentStarred;
-
-                        console.log(`🔄 Toggling star status for ${firstTrade.token_symbol}`);
-                        console.log(`   Current value: ${firstTrade.starred} (${typeof firstTrade.starred})`);
-                        console.log(`   Interpreted as: ${currentStarred}`);
-                        console.log(`   Setting to: ${newStarred}`);
-
-                        const { error: updateError } = await supabase
-                          .from('trading_history')
-                          .update({ starred: newStarred }) // Explicitly use boolean
-                          .eq('wallet_id', selectedWalletId)
-                          .eq('token_address', firstTrade.token_address);
-
-                        if (updateError) {
-                          console.error('Update error:', updateError);
-                          alert(`Update failed: ${updateError.message}`);
-                          return;
-                        }
-
-                        console.log(`✅ Successfully ${newStarred ? 'starred' : 'unstarred'} ${firstTrade.token_symbol}`);
-                        alert(`✅ ${newStarred ? 'Starred' : 'Unstarred'} ${firstTrade.token_symbol} trades!`);
-
-                        // Refresh the data
-                        loadTradeData();
-
-                      } catch (error) {
-                        console.error('Star test error:', error);
-                        alert(`Star test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                      }
-                    }}
-                    className="px-3 py-2 bg-gradient-to-r from-yellow-600 to-yellow-500 text-white text-sm rounded-xl hover:from-yellow-500 hover:to-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-yellow-900/15"
-                  >
-                    ⭐ Star Test
-                  </button>
                 </div>
               </div>
             </div>
@@ -1052,7 +871,7 @@ export default function TradeLog() {
         )}
         <TrafficInfoModal />
         </div>
-      </DashboardLayout>
+      </NewDashboardLayout>
     </div>
   );
 }

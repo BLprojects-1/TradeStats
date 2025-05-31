@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import DashboardLayout from '../../components/layouts/DashboardLayout';
+import NewDashboardLayout from '../../components/layouts/NewDashboardLayout';
 import TradeChecklist from '../../components/TradeChecklist';
 import TrafficInfoModal from '../../components/TrafficInfoModal';
 
@@ -19,8 +19,8 @@ const TradeChecklistPage = () => {
         <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <DashboardLayout title="Trade Checklist">
-        <div className="relative z-10 space-y-4 sm:space-y-6">
+      <NewDashboardLayout title="Trade Checklist">
+        <div className="relative z-10 space-y-6 sm:space-y-8">
           {/* Enhanced Header Section */}
           <div className="relative">
             <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
@@ -94,7 +94,7 @@ const TradeChecklistPage = () => {
 
           <TrafficInfoModal />
         </div>
-      </DashboardLayout>
+      </NewDashboardLayout>
     </div>
   );
 };

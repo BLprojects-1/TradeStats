@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
-import DashboardLayout from '../../components/layouts/DashboardLayout';
+import NewDashboardLayout from '../../components/layouts/NewDashboardLayout';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatSmallPrice, formatPriceWithTwoDecimals } from '../../utils/formatters';
@@ -282,8 +282,8 @@ export default function OpenTrades() {
         <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <DashboardLayout title="Open Trades">
-        <div className="relative z-10 space-y-4 sm:space-y-6">
+      <NewDashboardLayout title="Open Trades">
+        <div className="relative z-10 space-y-6 sm:space-y-8">
           {/* Enhanced Header Section */}
           <div className="relative">
             <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
@@ -625,7 +625,7 @@ export default function OpenTrades() {
           )}
           <TrafficInfoModal />
         </div>
-      </DashboardLayout>
+      </NewDashboardLayout>
     </div>
   );
 }

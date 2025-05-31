@@ -638,4 +638,6 @@ const TradeChecklist = forwardRef<TradeChecklistRef>((props, ref) => {
   );
 });
 
+TradeChecklist.displayName = 'TradeChecklist';
+
 export default TradeChecklist; 

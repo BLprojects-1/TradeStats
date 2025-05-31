@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { useWalletSelection } from '../contexts/WalletSelectionContext';
 import { getUserProfile, hasCompletedOnboarding, TrackedWallet } from '../utils/userProfile';
-import DashboardLayout from '../components/layouts/DashboardLayout';
+import NewDashboardLayout from '../components/layouts/NewDashboardLayout';
 import { PerformanceChart } from '../components/PerformanceChart';
 import { PerformanceStats } from '../components/PerformanceStats';
 
@@ -364,7 +364,7 @@ export default function Dashboard() {
         <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <DashboardLayout title="Dashboard">
+      <NewDashboardLayout title="Dashboard">
         <div className="relative z-10 space-y-6">
           {/* Enhanced Header Section - Reduced glows */}
           <div className="relative">
@@ -947,7 +947,7 @@ export default function Dashboard() {
         )}
         
         <TrafficInfoModal />
-      </DashboardLayout>
+      </NewDashboardLayout>
     </div>
   );
 }
