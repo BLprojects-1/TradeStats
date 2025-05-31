@@ -4,6 +4,7 @@ import { tradingHistoryService } from '../services/tradingHistoryService';
 export interface UserProfile {
   id: string;
   display_name: string;
+  last_selected_wallet_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -154,7 +155,7 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
         // Use maybeSingle instead of single to avoid errors on missing rows
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, display_name, created_at, updated_at')
+          .select('id, display_name, last_selected_wallet_id, created_at, updated_at')
           .eq('id', userId)
           .maybeSingle();
 
@@ -530,5 +531,68 @@ export const deleteUserAccount = async (userId: string): Promise<void> => {
   } catch (error) {
     console.error('Error in deleteUserAccount:', error);
     throw error;
+  }
+};
+
+/**
+ * Update the user's last selected wallet ID
+ */
+export const updateLastSelectedWallet = async (userId: string, walletId: string | null): Promise<boolean> => {
+  try {
+    console.log('Updating last selected wallet for user:', userId, 'wallet:', walletId);
+
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ 
+        last_selected_wallet_id: walletId,
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Error updating last selected wallet:', error);
+      return false;
+    }
+
+    console.log('Last selected wallet updated successfully');
+    return true;
+  } catch (error) {
+    console.error('Error in updateLastSelectedWallet:', error);
+    return false;
+  }
+};
+
+/**
+ * Get the user's last selected wallet ID
+ */
+export const getLastSelectedWallet = async (userId: string): Promise<string | null> => {
+  try {
+    console.log('Getting last selected wallet for user:', userId);
+    
+    // First check if user is authenticated
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error('Session error when getting last selected wallet:', sessionError);
+      return null;
+    }
+
+    if (!sessionData.session) {
+      console.log('No active session when getting last selected wallet');
+      return null;
+    }
+
+    const profile = await getUserProfile(userId);
+    if (!profile) {
+      console.log('No profile found when getting last selected wallet');
+      return null;
+    }
+
+    console.log('Profile found:', profile);
+    console.log('Last selected wallet ID from profile:', profile.last_selected_wallet_id);
+    
+    return profile?.last_selected_wallet_id || null;
+  } catch (error) {
+    console.error('Error getting last selected wallet:', error);
+    return null;
   }
 }; 

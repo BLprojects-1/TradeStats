@@ -1,4 +1,4 @@
-import React, { ReactNode, useState, useRef, useEffect } from 'react';
+import React, { ReactNode, useState, useRef, useEffect, createContext, useContext } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,6 +15,23 @@ interface NewDashboardLayoutProps {
   selectedWalletId?: string | null;
   onWalletChange?: (walletId: string | null) => void;
 }
+
+// Create layout context for sidebar state
+interface LayoutContextType {
+  isSidebarCollapsed: boolean;
+  isMobileSidebarOpen: boolean;
+  isMobile: boolean;
+}
+
+const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
+
+export const useLayoutContext = () => {
+  const context = useContext(LayoutContext);
+  if (context === undefined) {
+    throw new Error('useLayoutContext must be used within a NewDashboardLayout');
+  }
+  return context;
+};
 
 const NewDashboardLayout = ({
   children,
@@ -74,68 +91,70 @@ const NewDashboardLayout = ({
   }, [router.events]);
 
   return (
-    <div className="flex flex-col h-screen bg-black">
-      <Head>
-        <title>{title} | ryvu</title>
-        <meta name="description" content={description} />
-        <link rel="icon" href="/favicon.ico" />
-        <style jsx>{`
-          @keyframes slideDownFadeIn {
-            0% {
-              opacity: 0;
-              transform: translateY(-10px) scale(0.95);
+    <LayoutContext.Provider value={{ isSidebarCollapsed, isMobileSidebarOpen, isMobile }}>
+      <div className="flex flex-col h-screen bg-black">
+        <Head>
+          <title>{title} | ryvu</title>
+          <meta name="description" content={description} />
+          <link rel="icon" href="/favicon.ico" />
+          <style jsx>{`
+            @keyframes slideDownFadeIn {
+              0% {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+              }
+              100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+              }
             }
-            100% {
-              opacity: 1;
-              transform: translateY(0) scale(1);
+            
+            @keyframes slideUpFadeOut {
+              0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+              }
+              100% {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+              }
             }
-          }
-          
-          @keyframes slideUpFadeOut {
-            0% {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-            }
-            100% {
-              opacity: 0;
-              transform: translateY(-10px) scale(0.95);
-            }
-          }
-        `}</style>
-      </Head>
+          `}</style>
+        </Head>
 
-      <div className="flex flex-1 min-h-0">
-        {/* Enhanced Sidebar */}
-        <DashboardSidebar
-          isSidebarCollapsed={isSidebarCollapsed}
-          isMobileSidebarOpen={isMobileSidebarOpen}
-          isMobile={isMobile}
-          onToggleSidebar={toggleSidebar}
-          onToggleMobileSidebar={toggleMobileSidebar}
-        />
-
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-black">
-          {/* Enhanced Header */}
-          <DashboardHeader
-            title={title}
+        <div className="flex flex-1 min-h-0">
+          {/* Enhanced Sidebar */}
+          <DashboardSidebar
             isSidebarCollapsed={isSidebarCollapsed}
+            isMobileSidebarOpen={isMobileSidebarOpen}
             isMobile={isMobile}
+            onToggleSidebar={toggleSidebar}
             onToggleMobileSidebar={toggleMobileSidebar}
           />
 
-          {/* Content with proper spacing for the fixed header */}
-          <div 
-            className="container mx-auto px-3 sm:px-4 lg:px-6 pb-6"
-            style={{ 
-              paddingTop: isMobile ? '12.5rem' : '7.5rem'
-            }}
-          >
-            {children}
-          </div>
-        </main>
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto bg-black">
+            {/* Enhanced Header */}
+            <DashboardHeader
+              title={title}
+              isSidebarCollapsed={isSidebarCollapsed}
+              isMobile={isMobile}
+              onToggleMobileSidebar={toggleMobileSidebar}
+            />
+
+            {/* Content with proper spacing for the fixed header */}
+            <div 
+              className="container mx-auto px-3 sm:px-4 lg:px-6 pb-6"
+              style={{ 
+                paddingTop: isMobile ? '12.5rem' : '7.5rem'
+              }}
+            >
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </LayoutContext.Provider>
   );
 };
 

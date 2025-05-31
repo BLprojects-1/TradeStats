@@ -547,20 +547,20 @@ export default function TradeLog() {
               <div className="relative flex space-x-1 bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-xl p-1 w-fit shadow-lg shadow-indigo-900/10">
                 <button
                   onClick={() => setActiveTab('starred')}
-                  className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 transform hover:scale-105 ${
+                  className={`px-6 py-3 text-sm font-medium rounded-lg focus:outline-none ${
                     activeTab === 'starred'
                       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
-                      : 'text-gray-400 hover:text-white hover:bg-[#252525]/50'
+                      : 'bg-indigo-900/20 border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-800/30 hover:border-indigo-400/50'
                   }`}
                 >
                   Starred Tokens ({getStarredTokens().length})
                 </button>
                 <button
                   onClick={() => setActiveTab('added')}
-                  className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 transform hover:scale-105 ${
+                  className={`px-6 py-3 text-sm font-medium rounded-lg focus:outline-none ${
                     activeTab === 'added'
                       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
-                      : 'text-gray-400 hover:text-white hover:bg-[#252525]/50'
+                      : 'bg-indigo-900/20 border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-800/30 hover:border-indigo-400/50'
                   }`}
                 >
                   Added Tokens ({getAddedTokens().length})
@@ -656,24 +656,31 @@ export default function TradeLog() {
 
                     {/* Enhanced Sort buttons */}
                     <div className="flex flex-wrap gap-2">
-                      {['time', 'value', 'size', 'price'].map((field) => (
-                        <button
-                          key={field}
-                          onClick={() => handleSortChange(field as 'time' | 'value' | 'size' | 'price')}
-                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
-                            sortField === field
-                              ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-900/15'
-                              : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
-                          }`}
-                        >
-                          {field.charAt(0).toUpperCase() + field.slice(1)}
-                          {sortField === field && (
-                            <span className="ml-1">
-                              {sortDirection === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                      <span className="text-sm text-gray-400 font-medium">Sort by:</span>
+                      
+                      {/* Wrap the buttons in a relative container to prevent tooltip overlap */}
+                      <div className="relative inline-block">
+                        <div className="flex flex-wrap gap-2">
+                          {['time', 'value', 'size', 'price'].map((field) => (
+                            <button
+                              key={field}
+                              onClick={() => handleSortChange(field as 'time' | 'value' | 'size' | 'price')}
+                              className={`px-4 py-2 rounded-xl text-sm font-medium focus:outline-none z-10 relative ${
+                                sortField === field
+                                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-900/15'
+                                  : 'bg-cyan-900/20 border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-800/30 hover:border-cyan-400/50'
+                              }`}
+                            >
+                              {field.charAt(0).toUpperCase() + field.slice(1)}
+                              {sortField === field && (
+                                <span className="ml-1">
+                                  {sortDirection === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

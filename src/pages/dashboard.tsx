@@ -33,6 +33,7 @@ export default function Dashboard() {
   const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [scannedWallets, setScannedWallets] = useState<Set<string>>(new Set());
   const walletsRef = useRef(wallets);
+  const tradeChecklistRef = useRef<{ openModal: () => void }>(null);
 
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export default function Dashboard() {
   const [showWalletScanModal, setShowWalletScanModal] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
   const [hasTradeChecklistItems, setHasTradeChecklistItems] = useState(false);
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
 
   // Use our processed trading data hook
   const {
@@ -328,6 +330,23 @@ export default function Dashboard() {
     }
   }, [showScanModal]);
 
+  const handleAddRule = () => {
+    setIsChecklistModalOpen(true);
+    tradeChecklistRef.current?.openModal();
+  };
+
+  // Listen for modal close events
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isChecklistModalOpen) {
+        setIsChecklistModalOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscKey);
+    return () => document.removeEventListener('keydown', handleEscKey);
+  }, [isChecklistModalOpen]);
+
   // Show loading state while checking authentication
   if (loading || isCheckingOnboarding) {
     return (
@@ -379,10 +398,10 @@ export default function Dashboard() {
                 <div className="flex space-x-3">
                   <button
                     onClick={() => setActiveSection('overview')}
-                    className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
+                    className={`px-6 py-3 rounded-xl text-sm font-medium focus:outline-none ${
                       activeSection === 'overview'
                         ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
-                        : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
+                        : 'bg-indigo-900/20 border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-800/30 hover:border-indigo-400/50'
                     }`}
                   >
                     <span className="flex items-center space-x-2">
@@ -394,10 +413,10 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={() => setActiveSection('checklist')}
-                    className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
+                    className={`px-6 py-3 rounded-xl text-sm font-medium focus:outline-none ${
                       activeSection === 'checklist'
                         ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
-                        : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
+                        : 'bg-indigo-900/20 border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-800/30 hover:border-indigo-400/50'
                     }`}
                   >
                     <span className="flex items-center space-x-2">
@@ -472,9 +491,9 @@ export default function Dashboard() {
                       {!hasTradeChecklistItems && (
                         <button
                           className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-lg hover:from-indigo-500 hover:to-indigo-400 text-sm font-medium transition-all duration-300 transform hover:scale-105 shadow-lg shadow-indigo-900/15"
-                          onClick={() => router.push('/dashboard/trade-checklist')}
+                          onClick={handleAddRule}
                         >
-                          Create
+                          Add Rule
                         </button>
                       )}
                     </div>
@@ -879,8 +898,39 @@ export default function Dashboard() {
           ) : (
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 blur-md transition-all duration-700 rounded-3xl"></div>
-              <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl p-8 shadow-xl shadow-indigo-900/10">
-                <TradeChecklist />
+              <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-indigo-500/40">
+                <div className="p-6 border-b border-indigo-500/20">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/15">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                          Your Trading Criteria
+                        </h2>
+                        <p className="text-gray-400">Create personalized checklist items to validate your trading decisions</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleAddRule}
+                      className="group bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-6 py-3 rounded-xl font-semibold flex items-center space-x-2 shadow-lg shadow-indigo-900/15 transition-all duration-300 transform hover:scale-105"
+                      aria-label="Add rule"
+                      tabIndex={0}
+                    >
+                      <svg className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span>Add Rule</span>
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-8">
+                  <TradeChecklist ref={tradeChecklistRef} />
+                </div>
               </div>
             </div>
           )}
@@ -923,6 +973,8 @@ export default function Dashboard() {
             tokenLogoURI={selectedTradeModal.tokenLogoURI}
             walletAddress={wallets.find(w => w.id === selectedWalletId)?.wallet_address || ''}
             mode="open-trades"
+            initialSwingPlan=""
+            onSwingPlanChange={() => {}}
           />
         )}
 

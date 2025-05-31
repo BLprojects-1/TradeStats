@@ -219,24 +219,27 @@ export default function AddedTokenModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#1a1a1a] rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl shadow-2xl shadow-indigo-900/20 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between p-6 border-b border-indigo-500/20">
+          <div className="flex items-center space-x-4">
             {tokenLogoURI && (
-              <img src={tokenLogoURI} alt={tokenSymbol} className="w-8 h-8 rounded-full" />
+              <div className="relative">
+                <img src={tokenLogoURI} alt={tokenSymbol} className="w-10 h-10 rounded-full ring-2 ring-indigo-500/30 shadow-lg" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20"></div>
+              </div>
             )}
             <div>
-              <h2 className="text-xl font-semibold text-white">Token Info</h2>
-              <p className="text-gray-400">{tokenSymbol}</p>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Token Info</h2>
+              <p className="text-indigo-300 font-medium">{tokenSymbol}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="p-3 rounded-xl bg-slate-800/50 border border-indigo-500/30 hover:bg-slate-700/50 hover:border-indigo-500/50 text-gray-400 hover:text-gray-200 transition-all duration-300 group"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>

@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { jupiterApiService } from '../services/jupiterApiService';
 import { ChecklistItem, ChecklistItemType } from './TradeChecklist';
 import { supabase } from '../utils/supabaseClient';
+import { useLayoutContext } from './layouts/NewDashboardLayout';
 
 interface TradeInfoModalProps {
   isOpen: boolean;
@@ -18,6 +19,9 @@ interface TradeInfoModalProps {
   initialTrade?: ProcessedTrade; // For trade-log mode
   initialSwingPlan?: string;
   onSwingPlanChange?: (plan: string) => void;
+  isSidebarCollapsed?: boolean;
+  isMobileSidebarOpen?: boolean;
+  isMobile?: boolean;
 }
 
 interface SwingNote {
@@ -58,7 +62,10 @@ export default function TradeInfoModal({
   mode,
   initialTrade,
   initialSwingPlan = '',
-  onSwingPlanChange
+  onSwingPlanChange,
+  isSidebarCollapsed,
+  isMobileSidebarOpen,
+  isMobile
 }: TradeInfoModalProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -91,6 +98,57 @@ export default function TradeInfoModal({
   const [savingTradeNotes, setSavingTradeNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [loadingTradeNotes, setLoadingTradeNotes] = useState(false);
+
+  // Get sidebar state from context if not provided as props
+  let layoutState;
+  try {
+    layoutState = useLayoutContext();
+  } catch (error) {
+    // Context not available, use props or defaults
+    layoutState = null;
+  }
+  
+  const currentSidebarCollapsed = isSidebarCollapsed ?? layoutState?.isSidebarCollapsed ?? false;
+  const currentMobileSidebarOpen = isMobileSidebarOpen ?? layoutState?.isMobileSidebarOpen ?? false;
+  const currentMobile = isMobile ?? layoutState?.isMobile ?? false;
+
+  // Dynamic width calculation based on sidebar state
+  const getModalStyles = () => {
+    // Base styles for all screen sizes
+    let modalClasses = 'relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl shadow-2xl shadow-indigo-900/20 overflow-y-auto transition-all duration-300 max-h-[75vh]';
+    let containerClasses = 'fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 transition-all duration-300 pt-24';
+    
+    // Handle different screen sizes and sidebar states
+    if (currentMobile || window.innerWidth < 1024) {
+      // Mobile screens
+      if (currentMobileSidebarOpen) {
+        // Mobile with sidebar open - center in the space between sidebar and right edge
+        containerClasses += ' pl-80'; // Start after sidebar
+        modalClasses += ' w-full max-w-md mx-auto pr-4'; // Center in remaining space
+      } else {
+        // Mobile with sidebar closed
+        containerClasses += ' px-4';
+        modalClasses += ' w-full max-w-xl mx-auto'; // Larger on mobile when sidebar closed
+      }
+    } else {
+      // Desktop screens
+      if (currentMobileSidebarOpen) {
+        // Desktop with mobile sidebar open (unusual case)
+        containerClasses += ' pl-80';
+        modalClasses += ' w-full max-w-4xl mx-auto pr-4'; // Much larger on desktop
+      } else if (currentSidebarCollapsed) {
+        // Desktop with collapsed sidebar
+        containerClasses += ' pl-20';
+        modalClasses += ' w-full max-w-6xl mx-auto pr-4'; // Very large when sidebar collapsed
+      } else {
+        // Desktop with expanded sidebar
+        containerClasses += ' pl-72';
+        modalClasses += ' w-full max-w-5xl mx-auto pr-4'; // Large on desktop with expanded sidebar
+      }
+    }
+    
+    return { containerClasses, modalClasses };
+  };
 
   useEffect(() => {
     if (isOpen && tokenAddress) {
@@ -699,8 +757,10 @@ export default function TradeInfoModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#1a1a1a] rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div 
+      className={getModalStyles().containerClasses}
+    >
+      <div className={getModalStyles().modalClasses}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-center space-x-3">
@@ -734,7 +794,7 @@ export default function TradeInfoModal({
           ) : tradeDetail ? (
             <div className="space-y-6">
               {/* Trade Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="bg-[#252525] p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-400 mb-2">Total Bought</h3>
                   <p className="text-lg font-semibold text-white">{formatTokenAmount(tradeDetail.totalBought)}</p>

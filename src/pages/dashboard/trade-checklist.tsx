@@ -1,14 +1,28 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import NewDashboardLayout from '../../components/layouts/NewDashboardLayout';
 import TradeChecklist from '../../components/TradeChecklist';
 import TrafficInfoModal from '../../components/TrafficInfoModal';
 
 const TradeChecklistPage = () => {
   const tradeChecklistRef = useRef<{ openModal: () => void }>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleAddRule = () => {
+    setIsModalOpen(true);
     tradeChecklistRef.current?.openModal();
   };
+
+  // Listen for modal close events (we can use a custom event or state management)
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isModalOpen) {
+        setIsModalOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscKey);
+    return () => document.removeEventListener('keydown', handleEscKey);
+  }, [isModalOpen]);
 
   return (
     <div className="relative min-h-screen bg-[#0a0a0f] text-gray-100 overflow-hidden">

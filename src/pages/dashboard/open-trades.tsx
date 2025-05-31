@@ -379,25 +379,29 @@ export default function OpenTrades() {
                   {/* Enhanced Sorting Controls */}
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-gray-400 font-medium">Sort by:</span>
-                    <div className="flex space-x-2">
-                      {['time', 'value', 'size'].map((field) => (
-                        <button
-                          key={field}
-                          onClick={() => handleSortChange(field as 'time' | 'value' | 'size')}
-                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
-                            sortField === field
-                              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
-                              : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
-                          }`}
-                        >
-                          {field.charAt(0).toUpperCase() + field.slice(1)}
-                          {sortField === field && (
-                            <span className="ml-1">
-                              {sortDirection === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                    
+                    {/* Wrap the buttons in a relative container to prevent tooltip overlap */}
+                    <div className="relative inline-block">
+                      <div className="flex space-x-2">
+                        {['time', 'value', 'size'].map((field) => (
+                          <button
+                            key={field}
+                            onClick={() => handleSortChange(field as 'time' | 'value' | 'size')}
+                            className={`px-4 py-2 rounded-xl text-sm font-medium focus:outline-none z-10 relative ${
+                              sortField === field
+                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
+                                : 'bg-indigo-900/20 border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-800/30 hover:border-indigo-400/50'
+                            }`}
+                          >
+                            {field.charAt(0).toUpperCase() + field.slice(1)}
+                            {sortField === field && (
+                              <span className="ml-1">
+                                {sortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -448,25 +448,29 @@ export default function TradingHistory() {
                   {/* Enhanced Sorting Controls */}
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-gray-400 font-medium">Sort by:</span>
-                    <div className="flex space-x-2">
-                      {['type', 'amount', 'valueUSD'].map((field) => (
-                        <button
-                          key={field}
-                          onClick={() => handleSort(field as 'type' | 'amount' | 'valueUSD')}
-                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
-                            sortField === field
-                              ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-900/15'
-                              : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
-                          }`}
-                        >
-                          {field === 'type' ? 'Type' : field === 'amount' ? 'Amount' : 'Value'}
-                          {sortField === field && (
-                            <span className="ml-1">
-                              {sortDirection === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                    
+                    {/* Wrap the buttons in a relative container to prevent tooltip overlap */}
+                    <div className="relative inline-block">
+                      <div className="flex space-x-2">
+                        {['type', 'amount', 'valueUSD'].map((field) => (
+                          <button
+                            key={field}
+                            onClick={() => handleSort(field as 'type' | 'amount' | 'valueUSD')}
+                            className={`px-4 py-2 rounded-xl text-sm font-medium focus:outline-none z-10 relative ${
+                              sortField === field
+                                ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-900/15'
+                                : 'bg-violet-900/20 border border-violet-500/30 text-violet-300 hover:text-white hover:bg-violet-800/30 hover:border-violet-400/50'
+                            }`}
+                          >
+                            {field === 'type' ? 'Type' : field === 'amount' ? 'Amount' : 'Value'}
+                            {sortField === field && (
+                              <span className="ml-1">
+                                {sortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -570,7 +574,7 @@ export default function TradingHistory() {
                                 onClick={(e) => e.stopPropagation()}
                                 className="text-violet-400 hover:text-violet-300 font-mono text-sm transition-colors duration-300 hover:underline"
                               >
-                                {trade.signature.slice(0, 8)}...
+                                {trade.signature ? trade.signature.slice(0, 8) : 'N/A'}...
                               </a>
                             </td>
                           </tr>

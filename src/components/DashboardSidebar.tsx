@@ -2,11 +2,23 @@ import React, { useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
+import { 
+  HiChevronDoubleLeft, 
+  HiChevronDoubleRight, 
+  HiX,
+  HiHome,
+  HiClipboardList,
+  HiTrendingUp,
+  HiClock,
+  HiStar,
+  HiCheckCircle,
+  HiUser
+} from 'react-icons/hi';
 
 interface NavigationItem {
   name: string;
   href: string;
-  icon: string;
+  icon: React.ComponentType<{ className?: string }>;
   description: string;
 }
 
@@ -32,44 +44,44 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
     { 
       name: 'Dashboard', 
       href: '/dashboard', 
-      icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+      icon: HiHome,
       description: 'Overview & performance'
     },
     { 
       name: 'Open Trades', 
       href: '/dashboard/open-trades', 
-      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
+      icon: HiClipboardList,
       description: 'Current positions'
     },
     { 
       name: 'Top Trades', 
       href: '/dashboard/top-trades', 
-      icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
+      icon: HiTrendingUp,
       description: 'Best performing trades'
     },
     { 
       name: 'Trading History', 
       href: '/dashboard/trading-history', 
-      icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+      icon: HiClock,
       description: 'Complete trade history'
     },
     { 
       name: 'Trade Log', 
       href: '/dashboard/trade-log', 
-      icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z',
+      icon: HiStar,
       description: 'Starred trades'
     },
     { 
       name: 'Trade Checklist', 
       href: '/dashboard/trade-checklist', 
-      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+      icon: HiCheckCircle,
       description: 'Trading criteria'
     },
     { 
       name: 'Account', 
       href: '/dashboard/account', 
-      icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-      description: 'Profile, Walle & settings'
+      icon: HiUser,
+      description: 'Profile, Wallet & settings'
     }
   ];
 
@@ -120,7 +132,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
         />
       )}
 
-      {/* Sidebar - Match dashboard branding */}
+      {/* Sidebar - Professional Design */}
       <aside 
         ref={sidebarRef}
         className={`fixed md:relative h-full transition-all duration-300 ease-in-out z-40
@@ -128,7 +140,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           ${isMobileSidebarOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full md:translate-x-0'} 
           flex flex-col`}
       >
-        {/* Match dashboard background styling */}
+        {/* Background Layer */}
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border-r border-indigo-500/40 shadow-xl shadow-indigo-900/10">
           </div>
@@ -136,33 +148,42 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
         
         {/* Content Layer */}
         <div className="relative z-10 flex flex-col h-full">
-          {/* Logo Section - With bottom border separator */}
+          {/* Logo Section */}
           <div className={`relative overflow-hidden transition-all duration-300 border-b border-indigo-500/30 ${
-            isSidebarCollapsed ? 'px-4 py-6' : 'px-6 py-6'
+            isSidebarCollapsed ? 'px-3 py-6' : 'px-6 py-6'
           }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center flex-1">
-                {/* Logo with fixed positioning to prevent blur */}
-                <div className="relative group flex-1">
-                  <div className="transition-all duration-300 ease-out">
-                    <Image 
-                      src="/logo.png" 
-                      alt="Ryvu Logo" 
-                      width={isSidebarCollapsed ? 32 : 140} 
-                      height={36}
-                      className={`h-9 w-auto transition-all duration-300 ease-out ${
-                        isSidebarCollapsed ? 'transform-gpu' : 'transform-gpu'
-                      }`}
-                      priority
-                      style={{ 
-                        imageRendering: 'crisp-edges',
-                        backfaceVisibility: 'hidden',
-                        transform: 'translate3d(0, 0, 0)',
-                        willChange: 'transform'
-                      }}
-                    />
+                {/* Logo - Hide in collapsed state */}
+                {!isSidebarCollapsed && (
+                  <div className="relative group flex-1">
+                    <div className="transition-all duration-300 ease-out">
+                      <Image 
+                        src="/logo.png" 
+                        alt="Ryvu Logo" 
+                        width={140} 
+                        height={36}
+                        className="h-9 w-auto transition-all duration-300 ease-out transform-gpu"
+                        priority
+                        style={{ 
+                          imageRendering: 'crisp-edges',
+                          backfaceVisibility: 'hidden',
+                          transform: 'translate3d(0, 0, 0)',
+                          willChange: 'transform'
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
+                
+                {/* Collapsed State Logo Alternative - Centered Icon */}
+                {isSidebarCollapsed && (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg border border-indigo-400/50">
+                      <span className="text-white font-bold text-sm">R</span>
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Toggle Buttons */}
@@ -170,137 +191,153 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                 {/* Desktop Toggle */}
                 <button
                   onClick={onToggleSidebar}
-                  className="group p-3 rounded-xl bg-[#252525]/80 hover:bg-[#303030] text-gray-400 hover:text-white transition-all duration-300 hidden md:flex items-center justify-center border border-indigo-500/40 shadow-lg hover:scale-105"
+                  className={`group relative w-10 h-10 rounded-xl hover:bg-gradient-to-r hover:from-indigo-500/20 hover:to-purple-500/20 
+                             text-gray-400 hover:text-indigo-300 transition-all duration-300 ease-out hidden md:flex items-center justify-center
+                             hover:shadow-lg hover:shadow-indigo-500/10 border border-transparent hover:border-indigo-500/30
+                             focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 focus:ring-offset-[#1a1a2e]
+                             ${isSidebarCollapsed ? 'bg-indigo-500/10 border-indigo-500/30 shadow-lg shadow-indigo-500/20' : ''}`}
                   aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 transition-all duration-300 group-hover:scale-110"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d={isSidebarCollapsed ? "M13 5l7 7-7 7M5 5l7 7-7 7" : "M11 19l-7-7 7-7m8 14l-7-7 7-7"}
+                  <div className="relative overflow-hidden">
+                    <HiChevronDoubleLeft
+                      className={`h-5 w-5 transform transition-all duration-300 ease-out group-hover:scale-110
+                                 ${isSidebarCollapsed ? 'opacity-0 -translate-x-2 rotate-180' : 'opacity-100 translate-x-0 rotate-0'}`}
                     />
-                  </svg>
+                    <HiChevronDoubleRight
+                      className={`h-5 w-5 transform transition-all duration-300 ease-out group-hover:scale-110 absolute inset-0
+                                 ${isSidebarCollapsed ? 'opacity-100 translate-x-0 rotate-0' : 'opacity-0 translate-x-2 rotate-180'}`}
+                    />
+                  </div>
                 </button>
                 
                 {/* Mobile Close */}
                 <button
                   onClick={onToggleMobileSidebar}
-                  className="group p-3 rounded-xl bg-[#252525]/80 hover:bg-red-900/30 text-gray-400 hover:text-red-300 transition-all duration-300 md:hidden flex items-center justify-center border border-indigo-500/40 hover:border-red-400/50 shadow-lg hover:scale-105"
+                  className="group w-10 h-10 rounded-xl hover:bg-gradient-to-r hover:from-red-500/20 hover:to-pink-500/20 
+                             text-gray-400 hover:text-red-300 transition-all duration-300 ease-out md:hidden flex items-center justify-center
+                             hover:shadow-lg hover:shadow-red-500/10 border border-transparent hover:border-red-500/30
+                             focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 focus:ring-offset-[#1a1a2e]"
                   aria-label="Close sidebar"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 transition-all duration-300 group-hover:scale-110"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
+                  <HiX className="h-5 w-5 transform transition-all duration-300 ease-out group-hover:scale-110 group-hover:rotate-90" />
                 </button>
               </div>
             </div>
-            
-            {/* Right stroke - same as menu items */}
-            <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-indigo-400/30 to-transparent"></div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
-            {navigationItems.map((item, index) => {
-              const isActive = router.pathname === item.href;
-              return (
-                <div key={item.name} className="relative group">
-                  <Link
-                    href={item.href}
-                    className={`flex items-center px-4 py-4 rounded-2xl transition-all duration-300 relative overflow-hidden group/link
-                      ${isActive
-                        ? 'bg-gradient-to-r from-indigo-600/30 to-purple-600/30 text-white border border-indigo-400/50 shadow-xl shadow-indigo-900/20'
-                        : 'text-gray-300 hover:text-white hover:bg-indigo-500/10 border border-transparent hover:border-indigo-400/40 hover:shadow-lg shadow-indigo-900/10'
-                      }
-                      ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}
-                    `}
-                  >
-                    {/* Active Indicator */}
-                    {isActive && (
-                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-10 bg-gradient-to-b from-indigo-400 to-purple-400 rounded-r-full shadow-lg shadow-indigo-400/40"></div>
-                    )}
-                    
-                    {/* Icon Container */}
-                    <div className={`relative transition-all duration-300 flex-shrink-0 ${isActive ? 'text-indigo-200' : 'text-gray-400 group-hover/link:text-indigo-300'}`}>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-6 w-6 transition-all duration-300 group-hover/link:scale-110"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={isActive ? 2.5 : 2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d={item.icon}
-                        />
-                      </svg>
-                    </div>
-                    
-                    {/* Text Content - Prevent wrapping during transitions */}
-                    <div className={`ml-4 flex-1 min-w-0 transition-all duration-300 overflow-hidden ${
-                      isSidebarCollapsed && !isMobileSidebarOpen 
-                        ? 'opacity-0 w-0 ml-0' 
-                        : 'opacity-100 w-auto'
-                    }`}>
-                      <div className={`font-bold text-sm tracking-wide transition-all duration-300 whitespace-nowrap ${
-                        isActive ? 'text-white' : 'text-gray-200 group-hover/link:text-white'
-                      }`}>
-                        {item.name}
+          {/* Navigation - Professional Design */}
+          <nav className={`flex-1 overflow-y-auto transition-all duration-300 ${
+            isSidebarCollapsed ? 'py-4 px-2' : 'py-6 px-4'
+          }`}>
+            <div className={`space-y-2 ${isSidebarCollapsed ? 'space-y-3' : ''}`}>
+              {navigationItems.map((item, index) => {
+                const isActive = router.pathname === item.href;
+                const IconComponent = item.icon;
+                
+                return (
+                  <div key={item.name} className="relative group">
+                    <Link
+                      href={item.href}
+                      className={`flex items-center transition-all duration-300 relative overflow-hidden group/link
+                        ${isSidebarCollapsed 
+                          ? 'w-14 h-14 rounded-2xl justify-center mx-auto flex-shrink-0' 
+                          : 'px-4 py-4 rounded-2xl justify-start'
+                        }
+                        ${isActive
+                          ? isSidebarCollapsed 
+                            ? 'bg-gradient-to-br from-indigo-600/60 to-purple-600/60 text-white border-2 border-indigo-400/80 shadow-2xl shadow-indigo-500/50'
+                            : 'bg-gradient-to-r from-indigo-600/30 to-purple-600/30 text-white border border-indigo-400/50 shadow-xl shadow-indigo-900/20'
+                          : isSidebarCollapsed
+                            ? 'text-gray-300 hover:text-white hover:bg-gradient-to-br hover:from-indigo-500/20 hover:to-purple-500/20 border-2 border-transparent hover:border-indigo-400/60 hover:shadow-xl hover:shadow-indigo-500/30'
+                            : 'text-gray-300 hover:text-white hover:bg-indigo-500/10 border border-transparent hover:border-indigo-400/40 hover:shadow-lg shadow-indigo-900/10'
+                        }
+                        focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-[#1a1a2e]
+                      `}
+                    >
+                      {/* Active Indicator for Expanded State */}
+                      {isActive && !isSidebarCollapsed && (
+                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1.5 h-10 bg-gradient-to-b from-indigo-400 to-purple-400 rounded-r-full shadow-lg shadow-indigo-400/40"></div>
+                      )}
+                      
+                      {/* Icon Container - Perfect Symmetry */}
+                      <div className={`relative transition-all duration-300 flex-shrink-0 flex items-center justify-center
+                        ${isSidebarCollapsed ? 'w-full h-full' : 'w-6 h-6'}
+                        ${isActive 
+                          ? 'text-white' 
+                          : 'text-gray-400 group-hover/link:text-indigo-300'
+                        }`}>
+                        {/* Enhanced Active Glow for Collapsed State */}
+                        {isActive && isSidebarCollapsed && (
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/30 to-purple-400/30 rounded-xl blur-lg"></div>
+                        )}
+                        {/* Standard Active Glow for Expanded State */}
+                        {isActive && !isSidebarCollapsed && (
+                          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-lg blur-sm"></div>
+                        )}
+                        
+                        <IconComponent className={`transition-all duration-300 ease-out relative z-10 flex-shrink-0
+                                                   ${isSidebarCollapsed ? 'w-7 h-7' : 'w-6 h-6'}
+                                                   ${isActive 
+                                                     ? isSidebarCollapsed 
+                                                       ? 'scale-105 drop-shadow-2xl filter brightness-110' 
+                                                       : 'scale-110 drop-shadow-lg' 
+                                                     : 'group-hover/link:scale-110'
+                                                   }`} />
                       </div>
-                      <div className={`text-xs mt-1 transition-all duration-300 whitespace-nowrap ${
-                        isActive ? 'text-indigo-100/90' : 'text-gray-500 group-hover/link:text-gray-400'
+                      
+                      {/* Text Content - Smooth Transitions */}
+                      <div className={`ml-4 flex-1 min-w-0 transition-all duration-300 overflow-hidden ${
+                        isSidebarCollapsed && !isMobileSidebarOpen 
+                          ? 'opacity-0 w-0 ml-0' 
+                          : 'opacity-100 w-auto'
                       }`}>
-                        {item.description}
+                        <div className={`font-bold text-sm tracking-wide transition-all duration-300 whitespace-nowrap ${
+                          isActive ? 'text-white' : 'text-gray-200 group-hover/link:text-white'
+                        }`}>
+                          {item.name}
+                        </div>
+                        <div className={`text-xs mt-1 transition-all duration-300 whitespace-nowrap ${
+                          isActive ? 'text-indigo-100/90' : 'text-gray-500 group-hover/link:text-gray-400'
+                        }`}>
+                          {item.description}
+                        </div>
                       </div>
-                    </div>
-                  </Link>
+                    </Link>
 
-                  {/* Tooltip for Collapsed State - Only show when collapsed */}
-                  {isSidebarCollapsed && !isMobileSidebarOpen && (
-                    <div className="absolute left-full ml-6 top-1/2 transform -translate-y-1/2 px-4 py-3 bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 text-white text-sm rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap border border-indigo-500/40 shadow-2xl z-50 backdrop-blur-xl">
-                      <div className="font-bold">{item.name}</div>
-                      <div className="text-xs text-gray-300 mt-1">{item.description}</div>
-                      <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-8 border-transparent border-r-[#1a1a2e]"></div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    {/* Professional Tooltip for Collapsed State */}
+                    {isSidebarCollapsed && !isMobileSidebarOpen && (
+                      <div className="absolute left-full ml-4 top-1/2 transform -translate-y-1/2 px-4 py-3 
+                                     bg-gradient-to-br from-[#1a1a2e]/98 to-[#1a1a28]/98 backdrop-blur-xl 
+                                     text-white text-sm rounded-xl opacity-0 group-hover:opacity-100 
+                                     transition-all duration-300 pointer-events-none whitespace-nowrap 
+                                     border border-indigo-500/50 shadow-2xl shadow-indigo-500/25 z-50
+                                     transform-gpu scale-95 group-hover:scale-100">
+                        <div className={`font-bold ${isActive ? 'text-indigo-200' : 'text-white'}`}>{item.name}</div>
+                        <div className="text-xs text-gray-300 mt-1">{item.description}</div>
+                        {/* Professional Arrow */}
+                        <div className="absolute right-full top-1/2 transform -translate-y-1/2 
+                                       border-[6px] border-transparent border-r-[#1a1a2e] 
+                                       drop-shadow-lg"></div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </nav>
 
-          {/* Footer Section - With top border separator */}
-          <div className="relative p-5 border-t border-indigo-500/30">
-            {/* Social Links - Responsive layout with smooth transitions */}
-            <div className={`flex items-center justify-center mb-4 transition-all duration-300 ${
-              isSidebarCollapsed && !isMobileSidebarOpen 
-                ? 'flex-col space-y-4' 
-                : 'flex-row space-x-4'
+          {/* Footer Section */}
+          <div className="relative border-t border-indigo-500/30">
+            {/* Social Links - Perfect Alignment */}
+            <div className={`flex items-center justify-center transition-all duration-300 ${
+              isSidebarCollapsed ? 'flex-col space-y-3 py-6' : 'flex-row space-x-4 py-5'
             }`}>
               <a 
                 href="https://x.com/Ryvujournal" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="group w-11 h-11 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-900/20 transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:shadow-indigo-400/30 border border-indigo-500/40 hover:border-indigo-400"
+                className={`group bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-900/20 transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:shadow-indigo-400/30 border border-indigo-500/40 hover:border-indigo-400
+                  ${isSidebarCollapsed ? 'w-12 h-12' : 'w-11 h-11'}`}
                 aria-label="Follow us on X (Twitter)"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white group-hover:scale-110 transition-transform duration-200">
@@ -312,7 +349,8 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                 href="https://discord.gg/6q7UrFsy" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="group w-11 h-11 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-900/20 transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:shadow-indigo-400/30 border border-indigo-500/40 hover:border-indigo-400"
+                className={`group bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-900/20 transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:shadow-indigo-400/30 border border-indigo-500/40 hover:border-indigo-400
+                  ${isSidebarCollapsed ? 'w-12 h-12' : 'w-11 h-11'}`}
                 aria-label="Join our Discord server"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white group-hover:scale-110 transition-transform duration-200">
@@ -322,26 +360,24 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
               
               <button 
                 onClick={handleCopyCA}
-                className="group relative w-11 h-11 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-900/20 transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:shadow-indigo-400/30 border border-indigo-500/40 hover:border-indigo-400"
+                className={`group relative bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-900/20 transition-all duration-300 hover:scale-110 hover:shadow-2xl hover:shadow-indigo-400/30 border border-indigo-500/40 hover:border-indigo-400
+                  ${isSidebarCollapsed ? 'w-12 h-12' : 'w-11 h-11'}`}
                 aria-label="Copy Contract Address"
               >
                 <span className="text-white text-sm font-bold group-hover:scale-110 transition-transform duration-200">CA</span>
               </button>
             </div>
             
-            {/* Disclaimer - Improved visibility when expanded */}
+            {/* Disclaimer - Smooth Visibility */}
             <div className={`text-center transition-all duration-300 overflow-hidden ${
               isSidebarCollapsed && !isMobileSidebarOpen 
-                ? 'opacity-0 h-0' 
-                : 'opacity-100 h-auto'
+                ? 'opacity-0 h-0 pb-0' 
+                : 'opacity-100 h-auto pb-5'
             }`}>
               <p className="text-xs text-gray-400 leading-relaxed px-3 font-medium">
                 Not financial advice. Some data may be inaccurate.
               </p>
             </div>
-            
-            {/* Right stroke - same as menu items */}
-            <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-indigo-400/30 to-transparent"></div>
           </div>
         </div>
       </aside>

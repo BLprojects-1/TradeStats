@@ -8,6 +8,19 @@ import { TrackedWallet } from '../../utils/userProfile';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
 import NotificationToast from '../NotificationToast';
 import AddTokenModal from '../AddTokenModal';
+import { 
+  HiChevronDoubleLeft, 
+  HiChevronDoubleRight, 
+  HiX,
+  HiPlus,
+  HiHome,
+  HiClipboardList,
+  HiTrendingUp,
+  HiClock,
+  HiStar,
+  HiCheckCircle,
+  HiUser
+} from 'react-icons/hi';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -21,7 +34,7 @@ interface DashboardLayoutProps {
 interface NavigationItem {
   name: string;
   href: string;
-  icon: string;
+  icon: React.ComponentType<{ className?: string }>;
   isAction?: boolean;
   isComingSoon?: boolean;
   onClick?: () => void;
@@ -79,9 +92,9 @@ const DashboardLayout = ({
       setWalletDropdownOpen((open) => !open);
     }
   };
-  const handleWalletSelect = (walletId: string | null) => {
+  const handleWalletSelect = async (walletId: string | null) => {
     // Update the context first
-    contextSetSelectedWalletId(walletId);
+    await contextSetSelectedWalletId(walletId);
     // Also call the prop handler for backward compatibility
     if (onWalletChange) {
       onWalletChange(walletId);
@@ -133,17 +146,17 @@ const DashboardLayout = ({
     { 
       name: 'Add Token', 
       href: '#', 
-      icon: 'M12 4v16m8-8H4', 
+      icon: HiPlus, 
       isAction: true, 
       onClick: handleAddTokenClick 
     },
-    { name: 'Dashboard', href: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-    { name: 'Open Trades', href: '/dashboard/open-trades', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-    { name: 'Top Trades', href: '/dashboard/top-trades', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-    { name: 'Trading History', href: '/dashboard/trading-history', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-    { name: 'Trade Log', href: '/dashboard/trade-log', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z' },
-    { name: 'Trade Checklist', href: '/dashboard/trade-checklist', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
-    { name: 'Account', href: '/dashboard/account', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
+    { name: 'Dashboard', href: '/dashboard', icon: HiHome },
+    { name: 'Open Trades', href: '/dashboard/open-trades', icon: HiClipboardList },
+    { name: 'Top Trades', href: '/dashboard/top-trades', icon: HiTrendingUp },
+    { name: 'Trading History', href: '/dashboard/trading-history', icon: HiClock },
+    { name: 'Trade Log', href: '/dashboard/trade-log', icon: HiStar },
+    { name: 'Trade Checklist', href: '/dashboard/trade-checklist', icon: HiCheckCircle },
+    { name: 'Account', href: '/dashboard/account', icon: HiUser }
   ];
 
   const toggleSidebar = () => {
@@ -217,11 +230,11 @@ const DashboardLayout = ({
   }, [router.events]);
 
   // Handle wallet selection change
-  const handleWalletChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleWalletChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newWalletId = e.target.value || null;
     
     // Update the context
-    contextSetSelectedWalletId(newWalletId);
+    await contextSetSelectedWalletId(newWalletId);
     
     // Also call the prop handler for backward compatibility
     if (onWalletChange) {
@@ -297,45 +310,45 @@ const DashboardLayout = ({
                 priority
               />
             </div>
+            {/* Enhanced Collapse Toggle Button */}
             <button
               onClick={toggleSidebar}
-              className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors ml-2 hidden md:block"
+              className={`group relative p-2.5 rounded-xl hover:bg-gradient-to-r hover:from-indigo-500/20 hover:to-purple-500/20 
+                         text-gray-400 hover:text-indigo-300 transition-all duration-300 ease-out ml-2 hidden md:block
+                         hover:shadow-lg hover:shadow-indigo-500/10 border border-transparent hover:border-indigo-500/30
+                         focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 focus:ring-offset-[#1a1a1a]
+                         ${isSidebarCollapsed ? 'bg-indigo-500/10 border-indigo-500/30' : ''}`}
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d={isSidebarCollapsed ? "M13 5l7 7-7 7M5 5l7 7-7 7" : "M11 19l-7-7 7-7m8 14l-7-7 7-7"}
+              <div className="relative overflow-hidden">
+                {/* Collapse Icon */}
+                <HiChevronDoubleLeft
+                  className={`h-5 w-5 transform transition-all duration-300 ease-out group-hover:scale-110
+                             ${isSidebarCollapsed ? 'opacity-0 -translate-x-2 rotate-180' : 'opacity-100 translate-x-0 rotate-0'}`}
                 />
-              </svg>
+                {/* Expand Icon */}
+                <HiChevronDoubleRight
+                  className={`h-5 w-5 transform transition-all duration-300 ease-out group-hover:scale-110 absolute inset-0
+                             ${isSidebarCollapsed ? 'opacity-100 translate-x-0 rotate-0' : 'opacity-0 translate-x-2 rotate-180'}`}
+                />
+              </div>
+              
+              {/* Animated Background Indicator */}
+              <div className={`absolute inset-0 rounded-xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 
+                              transform transition-all duration-300 ease-out -z-10
+                              ${isSidebarCollapsed ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`} />
             </button>
+            
+            {/* Mobile Close Button */}
             <button
               onClick={toggleMobileSidebar}
-              className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors ml-2 md:hidden"
+              className="group p-2.5 rounded-xl hover:bg-gradient-to-r hover:from-red-500/20 hover:to-pink-500/20 
+                         text-gray-400 hover:text-red-300 transition-all duration-300 ease-out ml-2 md:hidden
+                         hover:shadow-lg hover:shadow-red-500/10 border border-transparent hover:border-red-500/30
+                         focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 focus:ring-offset-[#1a1a1a]"
               aria-label="Close sidebar"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <HiX className="h-5 w-5 transform transition-all duration-300 ease-out group-hover:scale-110 group-hover:rotate-90" />
             </button>
           </div>
 
@@ -345,6 +358,7 @@ const DashboardLayout = ({
               {navigationItems.map((item) => {
                 const isActive = router.pathname === item.href && !item.isAction;
                 const isActionItem = item.isAction;
+                const IconComponent = item.icon;
                 
                 return (
                   <li key={item.name}>
@@ -352,77 +366,96 @@ const DashboardLayout = ({
                       // Action item (like Add Token) - button with special styling
                       <button
                         onClick={item.onClick}
-                        className={`w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200 group ${
-                          'text-purple-300 hover:bg-gradient-to-r hover:from-purple-900/20 hover:to-indigo-800/20 hover:text-purple-100 border border-transparent hover:border-purple-500/30'
-                        }`}
+                        className={`w-full flex items-center px-4 py-3 rounded-xl transition-all duration-300 group
+                                   text-purple-300 hover:bg-gradient-to-r hover:from-purple-900/20 hover:to-indigo-800/20 
+                                   hover:text-purple-100 border border-transparent hover:border-purple-500/30
+                                   hover:shadow-lg hover:shadow-purple-500/10 focus:outline-none focus:ring-2 
+                                   focus:ring-purple-400 focus:ring-offset-1 focus:ring-offset-[#1a1a1a]`}
                       >
                         <div className="relative">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-6 w-6 group-hover:scale-110 transition-transform duration-200"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d={item.icon}
-                            />
-                          </svg>
+                          <IconComponent className="h-5 w-5 group-hover:scale-110 transition-transform duration-300 ease-out" />
                           {/* Small indicator dot to show it's an action */}
-                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full opacity-80"></div>
+                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full opacity-80 animate-pulse"></div>
                         </div>
                         {(!isSidebarCollapsed || isMobileSidebarOpen) && (
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-medium ml-3 truncate opacity-0 transition-all duration-300" style={{ 
+                            <span className="font-medium ml-3 truncate transition-all duration-300" style={{ 
                               width: isSidebarCollapsed ? '0' : 'auto',
                               opacity: isSidebarCollapsed ? '0' : '1',
                               visibility: isSidebarCollapsed ? 'hidden' : 'visible'
                             }}>{item.name}</span>
                             {item.isComingSoon && (
-                              <span className="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded-full opacity-0 transition-all duration-300" style={{
+                              <span className="px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded-full transition-all duration-300" style={{
                                 opacity: isSidebarCollapsed ? '0' : '1',
                                 visibility: isSidebarCollapsed ? 'hidden' : 'visible'
                               }}>Coming Soon</span>
                             )}
                           </div>
                         )}
+                        
+                        {/* Tooltip for collapsed state */}
+                        {isSidebarCollapsed && !isMobileSidebarOpen && (
+                          <div className="absolute left-full ml-6 top-1/2 transform -translate-y-1/2 px-3 py-2 
+                                         bg-gradient-to-br from-purple-600/95 to-indigo-600/95 backdrop-blur-xl 
+                                         text-white text-sm rounded-xl opacity-0 group-hover:opacity-100 
+                                         transition-all duration-300 pointer-events-none whitespace-nowrap 
+                                         border border-purple-500/40 shadow-2xl z-50">
+                            {item.name}
+                            <div className="absolute right-full top-1/2 transform -translate-y-1/2 
+                                           border-4 border-transparent border-r-[#1a1a2e]"></div>
+                          </div>
+                        )}
                       </button>
                     ) : (
-                      // Regular navigation item - Link with normal styling
-                      <Link
-                        href={item.href}
-                        className={`flex items-center px-4 py-3 rounded-lg transition-all duration-300 ${
-                          isActive
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        }`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-6 w-6 flex-shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                      // Regular navigation item - Link with enhanced styling
+                      <div className="relative group">
+                        <Link
+                          href={item.href}
+                          className={`flex items-center px-4 py-3 rounded-xl transition-all duration-300 
+                                     relative overflow-hidden ${
+                            isActive
+                              ? 'bg-gradient-to-r from-indigo-600/30 to-purple-600/30 text-white border border-indigo-400/50 shadow-xl shadow-indigo-900/20'
+                              : 'text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-500/10 hover:to-purple-500/10 border border-transparent hover:border-indigo-400/40 hover:shadow-lg hover:shadow-indigo-500/10'
+                          } focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 focus:ring-offset-[#1a1a1a]`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d={item.icon}
-                          />
-                        </svg>
-                        {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-                          <span className="ml-3 truncate opacity-0 transition-all duration-300" style={{ 
-                            width: isSidebarCollapsed ? '0' : 'auto',
-                            opacity: isSidebarCollapsed ? '0' : '1',
-                            visibility: isSidebarCollapsed ? 'hidden' : 'visible',
-                            whiteSpace: 'nowrap'
-                          }}>{item.name}</span>
+                          {/* Active indicator */}
+                          {isActive && (
+                            <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-8 
+                                           bg-gradient-to-b from-indigo-400 to-purple-400 rounded-r-full 
+                                           shadow-lg shadow-indigo-400/40"></div>
+                          )}
+                          
+                          <IconComponent className={`h-5 w-5 flex-shrink-0 transition-all duration-300 ease-out
+                                                     ${isActive ? 'text-indigo-200 scale-110' : 'text-gray-400 group-hover:text-indigo-300 group-hover:scale-110'}`} />
+                          
+                          {(!isSidebarCollapsed || isMobileSidebarOpen) && (
+                            <span className="ml-3 truncate font-medium transition-all duration-300" style={{ 
+                              width: isSidebarCollapsed ? '0' : 'auto',
+                              opacity: isSidebarCollapsed ? '0' : '1',
+                              visibility: isSidebarCollapsed ? 'hidden' : 'visible',
+                              whiteSpace: 'nowrap'
+                            }}>{item.name}</span>
+                          )}
+                          
+                          {/* Hover effect overlay */}
+                          <div className={`absolute inset-0 rounded-xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 
+                                          opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
+                                          ${isActive ? 'opacity-100' : ''}`}></div>
+                        </Link>
+                        
+                        {/* Tooltip for collapsed state */}
+                        {isSidebarCollapsed && !isMobileSidebarOpen && (
+                          <div className="absolute left-full ml-6 top-1/2 transform -translate-y-1/2 px-3 py-2 
+                                         bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl 
+                                         text-white text-sm rounded-xl opacity-0 group-hover:opacity-100 
+                                         transition-all duration-300 pointer-events-none whitespace-nowrap 
+                                         border border-indigo-500/40 shadow-2xl z-50">
+                            {item.name}
+                            <div className="absolute right-full top-1/2 transform -translate-y-1/2 
+                                           border-4 border-transparent border-r-[#1a1a2e]"></div>
+                          </div>
                         )}
-                      </Link>
+                      </div>
                     )}
                   </li>
                 );

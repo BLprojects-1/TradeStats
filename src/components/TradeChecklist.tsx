@@ -1,4 +1,5 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -500,18 +501,28 @@ const TradeChecklist = forwardRef<TradeChecklistRef>((props, ref) => {
         </div>
       </section>
 
-      {/* Add Item Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900/95 backdrop-blur-xl rounded-2xl p-8 w-full max-w-2xl border border-indigo-500/30 shadow-2xl shadow-indigo-900/50">
+      {/* Add Item Modal - Using Portal for better positioning */}
+      {isModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          {/* Full page overlay with blur */}
+          <div 
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            onClick={() => {
+              setIsModalOpen(false);
+              resetForm();
+            }}
+          />
+          
+          {/* Modal content */}
+          <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl shadow-2xl shadow-indigo-900/20 p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/30">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
                   {editingItemId ? 'Edit Checklist Item' : 'Add Checklist Item'}
                 </h2>
               </div>
@@ -520,10 +531,10 @@ const TradeChecklist = forwardRef<TradeChecklistRef>((props, ref) => {
                   setIsModalOpen(false);
                   resetForm();
                 }}
-                className="p-3 rounded-xl bg-slate-800/50 border border-indigo-500/30 hover:bg-slate-700/50 hover:border-indigo-500/50 text-gray-400 hover:text-gray-200 transition-all duration-300"
+                className="p-3 rounded-xl bg-slate-800/50 border border-indigo-500/30 hover:bg-slate-700/50 hover:border-indigo-500/50 text-gray-400 hover:text-gray-200 transition-all duration-300 group"
                 aria-label="Close modal"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -632,7 +643,8 @@ const TradeChecklist = forwardRef<TradeChecklistRef>((props, ref) => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
