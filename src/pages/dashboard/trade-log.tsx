@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
@@ -13,35 +13,7 @@ import NotificationToast from '../../components/NotificationToast';
 import { supabase } from '../../utils/supabaseClient';
 import WalletScanModal from '../../components/WalletScanModal';
 import TrafficInfoModal from '../../components/TrafficInfoModal';
-
-// Simplified interface for trade data from Supabase
-interface TradeLogEntry {
-  signature: string;
-  tokenAddress: string;
-  tokenSymbol: string;
-  tokenName: string;
-  tokenLogoURI: string | null;
-  type: 'BUY' | 'SELL';
-  amount: number;
-  totalVolume: number;
-  profitLoss: number;
-  timestamp: number;
-  starred: boolean;
-}
-
-// Interface for untracked tokens
-interface UntrackedToken {
-  id: string;
-  contract_address: string;
-  symbol: string;
-  wallet_address: string;
-  present_trades: boolean;
-  current_price?: number;
-  total_supply?: number;
-  token_uri?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import { tradeLogService, TradeLogEntry, UntrackedToken } from '../../services/tradeLogService';
 
 // Extended interface for merged token data
 interface MergedTokenData {
@@ -57,15 +29,21 @@ interface MergedTokenData {
   updated_at?: string;
 }
 
+// Add pagination constants to reduce load
+const ITEMS_PER_PAGE = 20;
+const MAX_INITIAL_LOAD = 100; // Limit initial data load
+
 export default function TradeLog() {
   const { user, loading } = useAuth();
   const { selectedWalletId, wallets, isWalletScanning } = useWalletSelection();
   const router = useRouter();
 
-  // Simplified state management
+  // State management
   const [tradeLog, setTradeLog] = useState<TradeLogEntry[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // State for untracked tokens
   const [untrackedTokens, setUntrackedTokens] = useState<UntrackedToken[]>([]);
@@ -101,65 +79,86 @@ export default function TradeLog() {
   const walletAddress = selectedWallet?.wallet_address || '';
 
   /**
-   * Simplified direct Supabase data loading - much faster!
+   * Load starred trades using our dedicated service
    */
-  const loadTradeData = async () => {
+  const loadTradeData = useCallback(async () => {
     if (!selectedWalletId) {
       setTradeLog([]);
+      setTotalCount(0);
       return;
     }
 
-    console.log('🚀 Loading trade data directly from Supabase for wallet:', selectedWalletId);
+    console.log('🚀 Loading starred trades for wallet:', selectedWalletId);
+    console.log('👤 Current user:', user?.id);
+    console.log('🗂️ Selected wallet:', selectedWallet);
+
     setDataLoading(true);
     setError(null);
 
     try {
-      // Direct query to Supabase - no complex processing
-      const { data, error: supabaseError } = await supabase
-        .from('trading_history')
-        .select(`
-          signature,
-          token_address,
-          token_symbol,
-          token_logo_uri,
-          type,
-          amount,
-          value_usd,
-          timestamp,
-          starred
-        `)
-        .eq('wallet_id', selectedWalletId)
-        .eq('starred', true) // Only get starred trades for trade log
-        .order('timestamp', { ascending: false });
+      // First, ensure we have a valid session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (supabaseError) {
-        throw supabaseError;
+      if (sessionError) {
+        console.error('❌ Session error:', sessionError);
+        throw new Error(`Authentication error: ${sessionError.message}`);
       }
 
-      // Simple transformation - no complex calculations
-      const transformedTrades: TradeLogEntry[] = (data || []).map(trade => ({
-        signature: trade.signature || '',
-        tokenAddress: trade.token_address,
-        tokenSymbol: trade.token_symbol,
-        tokenName: trade.token_symbol, // Use symbol as name
-        tokenLogoURI: trade.token_logo_uri,
-        type: trade.type as 'BUY' | 'SELL',
-        amount: Math.abs(trade.amount || 0),
-        totalVolume: trade.value_usd || 0,
-        profitLoss: trade.type === 'BUY' ? -(trade.value_usd || 0) : (trade.value_usd || 0),
-        timestamp: new Date(trade.timestamp).getTime(),
-        starred: trade.starred
-      }));
+      if (!session) {
+        console.error('❌ No active session');
+        throw new Error('Please log in to view starred trades');
+      }
 
-      console.log('✅ Loaded', transformedTrades.length, 'starred trades');
-      setTradeLog(transformedTrades);
+      console.log('🔐 Auth session active for user:', session.user.id);
+
+      // Check if there are any trades at all for this wallet (for debugging)
+      const { data: allTrades, error: allTradesError } = await supabase
+        .from('trading_history')
+        .select('signature, token_symbol, starred, wallet_id')
+        .eq('wallet_id', selectedWalletId)
+        .limit(5);
+
+      if (allTradesError) {
+        console.error('❌ Error checking all trades:', allTradesError);
+        throw new Error(`Database error: ${allTradesError.message}`);
+      } else {
+        console.log('📊 All trades sample for wallet:', allTrades);
+        console.log('⭐ Starred trades in sample:', allTrades?.filter(t => t.starred));
+      }
+
+      // Now get starred trades using our service
+      const { trades, totalCount } = await tradeLogService.getStarredTrades(selectedWalletId);
+
+      console.log('📈 Service returned trades:', trades.length);
+      console.log('🎯 Total count:', totalCount);
+      console.log('🔍 Detailed trades data:', trades);
+
+      // Check if any trades have starred=true
+      const starredTrades = trades.filter(t => t.starred === true);
+      console.log(`⭐ Trades with starred=true: ${starredTrades.length}`);
+
+      // Check if any trades have starred='TRUE'
+      const stringStarredTrades = trades.filter(t => String(t.starred).toUpperCase() === 'TRUE');
+      console.log(`⭐ Trades with starred='TRUE': ${stringStarredTrades.length}`);
+
+      setTradeLog(trades);
+      setTotalCount(totalCount);
+      console.log(`✅ Loaded ${trades.length} starred trades`);
     } catch (err) {
-      console.error('❌ Error loading trade data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load trading data');
+      console.error('❌ Error loading starred trades:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load starred trades';
+      setError(errorMessage);
+      setTradeLog([]);
+      setTotalCount(0);
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [selectedWalletId, user?.id, selectedWallet]);
+
+  // Load data when wallet changes
+  useEffect(() => {
+    loadTradeData();
+  }, [loadTradeData]);
 
   const {
     isLoading: isRefreshing,
@@ -199,15 +198,6 @@ export default function TradeLog() {
     }
   }, [user, loading, router]);
 
-  // Load data when wallet changes
-  useEffect(() => {
-    if (selectedWalletId) {
-      loadTradeData();
-    } else {
-      setTradeLog([]);
-    }
-  }, [selectedWalletId]);
-
   // Load swing plans from localStorage on mount
   useEffect(() => {
     if (user?.id) {
@@ -241,11 +231,19 @@ export default function TradeLog() {
     try {
       // Find the token data in our current view
       const currentTokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
-      const tokenData = currentTokens.find(t => t.tokenAddress === tokenAddress);
+      const tokenData = currentTokens.find((t: MergedTokenData) => t.tokenAddress === tokenAddress);
       if (!tokenData) return;
 
-      const isCurrentlyStarred = tokenData.starred;
+      // Check if the token is currently starred by looking at its trades
+      // This handles both boolean true and string 'TRUE' values
+      const isCurrentlyStarred = tokenData.starred === true || 
+                                String(tokenData.starred).toUpperCase() === 'TRUE';
       const newStarredStatus = !isCurrentlyStarred;
+
+      console.log(`🔄 handleStarTrade: Toggling star for ${tokenData.tokenSymbol}`);
+      console.log(`   Current value: ${tokenData.starred} (${typeof tokenData.starred})`);
+      console.log(`   Interpreted as: ${isCurrentlyStarred}`);
+      console.log(`   Setting to: ${newStarredStatus}`);
 
       // If the token has trades, handle trade starring
       if (tokenData.present_trades && tokenData.trades.length > 0) {
@@ -256,37 +254,19 @@ export default function TradeLog() {
             : t
         ));
 
-        // Update the database for trades directly with Supabase
-        const { error: updateError } = await supabase
-          .from('trading_history')
-          .update({ starred: newStarredStatus })
-          .eq('wallet_id', selectedWalletId)
-          .eq('token_address', tokenAddress);
-
-        if (updateError) {
-          console.error('❌ Error updating starred status:', updateError);
-          throw updateError;
-        }
+        // Update the database using the new service
+        await tradeLogService.toggleTokenStarred(selectedWalletId, tokenAddress, newStarredStatus);
+        console.log(`✅ Database updated for ${tokenData.tokenSymbol}`);
       }
 
       // If we're unstarring and this token is only in untracked_tokens (no trades), remove it
       if (!newStarredStatus && (!tokenData.present_trades || tokenData.trades.length === 0)) {
-        console.log(`🗑️ Removing untracked token ${tokenAddress} from untracked_tokens table`);
-        
-        const { error } = await supabase
-          .from('untracked_tokens')
-          .delete()
-          .eq('wallet_address', walletAddress)
-          .eq('contract_address', tokenAddress);
-
-        if (error) {
-          console.error('❌ Error removing untracked token:', error);
-          throw error;
-        }
+        // Remove using the new service
+        await tradeLogService.removeUntrackedToken(walletAddress, tokenAddress);
 
         // Remove from local state
         setUntrackedTokens(prev => prev.filter(t => t.contract_address !== tokenAddress));
-        
+
         // Show notification for removal
         setStarNotification({ 
           show: true, 
@@ -308,7 +288,7 @@ export default function TradeLog() {
       }, 3000);
     } catch (err) {
       console.error('Error starring/unstarring token:', err);
-      
+
       // Revert local state changes on error
       setTradeLog(prev => prev.map(trade => 
         trade.tokenAddress === tokenAddress 
@@ -355,11 +335,19 @@ export default function TradeLog() {
   };
 
   /**
-   * Simplified data processing - no complex merging needed
+   * Fix the getStarredTokens function to be a proper function
    */
-  const getStarredTokens = () => {
+  const getStarredTokens = (): MergedTokenData[] => {
+    // First, filter trades to ensure we only include starred ones
+    // This handles both boolean true and string 'TRUE' values
+    const starredTrades = tradeLog.filter(trade => 
+      trade.starred === true || String(trade.starred).toUpperCase() === 'TRUE'
+    );
+
+    console.log(`🔍 getStarredTokens: Found ${starredTrades.length} starred trades out of ${tradeLog.length} total`);
+
     // Group starred trades by token address for "Starred Tokens" tab
-    const grouped = tradeLog.reduce((acc, trade) => {
+    const grouped = starredTrades.reduce((acc, trade) => {
       if (!acc[trade.tokenAddress]) {
         acc[trade.tokenAddress] = {
           tokenAddress: trade.tokenAddress,
@@ -375,17 +363,19 @@ export default function TradeLog() {
       return acc;
     }, {} as Record<string, MergedTokenData>);
 
-    return Object.values(grouped);
+    const result = Object.values(grouped);
+    console.log(`✅ getStarredTokens: Returning ${result.length} grouped token entries`);
+    return result;
   };
 
-  const getAddedTokens = () => {
-    // Return all untracked tokens, regardless of present_trades status
-    return untrackedTokens.map(token => ({
+  const getAddedTokens = (): MergedTokenData[] => {
+    // Return all untracked tokens, with minimal processing
+    return untrackedTokens.slice(0, 50).map(token => ({ // Limit to 50 to reduce load
       tokenAddress: token.contract_address,
       tokenSymbol: token.symbol,
       tokenName: token.symbol,
       tokenLogoURI: token.token_uri || null,
-      starred: true, // All tracked tokens are considered "starred"
+      starred: true,
       present_trades: token.present_trades,
       current_price: token.current_price,
       trades: [] as TradeLogEntry[],
@@ -394,119 +384,83 @@ export default function TradeLog() {
     }));
   };
 
-  const getSortedTokenList = () => {
+  const getSortedTokenList = useMemo(() => {
     const tokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
-    
-    return tokens.sort((a, b) => {
-      let aValue: number;
-      let bValue: number;
+
+    // Pre-calculate sort values to avoid repeated calculations
+    const tokensWithSortValues = tokens.map((token: MergedTokenData) => {
+      let sortValue: number;
 
       switch (sortField) {
         case 'time':
           if (activeTab === 'starred') {
-            // Sort by most recent trade timestamp
-            const aLatestTrade = a.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
-            const bLatestTrade = b.trades.sort((x, y) => y.timestamp - x.timestamp)[0];
-            aValue = aLatestTrade?.timestamp || 0;
-            bValue = bLatestTrade?.timestamp || 0;
+            // Use first trade timestamp (already sorted by timestamp desc)
+            sortValue = token.trades[0]?.timestamp || 0;
           } else {
-            // Sort by created_at for added tokens
-            const aToken = untrackedTokens.find(t => t.contract_address === a.tokenAddress);
-            const bToken = untrackedTokens.find(t => t.contract_address === b.tokenAddress);
-            aValue = aToken ? new Date(aToken.created_at).getTime() : 0;
-            bValue = bToken ? new Date(bToken.created_at).getTime() : 0;
+            // Use created_at for added tokens
+            const untrackedToken = untrackedTokens.find((t: UntrackedToken) => t.contract_address === token.tokenAddress);
+            sortValue = untrackedToken ? new Date(untrackedToken.created_at).getTime() : 0;
           }
           break;
         case 'value':
-          // Sort by total P/L (only for starred tokens)
-          aValue = a.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-          bValue = b.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
+          // Pre-calculate total P/L
+          sortValue = token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
           break;
         case 'size':
-          // Sort by total volume (only for starred tokens)
-          aValue = a.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
-          bValue = b.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
+          // Pre-calculate total volume
+          sortValue = token.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
           break;
         case 'price':
-          // Sort by current price (only for starred tokens)
-          aValue = a.current_price || 0;
-          bValue = b.current_price || 0;
+          sortValue = token.current_price || 0;
           break;
         default:
-          aValue = 0;
-          bValue = 0;
+          sortValue = token.trades[0]?.timestamp || 0;
       }
 
-      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+      return { ...token, sortValue };
     });
-  };
 
-  // Simplified stats calculation
-  const currentTokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
-  const totalTokens = currentTokens.length;
-  const totalVolume = currentTokens.reduce((sum, token) => 
-    sum + token.trades.reduce((tradeSum, trade) => tradeSum + trade.totalVolume, 0), 0
-  );
-  const totalPnL = currentTokens.reduce((sum, token) => 
-    sum + token.trades.reduce((tradeSum, trade) => tradeSum + trade.profitLoss, 0), 0
-  );
+    // Simple sort by pre-calculated values
+    return tokensWithSortValues.sort((a, b) => 
+      sortDirection === 'asc' ? a.sortValue - b.sortValue : b.sortValue - a.sortValue
+    );
+  }, [tradeLog, untrackedTokens, activeTab, sortField, sortDirection, getStarredTokens, getAddedTokens]);
+
+  // Optimized stats calculation with memoization
+  const stats = useMemo(() => {
+    const currentTokens = activeTab === 'starred' ? getStarredTokens() : getAddedTokens();
+    const totalTokens = currentTokens.length;
+
+    // Only calculate for visible data to reduce load
+    const visibleTokens = currentTokens.slice(0, ITEMS_PER_PAGE);
+
+    const totalVolume = visibleTokens.reduce((sum, token) => 
+      sum + token.trades.reduce((tradeSum, trade) => tradeSum + trade.totalVolume, 0), 0
+    );
+    const totalPnL = visibleTokens.reduce((sum, token) => 
+      sum + token.trades.reduce((tradeSum, trade) => tradeSum + trade.profitLoss, 0), 0
+    );
+
+    return { totalTokens, totalVolume, totalPnL };
+  }, [tradeLog, untrackedTokens, activeTab, getStarredTokens, getAddedTokens]);
 
   /**
-   * Fetch untracked tokens for the current wallet
+   * Fetch untracked tokens for the current wallet using the new service
    */
-  const fetchUntrackedTokens = async () => {
+  const fetchUntrackedTokens = useCallback(async () => {
     if (!selectedWallet?.wallet_address) {
       setUntrackedTokens([]);
       return;
     }
 
     try {
-      console.log(`🔍 Fetching untracked tokens for wallet: ${selectedWallet.wallet_address}`);
-      
-      const { data, error } = await supabase
-        .from('untracked_tokens')
-        .select(`
-          id,
-          contract_address,
-          symbol,
-          wallet_address,
-          present_trades,
-          current_price,
-          total_supply,
-          token_uri,
-          created_at,
-          updated_at
-        `)
-        .eq('wallet_address', selectedWallet.wallet_address)
-        .order('updated_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ Error fetching untracked tokens:', error);
-        setUntrackedTokens([]);
-        return;
-      }
-
-      // Transform the data to match our interface
-      const transformedData = data?.map(token => ({
-        id: token.id,
-        contract_address: token.contract_address,
-        symbol: token.symbol,
-        wallet_address: token.wallet_address,
-        present_trades: token.present_trades || false,
-        current_price: token.current_price ? parseFloat(token.current_price) : undefined,
-        total_supply: token.total_supply ? parseFloat(token.total_supply) : undefined,
-        token_uri: token.token_uri || null,
-        created_at: token.created_at,
-        updated_at: token.updated_at
-      })) || [];
-
-      console.log(`✅ Found ${transformedData.length} untracked tokens`);
-      setUntrackedTokens(transformedData);
+      const tokens = await tradeLogService.getUntrackedTokens(selectedWallet.wallet_address);
+      setUntrackedTokens(tokens);
     } catch (error) {
       console.error('❌ Error in fetchUntrackedTokens:', error);
       setUntrackedTokens([]);
     }
-  };
+  }, [selectedWallet?.wallet_address]);
 
   // Effect to fetch untracked tokens when wallet changes
   useEffect(() => {
@@ -515,12 +469,20 @@ export default function TradeLog() {
     } else {
       setUntrackedTokens([]);
     }
-  }, [selectedWallet?.wallet_address]);
+  }, [selectedWallet?.wallet_address, fetchUntrackedTokens]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-indigo-400 text-xl">Loading...</div>
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center relative overflow-hidden">
+        {/* Background Elements */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+          <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+          <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+        </div>
+        <div className="relative z-10 text-center">
+          <div className="animate-pulse text-indigo-400 text-xl mb-4">Loading your trade log...</div>
+          <div className="w-32 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full animate-pulse"></div>
+        </div>
       </div>
     );
   }
@@ -533,564 +495,498 @@ export default function TradeLog() {
   const currentLoadingMessage = error || (dataLoading ? 'Loading comprehensive trading data...' : '');
 
   return (
-    <DashboardLayout 
-      title="Trade Log"
-    >
-      <div className="space-y-4 sm:space-y-6">
-        <div className="mb-4 sm:mb-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
-            <h1 className="text-xl sm:text-2xl font-semibold text-white">Trade Log</h1>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing || isOnCooldown}
-                className={`
-                  flex items-center space-x-2 px-4 py-2 rounded-lg
-                  ${isRefreshing || isOnCooldown
-                    ? 'bg-indigo-800 cursor-not-allowed'
-                    : 'bg-indigo-600 hover:bg-indigo-700'
-                  }
-                  transition-colors duration-200
-                `}
-              >
-                <svg
-                  className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                <span>
-                  {isRefreshing
-                    ? 'Refreshing...'
-                    : isOnCooldown
-                    ? `Wait ${Math.ceil(refreshCooldownTimeLeft / 1000)}s`
-                    : 'Refresh'
-                  }
-                </span>
-              </button>
-            </div>
-          </div>
-          <p className="text-gray-500">View and analyze your starred tokens for deeper insights</p>
-        </div>
+    <div className="relative min-h-screen bg-[#0a0a0f] text-gray-100 overflow-hidden">
+      {/* Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
+      </div>
 
-        {error && (
-          <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4 sm:mb-6">
-            {error}
-          </div>
-        )}
-
-        {error && <ApiErrorBanner 
-          message={error} 
-          onRetry={handleRetry} 
-          errorType="general"
-        />}
-
-        {!selectedWalletId && (
-          <div className="bg-indigo-900/30 border border-indigo-500 text-indigo-200 px-4 py-3 rounded mb-4 sm:mb-6">
-            Please select a wallet from the dropdown menu to view your starred tokens.
-          </div>
-        )}
-
-        {/* Enhanced Analytics for Starred Trades */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
-              {activeTab === 'starred' ? 'Starred Tokens' : 'Added Tokens'}
-            </h3>
-            <p className="text-xl sm:text-2xl font-semibold text-yellow-400">{totalTokens}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {activeTab === 'starred' ? 'Tokens you\'ve starred' : 'Tokens you\'ve added to track'}
-            </p>
-          </div>
-
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
-              {activeTab === 'starred' ? 'Avg. Trade Size' : 'Total Added'}
-            </h3>
-            <p className="text-xl sm:text-2xl font-semibold text-white">
-              {activeTab === 'starred' ? (
-                totalTokens > 0 ? formatPriceWithTwoDecimals(totalVolume / totalTokens) : 'N/A'
-              ) : (
-                totalTokens
-              )}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {activeTab === 'starred' ? 'Average volume per trade' : 'Number of tracked tokens'}
-            </p>
-          </div>
-
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
-              {activeTab === 'starred' ? 'Total Volume' : 'With Price Data'}
-            </h3>
-            <p className="text-xl sm:text-2xl font-semibold text-white">
-              {activeTab === 'starred' ? (
-                totalTokens > 0 ? formatPriceWithTwoDecimals(totalVolume) : 'N/A'
-              ) : (
-                currentTokens.filter(token => token.current_price).length
-              )}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {activeTab === 'starred' ? 'Combined trade value' : 'Tokens with current price'}
-            </p>
-          </div>
-
-          <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">
-              {activeTab === 'starred' ? 'Total P/L' : 'Avg. Price'}
-            </h3>
-            <p className={`text-xl sm:text-2xl font-semibold ${
-              activeTab === 'starred' ? (totalPnL >= 0 ? 'text-green-400' : 'text-red-400') : 'text-white'
-            }`}>
-              {activeTab === 'starred' ? (
-                totalTokens > 0 ? (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL)) : 'N/A'
-              ) : (
-                (() => {
-                  const tokensWithPrices = currentTokens.filter(token => token.current_price);
-                  const avgPrice = tokensWithPrices.length > 0 
-                    ? tokensWithPrices.reduce((sum, token) => sum + (token.current_price || 0), 0) / tokensWithPrices.length
-                    : 0;
-                  return avgPrice > 0 ? formatPriceWithTwoDecimals(avgPrice) : 'N/A';
-                })()
-              )}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {activeTab === 'starred' ? 'Profit/loss across all tokens' : 'Average current price'}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4 sm:mb-6">
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={() => setActiveTab('starred')}
-                className={`text-xl sm:text-2xl font-semibold transition-colors ${
-                  activeTab === 'starred' 
-                    ? 'text-indigo-200' 
-                    : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                Starred Tokens
-              </button>
-              <span className="text-xl sm:text-2xl font-semibold text-gray-500">|</span>
-              <button
-                onClick={() => setActiveTab('added')}
-                className={`text-xl sm:text-2xl font-semibold transition-colors ${
-                  activeTab === 'added' 
-                    ? 'text-indigo-200' 
-                    : 'text-gray-500 hover:text-gray-300'
-                }`}
-              >
-                Added Tokens
-              </button>
-            </div>
-
-            {/* Sorting Controls */}
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-400">Sort by:</span>
-              {activeTab === 'starred' ? (
-                <>
+      <DashboardLayout title="Trade Log">
+        <div className="relative z-10 space-y-4 sm:space-y-6">
+          {/* Enhanced Header Section */}
+          <div className="relative">
+            <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
+                    Trade Log
+                  </h1>
+                  <p className="text-gray-300">Record and track your trading decisions and observations</p>
+                </div>
+                <div className="flex gap-2">
+                  {/* Debug button */}
                   <button
-                    onClick={() => handleSortChange('time')}
-                    className={`px-3 py-1 rounded text-sm font-medium ${
-                      sortField === 'time'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-[#252525] text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Time
-                    {sortField === 'time' && (
-                      <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleSortChange('value')}
-                    className={`px-3 py-1 rounded text-sm font-medium ${
-                      sortField === 'value'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-[#252525] text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Value
-                    {sortField === 'value' && (
-                      <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleSortChange('size')}
-                    className={`px-3 py-1 rounded text-sm font-medium ${
-                      sortField === 'size'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-[#252525] text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Size
-                    {sortField === 'size' && (
-                      <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => handleSortChange('price')}
-                    className={`px-3 py-1 rounded text-sm font-medium ${
-                      sortField === 'price'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-[#252525] text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Price
-                    {sortField === 'price' && (
-                      <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleSortChange('time')}
-                    className={`px-3 py-1 rounded text-sm font-medium ${
-                      sortField === 'time'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-[#252525] text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Time
-                    {sortField === 'time' && (
-                      <span className="ml-1">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Desktop table - hidden on mobile */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-800">
-              <thead>
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Star</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
-                  {activeTab === 'starred' ? (
-                    <>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Trades</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total Volume</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Total P/L</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Remaining Balance</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Est. Value</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Last Trade</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Current Price</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Added</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={activeTab === 'starred' ? 8 : 4} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
-                      <div className="flex items-center justify-center space-x-2">
-                        <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>{currentLoadingMessage || 'Loading trades...'}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : getSortedTokenList().length > 0 ? (
-                  getSortedTokenList().map((token) => {
-                    // Calculate token-level metrics
-                    const totalVolume = token.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
-                    const totalPnL = token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-                    const latestTrade = token.trades.length > 0 ? token.trades.sort((a, b) => b.timestamp - a.timestamp)[0] : null;
-                    
-                    // For tokens without trades, we need to show N/A values but can show current price
-                    const hasNoTrades = !token.present_trades || token.trades.length === 0;
-                    
-                    // Create a mock trade object for tokens without trades to handle click events
-                    const mockTradeForClick = latestTrade || {
-                      tokenAddress: token.tokenAddress,
-                      tokenSymbol: token.tokenSymbol,
-                      tokenName: token.tokenName,
-                      tokenLogoURI: token.tokenLogoURI,
-                      timestamp: Date.now(),
-                      amount: 0,
-                      totalVolume: 0,
-                      profitLoss: 0,
-                      signature: '',
-                      starred: true
-                    } as TradeLogEntry;
-
-                    return (
-                      <tr 
-                        key={token.tokenAddress}
-                        onClick={() => handleTradeClick(mockTradeForClick)}
-                        className="hover:bg-[#252525] cursor-pointer transition-colors"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStarTrade(token.tokenAddress);
-                            }}
-                            disabled={starringTrade === token.tokenAddress}
-                            className="hover:text-yellow-400 transition-colors disabled:opacity-50"
-                            aria-label={token.starred ? 'Unstar token' : 'Star token'}
-                          >
-                            {starringTrade === token.tokenAddress ? (
-                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                            ) : (
-                              <svg 
-                                className={`h-4 w-4 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
-                                xmlns="http://www.w3.org/2000/svg" 
-                                fill={token.starred ? 'currentColor' : 'none'} 
-                                viewBox="0 0 24 24" 
-                                stroke="currentColor"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                              </svg>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                          <div className="flex items-center space-x-2">
-                            {token.tokenLogoURI && (
-                              <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-5 h-5 rounded-full" />
-                            )}
-                            <span>{token.tokenSymbol}</span>
-                            {hasNoTrades && (
-                              <span className="text-xs bg-blue-900/30 text-blue-300 px-2 py-1 rounded-full">
-                                {activeTab === 'starred' ? 'Tracked' : 'Added'}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        {activeTab === 'starred' && (
-                          <>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {hasNoTrades ? 'N/A' : token.trades.length}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(totalVolume)}
-                            </td>
-                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${hasNoTrades ? 'text-gray-300' : (totalPnL >= 0 ? 'text-green-400' : 'text-red-400')}`}>
-                              {hasNoTrades ? 'N/A' : (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL))}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {hasNoTrades ? 'N/A' : formatTokenAmount(latestTrade!.amount)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(latestTrade!.totalVolume)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {hasNoTrades ? 'N/A' : formatTimeAgo(latestTrade!.timestamp)}
-                            </td>
-                          </>
-                        )}
-                        {activeTab === 'added' && (
-                          <>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {token.current_price ? formatSmallPrice(token.current_price) : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {(() => {
-                                const untrackedToken = untrackedTokens.find(t => t.contract_address === token.tokenAddress);
-                                return untrackedToken ? formatTimeAgo(new Date(untrackedToken.created_at).getTime()) : 'N/A';
-                              })()}
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={activeTab === 'starred' ? 8 : 4} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
-                      {selectedWalletId 
-                        ? (activeTab === 'starred' 
-                            ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
-                            : 'No added tokens found. Add some tokens to track from other pages to see them here.')
-                        : 'Select a wallet to view your tokens'
+                    onClick={async () => {
+                      if (!selectedWalletId) {
+                        alert('Please select a wallet first');
+                        return;
                       }
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
 
-          {/* Mobile card view - visible only on small screens */}
-          <div className="sm:hidden">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-4 text-gray-400">
-                <div className="flex items-center space-x-2">
-                  <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>{currentLoadingMessage || 'Loading trades...'}</span>
+                      try {
+                        console.log('🧪 Testing database access...');
+
+                        // Test 1: Check auth session
+                        const { data: { session } } = await supabase.auth.getSession();
+                        console.log('Session:', session ? 'Active' : 'None');
+
+                        // Test 2: Check if wallet exists and belongs to user
+                        const { data: wallet, error: walletError } = await supabase
+                          .from('tracked_wallets')
+                          .select('id, user_id, wallet_address')
+                          .eq('id', selectedWalletId)
+                          .single();
+
+                        if (walletError) {
+                          console.error('Wallet error:', walletError);
+                          alert(`Wallet error: ${walletError.message}`);
+                          return;
+                        }
+
+                        console.log('Wallet found:', wallet);
+
+                        // Test 3: Count total trades for this wallet
+                        const { count: totalTrades, error: countError } = await supabase
+                          .from('trading_history')
+                          .select('*', { count: 'exact', head: true })
+                          .eq('wallet_id', selectedWalletId);
+
+                        if (countError) {
+                          console.error('Count error:', countError);
+                          alert(`Count error: ${countError.message}`);
+                          return;
+                        }
+
+                        // Test 4: Count starred trades with boolean true
+                        const { count: starredTradesBoolean, error: starredErrorBoolean } = await supabase
+                          .from('trading_history')
+                          .select('*', { count: 'exact', head: true })
+                          .eq('wallet_id', selectedWalletId)
+                          .eq('starred', true);
+
+                        if (starredErrorBoolean) {
+                          console.error('Starred count error (boolean):', starredErrorBoolean);
+                          alert(`Starred count error (boolean): ${starredErrorBoolean.message}`);
+                          return;
+                        }
+
+                        // Test 4b: Count starred trades with string 'TRUE'
+                        const { count: starredTradesString, error: starredErrorString } = await supabase
+                          .from('trading_history')
+                          .select('*', { count: 'exact', head: true })
+                          .eq('wallet_id', selectedWalletId)
+                          .eq('starred', 'TRUE');
+
+                        if (starredErrorString) {
+                          console.error('Starred count error (string):', starredErrorString);
+                          alert(`Starred count error (string): ${starredErrorString.message}`);
+                          return;
+                        }
+
+                        // Test 4c: Count starred trades with OR condition
+                        const { count: starredTradesTotal, error: starredErrorTotal } = await supabase
+                          .from('trading_history')
+                          .select('*', { count: 'exact', head: true })
+                          .eq('wallet_id', selectedWalletId)
+                          .or('starred.eq.true,starred.eq.TRUE');
+
+                        if (starredErrorTotal) {
+                          console.error('Starred count error (total):', starredErrorTotal);
+                          alert(`Starred count error (total): ${starredErrorTotal.message}`);
+                          return;
+                        }
+
+                        // Test 5: Get sample trades
+                        const { data: sampleTrades, error: sampleError } = await supabase
+                          .from('trading_history')
+                          .select('signature, token_symbol, starred, type, value_usd')
+                          .eq('wallet_id', selectedWalletId)
+                          .limit(3);
+
+                        if (sampleError) {
+                          console.error('Sample error:', sampleError);
+                          alert(`Sample error: ${sampleError.message}`);
+                          return;
+                        }
+
+                        alert(`✅ Database Test Results:
+📊 Total trades: ${totalTrades || 0}
+⭐ Starred trades (boolean true): ${starredTradesBoolean || 0}
+⭐ Starred trades (string 'TRUE'): ${starredTradesString || 0}
+⭐ Starred trades (total): ${starredTradesTotal || 0}
+🎯 Sample trades: ${sampleTrades?.length || 0}
+👤 User ID: ${user?.id}
+🗂️ Wallet ID: ${selectedWalletId}
+📍 Wallet Address: ${wallet.wallet_address}
+💰 Wallet belongs to user: ${wallet.user_id === user?.id ? 'Yes' : 'No'}`);
+
+                      } catch (error) {
+                        console.error('Test error:', error);
+                        alert(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      }
+                    }}
+                    className="px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-sm rounded-xl hover:from-blue-500 hover:to-blue-400 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-blue-900/15"
+                  >
+                    🧪 Test DB
+                  </button>
+
+                  {/* Star test button */}
+                  <button
+                    onClick={async () => {
+                      if (!selectedWalletId) {
+                        alert('Please select a wallet first');
+                        return;
+                      }
+
+                      try {
+                        // Get first trade to star it
+                        const { data: firstTrade, error: tradeError } = await supabase
+                          .from('trading_history')
+                          .select('signature, token_symbol, token_address, starred')
+                          .eq('wallet_id', selectedWalletId)
+                          .limit(1)
+                          .single();
+
+                        if (tradeError) {
+                          alert(`No trades found: ${tradeError.message}`);
+                          return;
+                        }
+
+                        if (!firstTrade) {
+                          alert('No trades found for this wallet');
+                          return;
+                        }
+
+                        // Toggle its starred status
+                        const currentStarred = firstTrade.starred === true || 
+                                              String(firstTrade.starred).toUpperCase() === 'TRUE';
+                        const newStarred = !currentStarred;
+
+                        console.log(`🔄 Toggling star status for ${firstTrade.token_symbol}`);
+                        console.log(`   Current value: ${firstTrade.starred} (${typeof firstTrade.starred})`);
+                        console.log(`   Interpreted as: ${currentStarred}`);
+                        console.log(`   Setting to: ${newStarred}`);
+
+                        const { error: updateError } = await supabase
+                          .from('trading_history')
+                          .update({ starred: newStarred }) // Explicitly use boolean
+                          .eq('wallet_id', selectedWalletId)
+                          .eq('token_address', firstTrade.token_address);
+
+                        if (updateError) {
+                          console.error('Update error:', updateError);
+                          alert(`Update failed: ${updateError.message}`);
+                          return;
+                        }
+
+                        console.log(`✅ Successfully ${newStarred ? 'starred' : 'unstarred'} ${firstTrade.token_symbol}`);
+                        alert(`✅ ${newStarred ? 'Starred' : 'Unstarred'} ${firstTrade.token_symbol} trades!`);
+
+                        // Refresh the data
+                        loadTradeData();
+
+                      } catch (error) {
+                        console.error('Star test error:', error);
+                        alert(`Star test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      }
+                    }}
+                    className="px-3 py-2 bg-gradient-to-r from-yellow-600 to-yellow-500 text-white text-sm rounded-xl hover:from-yellow-500 hover:to-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg shadow-yellow-900/15"
+                  >
+                    ⭐ Star Test
+                  </button>
                 </div>
               </div>
-            ) : getSortedTokenList().length > 0 ? (
-              <div className="space-y-4">
-                {getSortedTokenList().map((token) => {
-                  // Calculate token-level metrics
-                  const totalVolume = token.trades.reduce((sum, trade) => sum + trade.totalVolume, 0);
-                  const totalPnL = token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0);
-                  const latestTrade = token.trades.length > 0 ? token.trades.sort((a, b) => b.timestamp - a.timestamp)[0] : null;
-                  
-                  // For tokens without trades, we need to show N/A values but can show current price
-                  const hasNoTrades = !token.present_trades || token.trades.length === 0;
-                  
-                  // Create a mock trade object for tokens without trades to handle click events
-                  const mockTradeForClick = latestTrade || {
-                    tokenAddress: token.tokenAddress,
-                    tokenSymbol: token.tokenSymbol,
-                    tokenName: token.tokenName,
-                    tokenLogoURI: token.tokenLogoURI,
-                    timestamp: Date.now(),
-                    amount: 0,
-                    totalVolume: 0,
-                    profitLoss: 0,
-                    signature: '',
-                    starred: true
-                  } as TradeLogEntry;
+            </div>
+          </div>
 
-                  return (
-                    <div 
-                      key={token.tokenAddress} 
-                      onClick={() => handleTradeClick(mockTradeForClick)}
-                      className="bg-[#252525] p-4 rounded-lg cursor-pointer hover:bg-[#2a2a2a] transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-2">
-                          {token.tokenLogoURI && (
-                            <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-6 h-6 rounded-full" />
-                          )}
-                          <span className="text-white font-medium">{token.tokenSymbol}</span>
-                          {hasNoTrades && (
-                            <span className="text-xs bg-blue-900/30 text-blue-300 px-2 py-1 rounded-full">
-                              {activeTab === 'starred' ? 'Tracked' : 'Added'}
+          {error && (
+            <div className="bg-gradient-to-r from-red-900/30 to-red-800/30 backdrop-blur-sm border border-red-500/30 text-red-200 px-6 py-4 rounded-2xl shadow-lg shadow-red-900/10">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <h4 className="font-semibold mb-2">Error loading starred trades:</h4>
+                  <p className="text-sm">{error}</p>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs opacity-75">Debug Info</summary>
+                    <div className="mt-1 text-xs opacity-75">
+                      <p>Wallet ID: {selectedWalletId}</p>
+                      <p>User ID: {user?.id}</p>
+                      <p>Wallet Address: {selectedWallet?.wallet_address}</p>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-8">
+            {/* Enhanced Tabs */}
+            <div className="relative group">
+              <div className="relative flex space-x-1 bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-xl p-1 w-fit shadow-lg shadow-indigo-900/10">
+                <button
+                  onClick={() => setActiveTab('starred')}
+                  className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 transform hover:scale-105 ${
+                    activeTab === 'starred'
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
+                      : 'text-gray-400 hover:text-white hover:bg-[#252525]/50'
+                  }`}
+                >
+                  Starred Tokens ({getStarredTokens().length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('added')}
+                  className={`px-6 py-3 text-sm font-medium rounded-lg transition-all duration-300 transform hover:scale-105 ${
+                    activeTab === 'added'
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
+                      : 'text-gray-400 hover:text-white hover:bg-[#252525]/50'
+                  }`}
+                >
+                  Added Tokens ({getAddedTokens().length})
+                </button>
+              </div>
+            </div>
+
+            {/* Enhanced Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-blue-600 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:border-indigo-500/40 hover:transform hover:scale-[1.02]">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-indigo-300 font-semibold">Total Tokens</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white mb-1">{stats.totalTokens}</p>
+                  <p className="text-gray-400 text-sm">Active tokens</p>
+                </div>
+              </div>
+
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-purple-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:border-purple-500/40 hover:transform hover:scale-[1.02]">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                      </svg>
+                    </div>
+                    <h3 className="text-purple-300 font-semibold">Total Volume</h3>
+                  </div>
+                  <p className="text-3xl font-bold text-white mb-1">{formatPriceWithTwoDecimals(stats.totalVolume)}</p>
+                  <p className="text-gray-400 text-sm">Trading volume</p>
+                </div>
+              </div>
+
+              <div className="relative group">
+                <div className={`absolute inset-0 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl ${
+                  stats.totalPnL >= 0 
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
+                    : 'bg-gradient-to-r from-red-600 to-rose-600'
+                }`}></div>
+                <div className={`relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:transform hover:scale-[1.02] ${
+                  stats.totalPnL >= 0 
+                    ? 'border-green-500/40 hover:border-green-500/40' 
+                    : 'border-red-500/40 hover:border-red-500/40'
+                }`}>
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      stats.totalPnL >= 0 
+                        ? 'bg-gradient-to-br from-green-600 to-emerald-600' 
+                        : 'bg-gradient-to-br from-red-600 to-rose-600'
+                    }`}>
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                    <h3 className={`font-semibold ${
+                      stats.totalPnL >= 0 ? 'text-green-300' : 'text-red-300'
+                    }`}>Total P/L</h3>
+                  </div>
+                  <p className={`text-3xl font-bold mb-1 ${
+                    stats.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {formatPriceWithTwoDecimals(stats.totalPnL)}
+                  </p>
+                  <p className="text-gray-400 text-sm">Profit/Loss</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Enhanced Token List */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 opacity-0 group-hover:opacity-50 blur-md transition-all duration-700 rounded-3xl"></div>
+              <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-cyan-500/40 rounded-3xl shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-cyan-500/40">
+                <div className="p-6 border-b border-cyan-500/20">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-900/15">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                      </div>
+                      <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                        {activeTab === 'starred' ? 'Starred Tokens' : 'Added Tokens'}
+                      </h2>
+                    </div>
+
+                    {/* Enhanced Sort buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      {['time', 'value', 'size', 'price'].map((field) => (
+                        <button
+                          key={field}
+                          onClick={() => handleSortChange(field as 'time' | 'value' | 'size' | 'price')}
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
+                            sortField === field
+                              ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-900/15'
+                              : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
+                          }`}
+                        >
+                          {field.charAt(0).toUpperCase() + field.slice(1)}
+                          {sortField === field && (
+                            <span className="ml-1">
+                              {sortDirection === 'asc' ? '↑' : '↓'}
                             </span>
                           )}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStarTrade(token.tokenAddress);
-                          }}
-                          disabled={starringTrade === token.tokenAddress}
-                          className="hover:text-yellow-400 transition-colors disabled:opacity-50"
-                          aria-label={token.starred ? 'Unstar token' : 'Star token'}
-                        >
-                          {starringTrade === token.tokenAddress ? (
-                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 718-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                          ) : (
-                            <svg 
-                              className={`h-5 w-5 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
-                              xmlns="http://www.w3.org/2000/svg" 
-                              fill={token.starred ? 'currentColor' : 'none'} 
-                              viewBox="0 0 24 24" 
-                              stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                            </svg>
-                          )}
                         </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        {activeTab === 'starred' ? (
-                          <>
-                            <div>
-                              <p className="text-gray-400">Trades</p>
-                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : token.trades.length}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">Volume</p>
-                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(totalVolume)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">P/L</p>
-                              <p className={hasNoTrades ? 'text-gray-300' : (totalPnL >= 0 ? 'text-green-400' : 'text-red-400')}>
-                                {hasNoTrades ? 'N/A' : (totalPnL >= 0 ? `+${formatPriceWithTwoDecimals(totalPnL)}` : formatPriceWithTwoDecimals(totalPnL))}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">Remaining Balance</p>
-                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : formatTokenAmount(latestTrade!.amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">Est. Value</p>
-                              <p className="text-gray-300">{hasNoTrades ? 'N/A' : formatPriceWithTwoDecimals(latestTrade!.totalVolume)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">Last Trade</p>
-                              <p className="text-gray-300">
-                                {hasNoTrades ? 'N/A' : formatTimeAgo(latestTrade!.timestamp)}
-                              </p>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div>
-                              <p className="text-gray-400">Current Price</p>
-                              <p className="text-gray-300">{token.current_price ? formatSmallPrice(token.current_price) : 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">Added</p>
-                              <p className="text-gray-300">
-                                {(() => {
-                                  const untrackedToken = untrackedTokens.find(t => t.contract_address === token.tokenAddress);
-                                  return untrackedToken ? formatTimeAgo(new Date(untrackedToken.created_at).getTime()) : 'N/A';
-                                })()}
-                              </p>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
+
+                {/* Token table with enhanced styling */}
+                <div className="overflow-x-auto">
+                  <div className="min-w-full inline-block align-middle">
+                    <table className="min-w-full divide-y divide-cyan-500/20">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-cyan-950/60 to-blue-950/60 backdrop-blur-sm">
+                          {['Star', 'Token', 'Trades', 'Volume', 'P/L', 'Price', 'Last Activity'].map((header) => (
+                            <th key={header} className="px-4 py-4 text-left text-xs font-semibold text-cyan-300 uppercase tracking-wider">
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-cyan-500/10">
+                        {isLoading ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-12 text-center">
+                              <div className="flex items-center justify-center space-x-3">
+                                <div className="relative">
+                                  <div className="w-8 h-8 border-4 border-indigo-600/30 border-t-indigo-500 rounded-full animate-spin"></div>
+                                  <div className="absolute inset-0 w-8 h-8 border-4 border-transparent border-t-cyan-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                                </div>
+                                <span className="text-gray-400 font-medium">{currentLoadingMessage || 'Loading trade log...'}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : getSortedTokenList.length > 0 ? (
+                          getSortedTokenList.slice(0, ITEMS_PER_PAGE).map((token) => (
+                            <tr 
+                              key={token.tokenAddress}
+                              onClick={() => handleTradeClick({
+                                signature: token.trades[0]?.signature || '',
+                                tokenAddress: token.tokenAddress,
+                                tokenSymbol: token.tokenSymbol,
+                                tokenName: token.tokenName,
+                                tokenLogoURI: token.tokenLogoURI,
+                                type: token.trades[0]?.type || 'BUY',
+                                amount: token.trades[0]?.amount || 0,
+                                totalVolume: token.trades[0]?.totalVolume || 0,
+                                profitLoss: token.trades[0]?.profitLoss || 0,
+                                timestamp: token.trades[0]?.timestamp || Date.now(),
+                                starred: token.starred
+                              })}
+                              className="hover:bg-indigo-500/10 cursor-pointer transition-all duration-300 group/row border-b border-indigo-500/5"
+                            >
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStarTrade(token.tokenAddress);
+                                  }}
+                                  disabled={starringTrade === token.tokenAddress}
+                                  className="p-2 rounded-xl hover:bg-indigo-500/20 hover:text-yellow-400 transition-all duration-300 disabled:opacity-50"
+                                  aria-label={token.starred ? 'Unstar token' : 'Star token'}
+                                >
+                                  {starringTrade === token.tokenAddress ? (
+                                    <div className="relative">
+                                      <div className="w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-500 rounded-full animate-spin"></div>
+                                      <div className="absolute inset-0 w-4 h-4 border-2 border-transparent border-t-yellow-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                                    </div>
+                                  ) : (
+                                    <svg 
+                                      className={`h-4 w-4 transition-all duration-300 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400 group-hover/row:text-gray-300'}`} 
+                                      xmlns="http://www.w3.org/2000/svg" 
+                                      fill={token.starred ? 'currentColor' : 'none'} 
+                                      viewBox="0 0 24 24" 
+                                      stroke="currentColor"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <div className="flex items-center space-x-3">
+                                  {token.tokenLogoURI && (
+                                    <img 
+                                      src={token.tokenLogoURI} 
+                                      alt={token.tokenSymbol} 
+                                      className="w-6 h-6 rounded-full ring-2 ring-indigo-500/30"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                      }}
+                                    />
+                                  )}
+                                  <span className="text-gray-100 font-medium group-hover/row:text-white transition-colors">{token.tokenSymbol}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
+                                {token.trades.length}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
+                                {formatPriceWithTwoDecimals(token.trades.reduce((sum, trade) => sum + trade.totalVolume, 0))}
+                              </td>
+                              <td className={`px-4 py-4 whitespace-nowrap font-semibold ${token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {formatPriceWithTwoDecimals(token.trades.reduce((sum, trade) => sum + trade.profitLoss, 0))}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
+                                {token.current_price ? formatSmallPrice(token.current_price) : '-'}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-gray-400 text-sm group-hover/row:text-gray-300 transition-colors">
+                                {activeTab === 'starred' && token.trades[0] 
+                                  ? formatTimeAgo(token.trades[0].timestamp)
+                                  : activeTab === 'added' && token.created_at
+                                  ? formatTimeAgo(new Date(token.created_at).getTime())
+                                  : '-'
+                                }
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                              {activeTab === 'starred' 
+                                ? (selectedWalletId ? 'No starred tokens found. Star some tokens to see them here.' : 'Select a wallet to view starred tokens')
+                                : (selectedWalletId ? 'No added tokens found for this wallet.' : 'Select a wallet to view added tokens')
+                              }
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="text-sm text-gray-300 text-center py-4">
-                {selectedWalletId 
-                  ? (activeTab === 'starred' 
-                      ? 'No starred tokens found. Star some tokens from other pages to see them here.' 
-                      : 'No added tokens found. Add some tokens to track from other pages to see them here.')
-                  : 'Select a wallet to view your tokens'
-                }
-              </div>
-            )}
+            </div>
           </div>
-        </div>
 
         <LoadingToast 
           isVisible={!!(isLoading || (selectedWalletId && isWalletScanning(selectedWalletId) && tradeLog.length === 0))} 
@@ -1155,7 +1051,8 @@ export default function TradeLog() {
           />
         )}
         <TrafficInfoModal />
-      </div>
-    </DashboardLayout>
+        </div>
+      </DashboardLayout>
+    </div>
   );
 }

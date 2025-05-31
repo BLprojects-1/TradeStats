@@ -331,8 +331,16 @@ export default function Dashboard() {
   // Show loading state while checking authentication
   if (loading || isCheckingOnboarding) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-indigo-400 text-xl">Loading...</div>
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center relative overflow-hidden">
+        {/* Background Elements - Reduced glows */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+          <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+          <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+        </div>
+        <div className="relative z-10 text-center">
+          <div className="animate-pulse text-indigo-400 text-xl mb-4">Loading your trading dashboard...</div>
+          <div className="w-32 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full animate-pulse"></div>
+        </div>
       </div>
     );
   }
@@ -348,191 +356,224 @@ export default function Dashboard() {
   const hasWallet = wallets.length > 0;
 
   return (
-    <DashboardLayout title="Dashboard">
-      <div className="space-y-4 sm:space-y-6">
-        {/* Header and Checklist */}
-        <div className="mb-4 sm:mb-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
-            <h1 className="text-xl sm:text-2xl font-semibold text-white">Dashboard Overview</h1>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setActiveSection('overview')}
-                className={`px-4 py-2 rounded-md text-sm font-medium ${
-                  activeSection === 'overview'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-[#252525] text-gray-400 hover:text-white'
-                }`}
-              >
-                Overview
-              </button>
-              <button
-                onClick={() => setActiveSection('checklist')}
-                className={`px-4 py-2 rounded-md text-sm font-medium ${
-                  activeSection === 'checklist'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-[#252525] text-gray-400 hover:text-white'
-                }`}
-              >
-                Trade Checklist
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {/* Getting Started Checklist - Left Side */}
-            <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-4">
-              <h2 className="text-lg font-semibold text-indigo-200 mb-3">Getting Started Checklist</h2>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-3">
-                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 ${hasWallet ? 'border-green-500 bg-green-500' : 'border-gray-500 bg-gray-800'}`}>
-                    {hasWallet ? <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> : ''}
-                  </span>
-                  <span className="text-white text-sm">Add your wallet</span>
-                  {!hasWallet && (
-                    <button
-                      className="ml-auto px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs"
-                      onClick={() => router.push('/dashboard/account')}
-                    >
-                      Go to Account
-                    </button>
-                  )}
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 ${hasTradeChecklistItems ? 'border-green-500 bg-green-500' : 'border-gray-500 bg-gray-800'}`}>
-                    {hasTradeChecklistItems ? <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> : ''}
-                  </span>
-                  <span className="text-white text-sm">Create trading criteria checklist</span>
-                  {!hasTradeChecklistItems && (
-                    <button
-                      className="ml-auto px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs"
-                      onClick={() => router.push('/dashboard/trade-checklist')}
-                    >
-                      Create Checklist
-                    </button>
-                  )}
-                </li>
-              </ul>
-            </div>
+    <div className="relative min-h-screen bg-[#0a0a0f] text-gray-100 overflow-hidden">
+      {/* Background Elements - Reduced glows */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
+      </div>
 
-            {/* Trading Tools Section - Right Side */}
-            <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-4">
-              <h2 className="text-lg font-semibold text-indigo-200 mb-3">Trading Tools</h2>
-              <p className="text-gray-400 text-sm mb-4">Essential tools for Solana trading</p>
-              <div className="space-y-3">
-                {/* Dexscreener */}
-                <a
-                  href="https://dexscreener.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#252525] transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-lg overflow-hidden">
-                    <img 
-                      src="/dexscreener.png" 
-                      alt="Dexscreener" 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-white text-sm font-medium group-hover:text-indigo-200 transition-colors">Dexscreener</h3>
-                    <p className="text-gray-400 text-xs">Real-time DEX charts & analytics</p>
-                  </div>
-                  <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-
-                {/* Axiom */}
-                <a
-                  href="https://axiom.trade/@ryvu"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#252525] transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-lg overflow-hidden">
-                    <img 
-                      src="/axiom.jpg" 
-                      alt="Axiom" 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-white text-sm font-medium group-hover:text-indigo-200 transition-colors">Axiom</h3>
-                    <p className="text-gray-400 text-xs">Advanced trading platform</p>
-                  </div>
-                  <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-
-                {/* BullX */}
-                <a
-                  href="https://bull-x.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#252525] transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-lg overflow-hidden">
-                    <img 
-                      src="/bullx.jpg" 
-                      alt="BullX" 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-white text-sm font-medium group-hover:text-indigo-200 transition-colors">BullX</h3>
-                    <p className="text-gray-400 text-xs">Multi-chain trading bot</p>
-                  </div>
-                  <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {activeSection === 'overview' ? (
-          <>
-            <div className="space-y-4 sm:space-y-6">
-              <div className="mb-4 sm:mb-6">
-                <h1 className="text-xl sm:text-2xl font-semibold mb-2 text-white">Dashboard Overview</h1>
-                <p className="text-gray-500">Welcome to your Solana trading dashboard</p>
-                {refreshMessage && (
-                  <div className={`mt-3 p-3 rounded-md text-sm ${
-                    refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
-                      ? 'bg-red-900/30 border border-red-500 text-red-200' 
-                      : 'bg-green-900/30 border border-green-500 text-green-200'
-                  }`}>
-                    {refreshMessage}
-                  </div>
-                )}
-              </div>
-
-              {(error || tradesError) && (
-                <div className="bg-red-900/30 border border-red-500 text-red-200 px-4 py-3 rounded mb-4 sm:mb-6">
-                  {error || tradesError}
-                  <button 
-                    onClick={() => window.location.reload()}
-                    className="ml-2 underline"
+      <DashboardLayout title="Dashboard">
+        <div className="relative z-10 space-y-6">
+          {/* Enhanced Header Section - Reduced glows */}
+          <div className="relative">
+            <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
+                    Trading Command Center
+                  </h1>
+                  <p className="text-gray-300">Master your Solana trading performance</p>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setActiveSection('overview')}
+                    className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
+                      activeSection === 'overview'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
+                        : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
+                    }`}
                   >
-                    Refresh
+                    <span className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      <span>Overview</span>
+                    </span>
                   </button>
+                  <button
+                    onClick={() => setActiveSection('checklist')}
+                    className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
+                      activeSection === 'checklist'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/15'
+                        : 'bg-[#252525]/80 text-gray-400 hover:text-white hover:bg-[#303030]'
+                    }`}
+                  >
+                    <span className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Trade Checklist</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Enhanced Status Message */}
+              {refreshMessage && (
+                <div className={`p-4 rounded-xl border backdrop-blur-sm ${
+                  refreshMessage.includes('Failed') || refreshMessage.includes('unavailable') 
+                    ? 'bg-red-900/20 border-red-500/30 text-red-200' 
+                    : 'bg-green-900/20 border-green-500/30 text-green-200'
+                }`}>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${
+                      refreshMessage.includes('Failed') ? 'bg-red-400' : 'bg-green-400'
+                    }`}></div>
+                    <span className="font-medium">{refreshMessage}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Enhanced Getting Started & Tools Section - Made equal height */}
+          {activeSection === 'overview' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Getting Started Checklist - Enhanced and made equal height */}
+              <div className="relative group h-full flex flex-col">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-50 blur transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:border-indigo-500/40 flex-1 flex flex-col min-h-[400px]">
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/15">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-white">Getting Started</h2>
+                  </div>
+                  
+                  <div className="space-y-4 flex-1">
+                    <div className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-indigo-500/30 hover:bg-indigo-500/10 hover:border-transparent transition-all duration-300 group/item">
+                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                        hasWallet ? 'border-green-500 bg-green-500/20' : 'border-gray-500 bg-gray-800/50'
+                      }`}>
+                        {hasWallet && <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                      <span className="text-white font-medium flex-1 group-hover/item:text-gray-200 transition-colors">Add your wallet</span>
+                      {!hasWallet && (
+                        <button
+                          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-lg hover:from-indigo-500 hover:to-indigo-400 text-sm font-medium transition-all duration-300 transform hover:scale-105 shadow-lg shadow-indigo-900/15"
+                          onClick={() => router.push('/dashboard/account')}
+                        >
+                          Get Started
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-indigo-500/30 hover:bg-indigo-500/10 hover:border-transparent transition-all duration-300 group/item">
+                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                        hasTradeChecklistItems ? 'border-green-500 bg-green-500/20' : 'border-gray-500 bg-gray-800/50'
+                      }`}>
+                        {hasTradeChecklistItems && <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                      <span className="text-white font-medium flex-1 group-hover/item:text-gray-200 transition-colors">Create trading criteria</span>
+                      {!hasTradeChecklistItems && (
+                        <button
+                          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-lg hover:from-indigo-500 hover:to-indigo-400 text-sm font-medium transition-all duration-300 transform hover:scale-105 shadow-lg shadow-indigo-900/15"
+                          onClick={() => router.push('/dashboard/trade-checklist')}
+                        >
+                          Create
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trading Tools Section - Enhanced */}
+              <div className="relative group h-full flex flex-col">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-0 group-hover:opacity-50 blur transition-all duration-500 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-purple-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:border-indigo-500/40 flex-1 flex flex-col min-h-[400px]">
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-900/15">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-white">Trading Tools</h2>
+                  </div>
+                  
+                  <div className="space-y-3 flex-1">
+                    {[
+                      { name: 'Dexscreener', desc: 'Real-time DEX charts & analytics', logo: '/dexscreener.png', url: 'https://dexscreener.com' },
+                      { name: 'Axiom', desc: 'Advanced trading platform', logo: '/axiom.jpg', url: 'https://axiom.trade/@ryvu' },
+                      { name: 'BullX', desc: 'Multi-chain trading bot', logo: '/bullx.jpg', url: 'https://bull-x.io' }
+                    ].map((tool, index) => (
+                      <a
+                        key={tool.name}
+                        href={tool.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-purple-500/30 hover:bg-purple-500/10 hover:border-transparent transition-all duration-300 group/tool transform hover:scale-[1.02]"
+                      >
+                        <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg">
+                          <img src={tool.logo} alt={tool.name} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-white font-medium group-hover/tool:text-gray-200 transition-colors">{tool.name}</h3>
+                          <p className="text-gray-400 text-sm group-hover/tool:text-gray-300 transition-colors">{tool.desc}</p>
+                        </div>
+                        <svg className="w-5 h-5 text-gray-400 group-hover/tool:text-purple-400 transition-colors transform group-hover/tool:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'overview' ? (
+            <>
+              {/* Error Display */}
+              {(error || tradesError) && (
+                <div className="bg-gradient-to-r from-red-900/30 to-red-800/30 backdrop-blur-sm border border-red-500/30 text-red-200 px-6 py-4 rounded-2xl shadow-lg shadow-red-900/10">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{error || tradesError}</span>
+                    <button 
+                      onClick={() => window.location.reload()}
+                      className="ml-auto underline hover:text-white transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-4 sm:gap-6">
-                <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6">
-                    <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Open Positions</h2>
+              {/* Enhanced Open Positions Section - Reduced glows */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-50 blur-md transition-all duration-700 rounded-3xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl p-8 shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-indigo-500/40">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-900/15">
+                        <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                          Open Positions
+                        </h2>
+                        <p className="text-gray-400">Real-time portfolio tracking</p>
+                      </div>
+                    </div>
+                    
                     {selectedWalletId && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete && (
                       <button
                         onClick={handleRefreshTrades}
                         disabled={refreshing || cooldownTimeLeft > 0}
-                        className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+                        className="group/btn bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:from-gray-700 disabled:to-gray-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium flex items-center space-x-2 shadow-lg shadow-indigo-900/15 transition-all duration-300 transform hover:scale-105 disabled:scale-100"
                       >
                         {refreshing ? (
                           <>
-                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
@@ -540,323 +581,373 @@ export default function Dashboard() {
                           </>
                         ) : cooldownTimeLeft > 0 ? (
                           <>
-                            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <span>{Math.floor(cooldownTimeLeft / 60)}:{(cooldownTimeLeft % 60).toString().padStart(2, '0')}</span>
                           </>
                         ) : (
                           <>
-                            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="h-5 w-5 group-hover/btn:rotate-180 transition-transform duration-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                            <span>Refresh</span>
+                            <span>Refresh Data</span>
                           </>
                         )}
                       </button>
                     )}
                   </div>
 
-                  {/* Desktop table - hidden on mobile */}
-                  <div className="hidden sm:block overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-800">
-                      <thead>
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Star</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Bought</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Sold</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Remaining Balance</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Unrealized P/L</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-800">
-                        {isLoadingTrades ? (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-400">
-                              <div className="flex items-center justify-center space-x-2">
-                                <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <span>Loading open trades...</span>
-                              </div>
-                            </td>
+                  {/* Responsive table - scrollable on all screen sizes */}
+                  <div className="overflow-x-auto">
+                    <div className="min-w-full inline-block align-middle">
+                      <table className="min-w-full divide-y divide-indigo-500/20">
+                        <thead>
+                          <tr className="bg-slate-950/40">
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Star</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Token</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Bought</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Sold</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Remaining Balance</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Unrealized P/L</th>
                           </tr>
-                        ) : openTrades.length > 0 ? (
-                          openTrades.map((token) => (
-                            <tr key={token.tokenAddress} className="hover:bg-[#252525] cursor-pointer" onClick={() => handleTradeClick && handleTradeClick(token)}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStarTrade(token.tokenAddress, token.tokenSymbol);
-                                  }}
-                                  disabled={starringTrade === token.tokenAddress}
-                                  className="hover:text-yellow-400 transition-colors disabled:opacity-50"
-                                  aria-label={token.starred ? 'Unstar token' : 'Star token'}
-                                >
-                                  {starringTrade === token.tokenAddress ? (
-                                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                  ) : (
-                                    <svg 
-                                      className={`h-4 w-4 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
-                                      xmlns="http://www.w3.org/2000/svg" 
-                                      fill={token.starred ? 'currentColor' : 'none'} 
-                                      viewBox="0 0 24 24" 
-                                      stroke="currentColor"
-                                    >
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                    </svg>
-                                  )}
-                                </button>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                <div className="flex items-center space-x-2">
-                                  {token.tokenLogoURI && (
-                                    <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-5 h-5 rounded-full" />
-                                  )}
-                                  <span>{token.tokenSymbol}</span>
+                        </thead>
+                        <tbody className="divide-y divide-indigo-500/10">
+                          {isLoadingTrades ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center">
+                                <div className="flex items-center justify-center space-x-3">
+                                  <div className="relative">
+                                    <div className="w-8 h-8 border-4 border-slate-600/30 border-t-slate-500 rounded-full animate-spin"></div>
+                                    <div className="absolute inset-0 w-8 h-8 border-4 border-transparent border-t-indigo-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                                  </div>
+                                  <span className="text-slate-400 font-medium">Loading open trades...</span>
                                 </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                {formatTokenAmount(token.totalBought)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                {formatTokenAmount(token.totalSold)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                {formatTokenAmount(token.netPosition)}
-                              </td>
-                              <td className={`px-6 py-4 whitespace-nowrap text-sm ${(token.profitLoss || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {formatPriceWithTwoDecimals(token.profitLoss || 0)}
+                            </tr>
+                          ) : openTrades.length > 0 ? (
+                            openTrades.map((token) => (
+                              <tr 
+                                key={token.tokenAddress} 
+                                className="group bg-white/2 hover:bg-indigo-500/10 cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-slate-900/10" 
+                                onClick={() => handleTradeClick && handleTradeClick(token)}
+                              >
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStarTrade(token.tokenAddress, token.tokenSymbol);
+                                    }}
+                                    disabled={starringTrade === token.tokenAddress}
+                                    className="p-2 rounded-lg hover:bg-slate-800/50 hover:text-yellow-400 transition-all duration-300 disabled:opacity-50"
+                                    aria-label={token.starred ? 'Unstar token' : 'Star token'}
+                                  >
+                                    {starringTrade === token.tokenAddress ? (
+                                      <div className="relative">
+                                        <div className="w-4 h-4 border-2 border-slate-600/30 border-t-slate-500 rounded-full animate-spin"></div>
+                                        <div className="absolute inset-0 w-4 h-4 border-2 border-transparent border-t-indigo-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                                      </div>
+                                    ) : (
+                                      <svg 
+                                        className={`h-4 w-4 transition-all duration-300 ${token.starred ? 'text-yellow-400 fill-current' : 'text-slate-400 group-hover:text-slate-300'}`} 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        fill={token.starred ? 'currentColor' : 'none'} 
+                                        viewBox="0 0 24 24" 
+                                        stroke="currentColor"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <div className="flex items-center space-x-3">
+                                    {token.tokenLogoURI && (
+                                      <div className="flex-shrink-0">
+                                        <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-8 h-8 rounded-full border border-slate-600/30" />
+                                      </div>
+                                    )}
+                                    <div>
+                                      <div className="text-sm font-semibold text-slate-100">{token.tokenSymbol}</div>
+                                      <div className="text-xs text-slate-400 font-mono truncate max-w-[120px]">
+                                        {token.tokenAddress.slice(0, 6)}...{token.tokenAddress.slice(-4)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <div className="text-sm font-medium text-slate-200">
+                                    {formatTokenAmount(token.totalBought)}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <div className="text-sm font-medium text-slate-200">
+                                    {formatTokenAmount(token.totalSold)}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <div className="text-sm font-medium text-slate-200">
+                                    {formatTokenAmount(token.netPosition)}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  <div className={`text-sm font-semibold ${(token.profitLoss || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {formatPriceWithTwoDecimals(token.profitLoss || 0)}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center">
+                                <div className="text-slate-400">
+                                  {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No trades found for this wallet'}
+                                </div>
                               </td>
                             </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-center">
-                              {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No trades found for this wallet'}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
-                  {/* Mobile card view - visible only on small screens */}
-                  <div className="sm:hidden">
-                    {isLoadingTrades ? (
-                      <div className="flex items-center justify-center py-4 text-gray-400">
-                        <div className="flex items-center space-x-2">
-                          <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span>Loading open trades...</span>
-                        </div>
-                      </div>
-                    ) : openTrades.length > 0 ? (
-                      <div className="space-y-4">
-                        {openTrades.map((token) => (
-                          <div key={token.tokenAddress} className="bg-[#252525] p-4 rounded-lg cursor-pointer" onClick={() => handleTradeClick(token)}>
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-2">
-                                {token.tokenLogoURI && (
-                                  <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-6 h-6 rounded-full" />
-                                )}
-                                <span className="text-white font-medium">{token.tokenSymbol}</span>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStarTrade(token.tokenAddress, token.tokenSymbol);
-                                }}
-                                disabled={starringTrade === token.tokenAddress}
-                                className="hover:text-yellow-400 transition-colors disabled:opacity-50"
-                                aria-label={token.starred ? 'Unstar token' : 'Star token'}
-                              >
-                                {starringTrade === token.tokenAddress ? (
-                                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                ) : (
-                                  <svg 
-                                    className={`h-5 w-5 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
-                                    xmlns="http://www.w3.org/2000/svg" 
-                                    fill={token.starred ? 'currentColor' : 'none'} 
-                                    viewBox="0 0 24 24" 
-                                    stroke="currentColor"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div>
-                                <p className="text-gray-400">Bought</p>
-                                <p className="text-gray-300">{formatTokenAmount(token.totalBought)}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-400">Sold</p>
-                                <p className="text-gray-300">{formatTokenAmount(token.totalSold)}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-400">Remaining Balance</p>
-                                <p className="text-gray-300">{formatTokenAmount(token.netPosition)}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-400">Unrealized P/L</p>
-                                <p className={`${(token.profitLoss || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                  {formatPriceWithTwoDecimals(token.profitLoss || 0)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-300 text-center py-4">
-                        {wallets.length === 0 ? 'No wallets connected' : !selectedWalletId ? 'Select a wallet to see your open positions' : 'No trades found for this wallet'}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Summary section - only show if there are trades */}
+                  {/* Enhanced Summary Section */}
                   {openTrades.length > 0 && (
-                    <div className="mt-6 pt-6 border-t border-gray-800">
-                      <h3 className="text-lg font-semibold text-indigo-200 mb-4">Position Summary</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6">
-                        <div className="bg-[#252525] p-4 rounded-lg">
-                          <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Open Positions</h4>
-                          <p className="text-xl sm:text-2xl font-semibold text-white">{openTrades.length}</p>
+                    <div className="mt-8 pt-8 border-t border-indigo-500/20">
+                      <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-6">
+                        Portfolio Summary
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="relative group">
+                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-blue-600 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                          <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-indigo-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-indigo-500/40 hover:transform hover:scale-[1.02]">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center">
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                              </div>
+                              <h4 className="text-indigo-300 font-semibold">Open Positions</h4>
+                            </div>
+                            <p className="text-3xl font-bold text-white mb-1">{openTrades.length}</p>
+                            <p className="text-gray-400 text-sm">Active trades</p>
+                          </div>
                         </div>
 
-                        <div className="bg-[#252525] p-4 rounded-lg">
-                          <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Total Value</h4>
-                          <p className="text-xl sm:text-2xl font-semibold text-white">
-                            {formatPriceWithTwoDecimals(openTrades.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
-                          </p>
+                        <div className="relative group">
+                          <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                          <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-indigo-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-purple-500/40 hover:transform hover:scale-[1.02]">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                </svg>
+                              </div>
+                              <h4 className="text-purple-300 font-semibold">Total Value</h4>
+                            </div>
+                            <p className="text-3xl font-bold text-white mb-1">
+                              {formatPriceWithTwoDecimals(openTrades.reduce((sum, token) => sum + (token.totalValue || 0), 0))}
+                            </p>
+                            <p className="text-gray-400 text-sm">Portfolio value</p>
+                          </div>
                         </div>
 
-                        <div className="bg-[#252525] p-4 rounded-lg">
-                          <h4 className="text-sm font-medium text-gray-400 mb-1 sm:mb-2">Unrealized P/L</h4>
-                          <p className={`text-xl sm:text-2xl font-semibold ${openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {formatPriceWithTwoDecimals(openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
-                          </p>
+                        <div className="relative group">
+                          <div className={`absolute inset-0 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl ${
+                            openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 
+                              ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
+                              : 'bg-gradient-to-r from-red-600 to-rose-600'
+                          }`}></div>
+                          <div className={`relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-indigo-500/40 p-6 rounded-2xl transition-all duration-500 hover:transform hover:scale-[1.02] ${
+                            openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 
+                              ? 'border-green-500/40 hover:border-green-500/40' 
+                              : 'border-red-500/40 hover:border-red-500/40'
+                          }`}>
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 
+                                  ? 'bg-gradient-to-br from-green-600 to-emerald-600' 
+                                  : 'bg-gradient-to-br from-red-600 to-rose-600'
+                              }`}>
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                              </div>
+                              <h4 className={`font-semibold ${
+                                openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 ? 'text-green-300' : 'text-red-300'
+                              }`}>Unrealized P/L</h4>
+                            </div>
+                            <p className={`text-3xl font-bold mb-1 flex items-center ${
+                              openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 ? '↗' : '↘'} 
+                              {formatPriceWithTwoDecimals(openTrades.reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
+                            </p>
+                            <p className="text-gray-400 text-sm">Current session</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-[#1a1a1a] rounded-lg shadow-md p-4 sm:p-6">
-                  <div className="flex justify-between items-center mb-4 sm:mb-6">
-                    <h2 className="text-xl sm:text-2xl font-semibold text-indigo-200">Performance Overview (24h)</h2>
-                  </div>
-                  {performanceLoading ? (
-                    <div className="text-center py-8">
-                      <div className="text-indigo-400">Loading performance data...</div>
-                    </div>
-                  ) : wallets.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400">No wallets connected</div>
-                    </div>
-                  ) : !selectedWalletId ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400">Select a wallet to see your performance metrics</div>
-                    </div>
-                  ) : performanceData ? (
-                    <div className="space-y-6">
-                      {/* Performance Chart */}
-                      <PerformanceChart dataPoints={performanceData.dataPoints} />
-
-                      {/* Performance Statistics */}
-                      <PerformanceStats metrics={performanceData.metrics} />
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-gray-400">Unable to load performance data</p>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Enhanced Performance Overview Section - Reduced glows */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-cyan-600 opacity-0 group-hover:opacity-50 blur-md transition-all duration-700 rounded-3xl"></div>
+                <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-purple-500/40 rounded-3xl p-8 shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-indigo-500/40">
+                  <div className="flex items-center space-x-4 mb-8">
+                    <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-900/15">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
+                        Performance Analytics
+                      </h2>
+                      <p className="text-gray-400">24-hour trading performance insights</p>
+                    </div>
+                  </div>
+
+                  {performanceLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 space-y-6">
+                      <div className="relative">
+                        <div className="w-20 h-20 border-4 border-purple-600/30 border-t-purple-500 rounded-full animate-spin"></div>
+                        <div className="absolute inset-0 w-20 h-20 border-4 border-transparent border-t-cyan-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                      </div>
+                      <span className="text-purple-300 font-medium">Analyzing your performance...</span>
+                    </div>
+                  ) : wallets.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 space-y-6">
+                      <div className="w-20 h-20 bg-gradient-to-br from-purple-600/20 to-cyan-600/20 rounded-3xl flex items-center justify-center">
+                        <svg className="w-10 h-10 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-gray-300 font-medium text-lg mb-2">No wallets connected</p>
+                        <p className="text-gray-500">Connect a wallet to see your performance analytics</p>
+                      </div>
+                    </div>
+                  ) : !selectedWalletId ? (
+                    <div className="flex flex-col items-center justify-center py-16 space-y-6">
+                      <div className="w-20 h-20 bg-gradient-to-br from-purple-600/20 to-cyan-600/20 rounded-3xl flex items-center justify-center">
+                        <svg className="w-10 h-10 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-gray-300 font-medium text-lg mb-2">Select a wallet</p>
+                        <p className="text-gray-500">Choose a wallet to view your performance metrics</p>
+                      </div>
+                    </div>
+                  ) : performanceData ? (
+                    <div className="space-y-8">
+                      {/* Enhanced Performance Chart Container */}
+                      <div className="relative group">
+                        <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-indigo-600 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                        <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-purple-500/40 rounded-2xl p-6 transition-all duration-500 hover:border-purple-500/40 hover:transform hover:scale-[1.01]">
+                          <PerformanceChart dataPoints={performanceData.dataPoints} />
+                        </div>
+                      </div>
+
+                      {/* Enhanced Performance Statistics Container */}
+                      <div className="relative group">
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 opacity-25 group-hover:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                        <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-cyan-500/40 rounded-2xl p-6 transition-all duration-500 hover:border-cyan-500/40 hover:transform hover:scale-[1.01]">
+                          <PerformanceStats metrics={performanceData.metrics} />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 space-y-6">
+                      <div className="w-20 h-20 bg-gradient-to-br from-red-600/20 to-orange-600/20 rounded-3xl flex items-center justify-center">
+                        <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-gray-300 font-medium text-lg mb-2">Unable to load data</p>
+                        <p className="text-gray-500">Performance data is temporarily unavailable</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 blur-md transition-all duration-700 rounded-3xl"></div>
+              <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl p-8 shadow-xl shadow-indigo-900/10">
+                <TradeChecklist />
+              </div>
             </div>
-          </>
-        ) : (
-          <TradeChecklist />
+          )}
+        </div>
+
+        {/* All existing modals and notifications with enhanced styling */}
+        <NotificationToast
+          message={loadingMessage || ''}
+          isVisible={showLoadingNotification}
+          type={loadingMessage?.includes('Failed') ? 'error' : 'info'}
+          autoDismissMs={3000}
+          onDismiss={() => setShowLoadingNotification(false)}
+        />
+
+        <NotificationToast
+          message={refreshMessage || ''}
+          isVisible={showNotification}
+          type="success"
+          autoDismissMs={5000}
+          onDismiss={() => setShowNotification(false)}
+        />
+
+        {showScanModal && selectedWalletForScan && (
+          <ScanTradesModal
+            wallet={selectedWalletForScan}
+            onClose={() => {
+              setShowScanModal(false);
+              setSelectedWalletForScan(null);
+            }}
+            onScanComplete={handleScanComplete}
+          />
         )}
-      </div>
 
-      {/* Loading notification */}
-      <NotificationToast
-        message={loadingMessage || ''}
-        isVisible={showLoadingNotification}
-        type={loadingMessage?.includes('Failed') ? 'error' : 'info'}
-        autoDismissMs={3000}
-        onDismiss={() => setShowLoadingNotification(false)}
-      />
+        {selectedTradeModal && selectedWalletId && (
+          <TradeInfoModal
+            isOpen={!!selectedTradeModal}
+            onClose={handleCloseModal}
+            tokenAddress={selectedTradeModal.tokenAddress}
+            tokenSymbol={selectedTradeModal.tokenSymbol}
+            tokenLogoURI={selectedTradeModal.tokenLogoURI}
+            walletAddress={wallets.find(w => w.id === selectedWalletId)?.wallet_address || ''}
+            mode="open-trades"
+          />
+        )}
 
-      {/* Existing refresh notification */}
-      <NotificationToast
-        message={refreshMessage || ''}
-        isVisible={showNotification}
-        type="success"
-        autoDismissMs={5000}
-        onDismiss={() => setShowNotification(false)}
-      />
-
-      {showScanModal && selectedWalletForScan && (
-        <ScanTradesModal
-          wallet={selectedWalletForScan}
-          onClose={() => {
-            setShowScanModal(false);
-            setSelectedWalletForScan(null);
-          }}
-          onScanComplete={handleScanComplete}
+        <NotificationToast
+          message={starNotification.isUnstarring 
+            ? `Removed ${starNotification.tokenSymbol} from trade log` 
+            : `Added ${starNotification.tokenSymbol} trade to trade log`}
+          isVisible={starNotification.show}
+          type="success"
+          autoDismissMs={3000}
+          onDismiss={() => setStarNotification({ show: false, tokenSymbol: '', isUnstarring: false })}
         />
-      )}
 
-      {/* Trade Info Modal */}
-      {selectedTradeModal && selectedWalletId && (
-        <TradeInfoModal
-          isOpen={!!selectedTradeModal}
-          onClose={handleCloseModal}
-          tokenAddress={selectedTradeModal.tokenAddress}
-          tokenSymbol={selectedTradeModal.tokenSymbol}
-          tokenLogoURI={selectedTradeModal.tokenLogoURI}
-          walletAddress={wallets.find(w => w.id === selectedWalletId)?.wallet_address || ''}
-          mode="open-trades"
-        />
-      )}
-
-      {/* Star notification */}
-      <NotificationToast
-        message={starNotification.isUnstarring 
-          ? `Removed ${starNotification.tokenSymbol} from trade log` 
-          : `Added ${starNotification.tokenSymbol} trade to trade log`}
-        isVisible={starNotification.show}
-        type="success"
-        autoDismissMs={3000}
-        onDismiss={() => setStarNotification({ show: false, tokenSymbol: '', isUnstarring: false })}
-      />
-
-      {/* Wallet Scan Modal */}
-      {user?.id && selectedWallet?.wallet_address && (
-        <WalletScanModal
-          isOpen={showWalletScanModal}
-          onClose={() => setShowWalletScanModal(false)}
-          onSuccess={handleWalletScanSuccess}
-          walletAddress={selectedWallet.wallet_address}
-          userId={user.id}
-        />
-      )}
-      <TrafficInfoModal />
-    </DashboardLayout>
+        {user?.id && selectedWallet?.wallet_address && (
+          <WalletScanModal
+            isOpen={showWalletScanModal}
+            onClose={() => setShowWalletScanModal(false)}
+            onSuccess={handleWalletScanSuccess}
+            walletAddress={selectedWallet.wallet_address}
+            userId={user.id}
+          />
+        )}
+        
+        <TrafficInfoModal />
+      </DashboardLayout>
+    </div>
   );
 }

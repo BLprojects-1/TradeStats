@@ -81,25 +81,25 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   }, [dataPoints, svgWidth, svgHeight]);
 
   // Define colors for positive and negative values
-  const positiveColor = '#10B981'; // Green for positive
-  const negativeColor = '#EF4444'; // Red for negative
-  const positiveFillColor = '#10B98125'; // Semi-transparent green
-  const negativeFillColor = '#EF444425'; // Semi-transparent red
+  const positiveColor = '#10b981'; // Emerald for positive
+  const negativeColor = '#f43f5e'; // Rose for negative
+  const positiveFillColor = '#10b98120'; // Semi-transparent emerald
+  const negativeFillColor = '#f43f5e20'; // Semi-transparent rose
 
   if (!dataPoints || dataPoints.length === 0) {
     return (
-      <div className={`bg-[#0f0f0f] rounded-lg p-4 border border-gray-800 ${className}`}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white text-sm font-medium">Realized PNL</h3>
+      <div className={`bg-slate-900/40 backdrop-blur-sm rounded-xl p-6 border border-slate-600/25 ${className}`}>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-slate-100 text-lg font-semibold">Realized PNL</h3>
           <div className="text-right">
-            <div className="text-lg font-bold text-gray-500">$0.00</div>
-            <div className="text-xs text-gray-500">24h</div>
+            <div className="text-2xl font-bold text-slate-400">$0.00</div>
+            <div className="text-sm text-slate-500">24h</div>
           </div>
         </div>
-        <div className="flex items-center justify-center h-40 text-gray-500 bg-[#141414] rounded-lg border border-gray-700/50">
+        <div className="flex items-center justify-center h-48 text-slate-500 bg-slate-800/50 rounded-xl border border-slate-700/50 backdrop-blur-sm">
           <div className="text-center">
-            <div className="text-sm">No trading data available</div>
-            <div className="text-xs mt-1">Data will appear when trades are made</div>
+            <div className="text-base font-medium">No trading data available</div>
+            <div className="text-sm mt-2 text-slate-600">Data will appear when trades are made</div>
           </div>
         </div>
       </div>
@@ -107,21 +107,21 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   }
 
   return (
-    <div className={`bg-[#0f0f0f] rounded-lg p-4 border border-gray-800 ${className}`}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-white text-sm font-medium">Realized PNL</h3>
+    <div className={`bg-slate-900/40 backdrop-blur-sm rounded-xl p-6 border border-slate-600/25 transition-all duration-300 hover:bg-slate-800/50 hover:border-slate-500/30 hover:shadow-lg hover:shadow-slate-900/20 ${className}`}>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-slate-100 text-lg font-semibold">Realized PNL</h3>
         <div className="text-right">
-          <div className={`text-lg font-bold ${
+          <div className={`text-2xl font-bold ${
             hoveredPointIndex !== null 
-              ? (dataPoints[hoveredPointIndex].cumulativePnL >= 0 ? 'text-green-400' : 'text-red-400')
-              : (dataPoints[dataPoints.length - 1]?.cumulativePnL >= 0 ? 'text-green-400' : 'text-red-400')
+              ? (dataPoints[hoveredPointIndex].cumulativePnL >= 0 ? 'text-emerald-400' : 'text-rose-400')
+              : (dataPoints[dataPoints.length - 1]?.cumulativePnL >= 0 ? 'text-emerald-400' : 'text-rose-400')
           }`}>
             {hoveredPointIndex !== null 
               ? `${dataPoints[hoveredPointIndex].cumulativePnL >= 0 ? '+' : ''}$${dataPoints[hoveredPointIndex].cumulativePnL.toFixed(2)}`
               : `${dataPoints[dataPoints.length - 1]?.cumulativePnL >= 0 ? '+' : ''}$${dataPoints[dataPoints.length - 1]?.cumulativePnL.toFixed(2) || '0.00'}`
             }
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-sm text-slate-500">
             {hoveredPointIndex !== null 
               ? new Date(dataPoints[hoveredPointIndex].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : '24h'
@@ -130,7 +130,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
         </div>
       </div>
 
-      <div className="relative bg-[#141414] rounded-lg border border-gray-700/50 p-3">
+      <div className="relative bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
         <svg 
           ref={svgRef}
           width="100%" 
@@ -222,9 +222,9 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
               <path 
                 d="M 40 0 L 0 0 0 32" 
                 fill="none" 
-                stroke="#4B5563" 
+                stroke="#475569" 
                 strokeWidth="0.5"
-                opacity="0.2"
+                opacity="0.15"
               />
             </pattern>
           </defs>
@@ -233,7 +233,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
             width="100%" 
             height="100%" 
             fill={`url(#grid-${chartId})`}
-            rx="4"
+            rx="8"
           />
 
           {/* Zero line */}
@@ -243,10 +243,10 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
               y1={zeroY}
               x2={svgWidth - chartPadding}
               y2={zeroY}
-              stroke="#6B7280"
-              strokeWidth="1"
-              strokeDasharray="2,2"
-              className="opacity-70"
+              stroke="#64748b"
+              strokeWidth="1.5"
+              strokeDasharray="4,4"
+              className="opacity-60"
             />
           )}
 
@@ -337,10 +337,10 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
               y1={chartPadding}
               x2={chartPadding + (hoveredPointIndex / (dataPoints.length - 1)) * (svgWidth - 2 * chartPadding)}
               y2={svgHeight - chartPadding}
-              stroke="#6B7280"
-              strokeWidth="1"
-              strokeDasharray="3,3"
-              className="opacity-70"
+              stroke="#64748b"
+              strokeWidth="1.5"
+              strokeDasharray="4,4"
+              className="opacity-50"
             />
           )}
 
@@ -357,9 +357,9 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                   cy={y}
                   r={hoveredPointIndex === index ? "5" : "3"}
                   fill={point.cumulativePnL >= 0 ? positiveColor : negativeColor}
-                  className={`${hoveredPointIndex === index ? 'opacity-100' : 'opacity-90'} drop-shadow-sm transition-all duration-200`}
-                  stroke="#000"
-                  strokeWidth="0.5"
+                  className={`${hoveredPointIndex === index ? 'opacity-100' : 'opacity-90'} drop-shadow-md transition-all duration-200`}
+                  stroke="#1e293b"
+                  strokeWidth="1.5"
                   style={{ cursor: 'pointer' }}
                 />
 
@@ -367,29 +367,29 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                 {hoveredPointIndex === index && (
                   <g>
                     <rect
-                      x={x - 45}
-                      y={y - 40}
-                      width="90"
-                      height="30"
-                      fill="#1f2937"
-                      stroke="#374151"
+                      x={x - 50}
+                      y={y - 45}
+                      width="100"
+                      height="35"
+                      fill="#1e293b"
+                      stroke="#475569"
                       strokeWidth="1"
-                      rx="4"
-                      className="opacity-95"
+                      rx="8"
+                      className="opacity-95 drop-shadow-lg"
                     />
                     <text
                       x={x}
-                      y={y - 25}
+                      y={y - 28}
                       textAnchor="middle"
-                      className="fill-white text-xs font-medium"
+                      className="fill-slate-100 text-sm font-semibold"
                     >
                       ${point.cumulativePnL.toFixed(2)}
                     </text>
                     <text
                       x={x}
-                      y={y - 15}
+                      y={y - 16}
                       textAnchor="middle"
-                      className="fill-gray-400 text-[10px]"
+                      className="fill-slate-400 text-xs"
                     >
                       {new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </text>

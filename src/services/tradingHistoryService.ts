@@ -1003,7 +1003,7 @@ export class TradingHistoryService {
       let query = supabase
         .from('trading_history')
         .select('*', { count: 'exact' })
-        .eq('starred', true)
+        .or('starred.eq.true,starred.eq.TRUE') // Handle both boolean true and string 'TRUE'
         .order('timestamp', { ascending: false });
 
       // If walletAddress is provided, filter by specific wallet

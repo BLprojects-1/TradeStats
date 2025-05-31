@@ -35,7 +35,7 @@ class DRPCCircuitBreaker {
     state: 'CLOSED',
     nextAttemptTime: 0
   };
-  
+
   private readonly maxFailures = 5;
   private readonly cooldownPeriod = 60000;
   private readonly timeout = 30000;
@@ -70,7 +70,7 @@ class DRPCCircuitBreaker {
   private recordFailure(): void {
     this.circuitState.failureCount++;
     this.circuitState.lastFailureTime = Date.now();
-    
+
     if (this.circuitState.failureCount >= this.maxFailures) {
       this.circuitState.state = 'OPEN';
       this.circuitState.nextAttemptTime = Date.now() + this.cooldownPeriod;
@@ -89,15 +89,15 @@ class DRPCCircuitBreaker {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`🔄 DRPC Request attempt ${attempt}/${maxRetries} for ${context}`);
-        
+
         const result = await requestFn();
         this.recordSuccess();
         console.log(`✅ DRPC Request successful for ${context}`);
         return result;
-        
+
       } catch (error: any) {
         lastError = error;
-        
+
         // Enhanced error classification
         const is408Error = error.response?.status === 408 || error.code === 'ECONNABORTED';
         const isNetworkError = error.code === 'ENOTFOUND' || 
@@ -109,7 +109,7 @@ class DRPCCircuitBreaker {
                               error.message?.includes('timeout') ||
                               error.message?.includes('ETIMEDOUT') ||
                               isNetworkError;
-        
+
         const isRetryableError = isTimeoutError || 
                                error.response?.status === 500 ||
                                error.response?.status === 502 ||
@@ -133,10 +133,10 @@ class DRPCCircuitBreaker {
           const backoffDelay = Math.min(baseDelay * Math.pow(2, attempt - 1), 30000); // Max 30s for serious errors
           const jitter = Math.random() * 1000; // Add jitter to prevent thundering herd
           const waitTime = backoffDelay + jitter;
-          
+
           const errorContext = is408Error ? 'Timeout detected.' : 
                               isNetworkError ? 'Network issue detected.' : '';
-          
+
           console.warn(`⚠️ DRPC Request failed for ${context} (attempt ${attempt}/${maxRetries}). ${errorContext} Retrying in ${Math.round(waitTime)}ms. Error: ${error.response?.status || error.code || error.message}`);
           await delay(waitTime);
           continue;
@@ -144,7 +144,7 @@ class DRPCCircuitBreaker {
 
         // Non-retryable error or max retries reached
         console.error(`❌ DRPC Request failed permanently for ${context} after ${attempt} attempts:`, error.response?.status || error.code || error.message);
-        
+
         // Only record failure for the circuit breaker if it's not a client-side error
         if (!error.response || error.response.status >= 500 || isTimeoutError) {
           this.recordFailure();
@@ -683,13 +683,12 @@ export class HistoricalPriceService {
         tradesFound: trades.length
       });
 
-      // Get unique token mints from the trades we found
-      const tradedTokenMints = new Set<string>(trades.map(trade => trade.tokenMint));
-      console.log(`Found ${tradedTokenMints.size} tokens with trades in initial scan`);
+      // Use all detected tokens from the past 24 hours, not just those with trades
+      console.log(`Found ${uniqueTokenMints.size} tokens detected in initial scan`);
 
       // For each token mint, fetch all historical trades
       let totalHistoricalTradesFound = 0;
-      for (const tokenMint of tradedTokenMints) {
+      for (const tokenMint of uniqueTokenMints) {
         this.updateScanStatus({ 
           currentStep: `Fetching historical trades for token ${tokenMint}...`,
         });
@@ -1005,7 +1004,15 @@ export class HistoricalPriceService {
       return data.result;
     } catch (error) {
       console.error(`Error fetching transaction ${signature}:`, error);
-      
+
+      // Handle free tier timeout error gracefully
+      if (error instanceof Error && 
+          error.message.includes('Request timeout on the free tier') || 
+          (error as any)?.response?.data?.error?.code === 30) {
+        console.warn(`⚠️ Free tier timeout for transaction ${signature}, skipping`);
+        return null;
+      }
+
       // Remove the old retry logic since circuit breaker handles retries
       throw error;
     }
@@ -1773,11 +1780,11 @@ export class HistoricalPriceService {
       // If circuit breaker fails or we get repeated 408s, try switching to backup
       const is408Error = error.response?.status === 408 || error.code === 'ECONNABORTED';
       const isCircuitOpen = error.message?.includes('Circuit breaker is OPEN');
-      
+
       if (is408Error || isCircuitOpen) {
         console.warn(`🔄 ${isCircuitOpen ? 'Circuit breaker is open' : '408 timeout error'}, attempting backup endpoint for ${context}`);
         this.switchToBackupDRPC();
-        
+
         // Single retry with new endpoint
         try {
           const backupResponse = await this.circuitBreaker.makeRequest(async () => {

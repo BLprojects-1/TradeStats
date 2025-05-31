@@ -23,19 +23,34 @@ const StatCard: React.FC<StatCardProps> = ({
   prefix = '', 
   suffix = '' 
 }) => {
-  let textColor = 'text-white';
+  let textColor = 'text-slate-100';
+  let borderColor = 'border-slate-600/25';
+  let bgColor = 'bg-slate-900/40';
+  
   if (isPositive !== undefined) {
-    textColor = isPositive ? 'text-green-400' : 'text-red-400';
+    if (isPositive) {
+      textColor = 'text-emerald-400';
+      borderColor = 'border-emerald-500/25';
+      bgColor = 'bg-emerald-950/30';
+    } else {
+      textColor = 'text-rose-400';
+      borderColor = 'border-rose-500/25';
+      bgColor = 'bg-rose-950/30';
+    }
   }
 
   return (
-    <div className="bg-[#1a1a1a] rounded-lg p-4 border border-gray-800">
-      <div className="text-sm text-gray-400 mb-1">{title}</div>
-      <div className={`text-lg font-bold ${textColor}`}>
+    <div className={`${bgColor} backdrop-blur-sm rounded-xl p-5 border transition-all duration-300 hover:bg-slate-800/50 hover:border-slate-500/30 hover:shadow-lg hover:shadow-slate-900/20 group ${borderColor}`}>
+      <div className="text-sm text-slate-400 mb-2 group-hover:text-slate-300 transition-colors font-medium">
+        {title}
+      </div>
+      <div className={`text-xl font-bold transition-colors mb-1 ${textColor}`}>
         {prefix}{typeof value === 'number' ? value.toFixed(2) : value}{suffix}
       </div>
       {subtitle && (
-        <div className="text-xs text-gray-500 mt-1">{subtitle}</div>
+        <div className="text-xs text-slate-500 group-hover:text-slate-400 transition-colors">
+          {subtitle}
+        </div>
       )}
     </div>
   );

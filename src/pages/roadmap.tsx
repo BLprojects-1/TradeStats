@@ -95,7 +95,7 @@ export default function Roadmap() {
       glowColor: "shadow-indigo-500/20",
       progress: 15,
       items: [
-        "🔄 'Add Token' feature for any token watching",
+        "✅ 'Add Token' feature for any token watching",
         "🔄 Improved scan times for larger wallets",
         "🔄 Complete dashboard UI revamp",
         "⏳ API infrastructure upgrades",
