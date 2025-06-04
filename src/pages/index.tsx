@@ -336,13 +336,6 @@ export default function Home() {
                   >
                     Start Now
                   </button>
-                  <Link 
-                    href="/contact"
-                    className="px-10 py-5 border border-emerald-500/30 text-emerald-300 rounded-xl hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all duration-300 font-semibold text-xl"
-                    aria-label="Contact our team"
-                  >
-                    Contact Sales
-                  </Link>
                 </div>
               </div>
             </div>
