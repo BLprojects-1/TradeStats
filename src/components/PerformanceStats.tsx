@@ -2,7 +2,7 @@ import React from 'react';
 import { PerformanceMetrics } from '../services/performanceService';
 
 interface PerformanceStatsProps {
-  metrics: PerformanceMetrics;
+  metrics?: PerformanceMetrics;
   className?: string;
 }
 
@@ -60,6 +60,19 @@ export const PerformanceStats: React.FC<PerformanceStatsProps> = ({
   metrics, 
   className = '' 
 }) => {
+  const defaultMetrics: PerformanceMetrics = {
+    totalPnL: 0,
+    totalTrades: 0,
+    tokensTraded: 0,
+    winRate: 0,
+    bestTrade: 0,
+    worstTrade: 0,
+    totalVolume: 0,
+    averageTradeSize: 0
+  };
+
+  const safeMetrics = metrics || defaultMetrics;
+
   const formatCurrency = (amount: number): string => {
     if (Math.abs(amount) >= 1000) {
       return `$${(amount / 1000).toFixed(1)}k`;
@@ -71,49 +84,94 @@ export const PerformanceStats: React.FC<PerformanceStatsProps> = ({
     return `${percent.toFixed(1)}%`;
   };
 
+  if (!metrics) {
+    return (
+      <div className={`space-y-4 ${className}`}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Total P&L"
+            value="$0.00"
+          />
+          
+          <StatCard
+            title="Tokens Traded"
+            value="0"
+          />
+          
+          <StatCard
+            title="Win Rate"
+            value="0.0%"
+          />
+          
+          <StatCard
+            title="Volume"
+            value="$0.00"
+          />
+        </div>
+        
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <StatCard
+            title="Best Trade"
+            value="$0.00"
+          />
+          
+          <StatCard
+            title="Worst Trade"
+            value="$0.00"
+          />
+          
+          <StatCard
+            title="Avg Trade Size"
+            value="$0.00"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`space-y-4 ${className}`}>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total P&L"
-          value={formatCurrency(metrics.totalPnL)}
-          isPositive={metrics.totalPnL >= 0}
+          value={formatCurrency(safeMetrics.totalPnL)}
+          isPositive={safeMetrics.totalPnL >= 0}
         />
         
         <StatCard
           title="Tokens Traded"
-          value={metrics.tokensTraded || metrics.totalTrades}
+          value={safeMetrics.tokensTraded || safeMetrics.totalTrades}
           
         />
         
         <StatCard
           title="Win Rate"
-          value={formatPercent(metrics.winRate)}
-          isPositive={metrics.winRate >= 50}
+          value={formatPercent(safeMetrics.winRate)}
+          isPositive={safeMetrics.winRate >= 50}
         />
         
         <StatCard
           title="Volume"
-          value={formatCurrency(metrics.totalVolume)}
+          value={formatCurrency(safeMetrics.totalVolume)}
         />
       </div>
       
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Best Trade"
-          value={formatCurrency(metrics.bestTrade)}
-          isPositive={metrics.bestTrade > 0}
+          value={formatCurrency(safeMetrics.bestTrade)}
+          isPositive={safeMetrics.bestTrade > 0}
         />
         
         <StatCard
           title="Worst Trade"
-          value={formatCurrency(metrics.worstTrade)}
-          isPositive={metrics.worstTrade >= 0}
+          value={formatCurrency(safeMetrics.worstTrade)}
+          isPositive={safeMetrics.worstTrade >= 0}
         />
         
         <StatCard
           title="Avg Trade Size"
-          value={formatCurrency(metrics.averageTradeSize)}
+          value={formatCurrency(safeMetrics.averageTradeSize)}
         />
       </div>
     </div>

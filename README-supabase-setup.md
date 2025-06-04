@@ -1,6 +1,6 @@
-# Supabase Setup for Journi App
+# Supabase Setup for TICKR App
 
-This guide explains how to set up the required Supabase database tables and policies for the Journi app.
+This guide explains how to set up the required Supabase database tables and policies for the TICKR app.
 
 ## Database Setup
 

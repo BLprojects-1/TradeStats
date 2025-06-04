@@ -1,10 +1,10 @@
-# Authentication System in Journi
+# Authentication System in TICKR
 
-This document provides an overview of how authentication works in Journi.
+This document provides an overview of how authentication works in TICKR.
 
 ## Overview
 
-Journi uses Supabase for authentication, with the following features:
+TICKR uses Supabase for authentication, with the following features:
 
 - Email/password authentication
 - Email confirmation

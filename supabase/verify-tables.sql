@@ -96,7 +96,7 @@ BEGIN
   RAISE NOTICE '---------------------------------------';
   RAISE NOTICE 'Database verification complete!';
   RAISE NOTICE '---------------------------------------';
-  RAISE NOTICE 'Tables required for Journi:';
+  RAISE NOTICE 'Tables required for TICKR:';
   RAISE NOTICE '- user_profiles: %', CASE WHEN table_exists('user_profiles') THEN 'YES' ELSE 'NO' END;
   RAISE NOTICE '- tracked_wallets: %', CASE WHEN table_exists('tracked_wallets') THEN 'YES' ELSE 'NO' END;
   RAISE NOTICE '---------------------------------------';

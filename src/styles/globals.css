@@ -2,24 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Inter font for modern typography */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 :root {
+  /* Brand Colors */
+  --primary-900: #020617;
+  --primary-800: #0F172A;
+  --primary-700: #1E293B;
+  --primary-600: #334155;
+  --primary-500: #64748B;
+  --primary-400: #94A3B8;
+  --primary-300: #CBD5E1;
+  --primary-200: #E2E8F0;
+  --primary-100: #F1F5F9;
+  
+  --accent-blue: #3B82F6;
+  --accent-blue-dark: #2563EB;
+  --accent-green: #10B981;
+  --accent-green-dark: #059669;
+  --accent-amber: #F59E0B;
+  --accent-red: #EF4444;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+  --gradient-success: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  --gradient-background: linear-gradient(180deg, #020617 0%, #0F172A 100%);
+  
   --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 0, 0, 0;
-  --background-end-rgb: 0, 0, 0;
+  --background-start-rgb: 2, 6, 23;
+  --background-end-rgb: 15, 23, 42;
 }
 
 html {
   scroll-behavior: smooth;
+  font-size: 80%; /* Scale down the base font size to 80% */
+  background: var(--gradient-background);
+  background-color: var(--primary-900);
+  min-height: 100vh;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: var(--gradient-background);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  font-variant-numeric: tabular-nums;
+  zoom: 0.8; /* Use zoom instead of transform for better space handling */
+  min-height: 100vh;
+}
+
+/* Typography improvements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
 /* Custom global styles */
@@ -27,10 +64,8 @@ html,
 body {
   padding: 0;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
-    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
-  background-color: #000000; /* pure black background */
-  color: #e2e8f0; /* light text color */
+  background-color: var(--primary-900);
+  color: var(--primary-100);
 }
 
 a {
@@ -42,8 +77,47 @@ a {
   box-sizing: border-box;
 }
 
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--primary-800);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-600);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-500);
+}
+
+/* Smooth animations */
+* {
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
 @layer base {
   body {
-    @apply bg-black text-gray-100;
+    @apply bg-slate-950 text-slate-100;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium px-6 py-3 rounded-lg shadow-lg shadow-blue-500/25 transition-all duration-200 hover:shadow-blue-500/40 hover:scale-105;
+  }
+  
+  .btn-secondary {
+    @apply border-2 border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white font-medium px-6 py-3 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25;
+  }
+  
+  .card-glass {
+    @apply bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-xl;
   }
 } 

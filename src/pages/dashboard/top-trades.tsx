@@ -15,7 +15,7 @@ import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { supabase } from '../../utils/supabaseClient';
 import { jupiterApiService } from '../../services/jupiterApiService';
 import WalletScanModal from '../../components/WalletScanModal';
-import TrafficInfoModal from '../../components/TrafficInfoModal';
+import { useNotificationContext } from '../../contexts/NotificationContext';
 
 // Interface for Faded Runners data
 interface FadedRunnerData {
@@ -436,8 +436,8 @@ export default function TopTrades() {
           bValue = b.profitLoss;
           break;
         case 'size':
-          aValue = a.totalBought;
-          bValue = b.totalBought;
+          aValue = getTokenTotalVolume(a);
+          bValue = getTokenTotalVolume(b);
           break;
         default:
           aValue = a.profitLoss;
@@ -474,18 +474,25 @@ export default function TopTrades() {
   };
 
   // Calculate additional properties from TopTradeData
-  const getTokenPercentageReturn = (token: TopTradeData): number => {
-    if (token.totalBought === 0) return 0;
-    return ((token.totalSold - token.totalBought) / token.totalBought) * 100;
+  const getTokenTotalVolume = (token: TopTradeData): number => {
+    // Calculate total volume as the sum of all buy and sell USD values
+    // If we have the volume data directly, use it
+    if (token.totalBuyVolume !== undefined && token.totalSellVolume !== undefined) {
+      return (token.totalBuyVolume || 0) + (token.totalSellVolume || 0);
+    }
+    
+    // Fallback: estimate based on profit/loss and token amounts
+    // The profitLoss represents net result (sells - buys in USD)
+    // To estimate total volume, we need to approximate the total USD value of all trades
+    const averageTokenValue = Math.abs(token.profitLoss) / Math.max(token.totalBought, token.totalSold, 1);
+    const estimatedBuyVolume = token.totalBought * averageTokenValue;
+    const estimatedSellVolume = token.totalSold * averageTokenValue;
+    
+    return estimatedBuyVolume + estimatedSellVolume;
   };
 
   const getTokenTotalValue = (token: TopTradeData): number => {
     return Math.max(token.totalBought, token.totalSold);
-  };
-
-  const getTokenTradeCount = (token: TopTradeData): number => {
-    // Estimate trade count based on volume (simplified)
-    return Math.max(2, Math.floor((token.totalBought + token.totalSold) / 1000));
   };
 
   const getTokenLastTradeTime = (token: TopTradeData): number => {
@@ -496,15 +503,15 @@ export default function TopTrades() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center relative overflow-hidden">
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden">
         {/* Background Elements */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-          <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
-          <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+          <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-blue-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+          <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-emerald-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
         </div>
         <div className="relative z-10 text-center">
-          <div className="animate-pulse text-indigo-400 text-xl mb-4">Loading your top trades...</div>
-          <div className="w-32 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full animate-pulse"></div>
+          <div className="animate-pulse text-blue-400 text-xl mb-4">Loading your professional performance analytics...</div>
+          <div className="w-32 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 mx-auto rounded-full animate-pulse"></div>
         </div>
       </div>
     );
@@ -519,59 +526,26 @@ export default function TopTrades() {
   const apiError = error;
 
   return (
-    <div className="relative min-h-screen bg-[#0a0a0f] text-gray-100 overflow-hidden">
+    <div className="relative min-h-screen bg-[#020617] text-gray-100 overflow-hidden">
       {/* Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
-        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
-        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
+        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-blue-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-emerald-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-blue-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <NewDashboardLayout title="Top Trades">
+      <NewDashboardLayout title="Professional Top Trades - TICKR">
         <div className="relative z-10 space-y-6 sm:space-y-8">
           {/* Enhanced Header Section */}
           <div className="relative">
-            <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
+            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-blue-500/40 rounded-2xl p-6 shadow-xl shadow-blue-900/10 card-glass">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
                 <div>
-                  <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                    Top Trades
+                  <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mb-2 gradient-text">
+                    Elite Trading Performance
                   </h1>
-                  <p className="text-gray-300">Your most profitable trading positions</p>
+                  <p className="text-slate-300">Professional analysis of your most profitable trading positions</p>
                 </div>
-                <button
-                  onClick={handleRefresh}
-                  disabled={isRefreshing || isOnCooldown}
-                  className={`
-                    group/btn flex items-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:scale-100 shadow-lg
-                    ${isRefreshing || isOnCooldown
-                      ? 'bg-gray-700/50 cursor-not-allowed text-gray-400 shadow-gray-900/15'
-                      : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-900/15'
-                    }
-                  `}
-                >
-                  <svg
-                    className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : 'group-hover/btn:rotate-180 transition-transform duration-300'}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  <span>
-                    {isRefreshing
-                      ? 'Refreshing...'
-                      : isOnCooldown
-                      ? `Wait ${Math.ceil(refreshCooldownTimeLeft / 1000)}s`
-                      : 'Refresh'
-                    }
-                  </span>
-                </button>
               </div>
             </div>
           </div>
@@ -594,12 +568,194 @@ export default function TopTrades() {
           />}
 
           {!selectedWalletId && (
-            <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/30 backdrop-blur-sm border border-indigo-500/30 text-indigo-200 px-6 py-4 rounded-2xl shadow-lg shadow-indigo-900/10">
+            <div className="bg-gradient-to-r from-blue-900/30 to-emerald-900/30 backdrop-blur-sm border border-blue-500/30 text-blue-200 px-6 py-4 rounded-2xl shadow-lg shadow-blue-900/10">
               <div className="flex items-center space-x-2">
-                <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>Please select a wallet from the dropdown menu to view your top trades.</span>
+                <span>Please select a wallet from the dropdown menu to view your elite trading performance.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Best Trade and Worst Trade Section */}
+          {selectedWalletId && !isLoading && topTrades.length > 0 && bestTrade && worstTrade && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Best Trade Card */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-0 group-hover:opacity-30 blur-md transition-all duration-700 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-emerald-500/40 rounded-2xl shadow-xl shadow-emerald-900/10 transition-all duration-500 hover:border-emerald-500/60 card-glass">
+                  <div className="p-6">
+                    <div className="flex items-center space-x-4 mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-emerald-600 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-900/15">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent gradient-text">
+                          🏆 Best Trade
+                        </h3>
+                        <p className="text-slate-400 text-sm">Your most profitable position</p>
+                      </div>
+                    </div>
+
+                    <div 
+                      className="cursor-pointer hover:bg-emerald-500/5 rounded-xl p-4 transition-all duration-300"
+                      onClick={() => handleTradeClick(bestTrade)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View details for best trade: ${bestTrade.tokenSymbol}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleTradeClick(bestTrade);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center space-x-4 mb-4">
+                        {bestTrade.tokenLogoURI && (
+                          <img 
+                            src={bestTrade.tokenLogoURI} 
+                            alt={`${bestTrade.tokenSymbol} logo`} 
+                            className="w-10 h-10 rounded-full ring-2 ring-emerald-500/30"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <h4 className="text-lg font-semibold text-white">{bestTrade.tokenSymbol}</h4>
+                          <p className="text-slate-400 text-sm">Click to view details</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-emerald-400">
+                            {formatPriceWithTwoDecimals(bestTrade.profitLoss || 0)}
+                          </div>
+                          <div className="text-emerald-300 text-sm font-medium">
+                            Volume: {formatPriceWithTwoDecimals(getTokenTotalVolume(bestTrade))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-emerald-500/20">
+                        <div className="text-center">
+                          <p className="text-slate-400 text-xs uppercase tracking-wider">Trade Volume</p>
+                          <p className="text-white font-semibold">{formatPriceWithTwoDecimals(getTokenTotalVolume(bestTrade))}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-slate-400 text-xs uppercase tracking-wider">Duration</p>
+                          <p className="text-white font-semibold">{bestTrade.duration}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Worst Trade Card */}
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-orange-600 opacity-0 group-hover:opacity-30 blur-md transition-all duration-700 rounded-2xl"></div>
+                <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-red-500/40 rounded-2xl shadow-xl shadow-red-900/10 transition-all duration-500 hover:border-red-500/60 card-glass">
+                  <div className="p-6">
+                    <div className="flex items-center space-x-4 mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/15">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent gradient-text">
+                          📉 Worst Trade
+                        </h3>
+                        <p className="text-slate-400 text-sm">Your most challenging position</p>
+                      </div>
+                    </div>
+
+                    <div 
+                      className="cursor-pointer hover:bg-red-500/5 rounded-xl p-4 transition-all duration-300"
+                      onClick={() => handleTradeClick(worstTrade)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View details for worst trade: ${worstTrade.tokenSymbol}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleTradeClick(worstTrade);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center space-x-4 mb-4">
+                        {worstTrade.tokenLogoURI && (
+                          <img 
+                            src={worstTrade.tokenLogoURI} 
+                            alt={`${worstTrade.tokenSymbol} logo`} 
+                            className="w-10 h-10 rounded-full ring-2 ring-red-500/30"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <h4 className="text-lg font-semibold text-white">{worstTrade.tokenSymbol}</h4>
+                          <p className="text-slate-400 text-sm">Click to view details</p>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-2xl font-bold ${(worstTrade.profitLoss || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {formatPriceWithTwoDecimals(worstTrade.profitLoss || 0)}
+                          </div>
+                          <div className={`text-sm font-medium ${getTokenTotalVolume(worstTrade) >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                            Volume: {formatPriceWithTwoDecimals(getTokenTotalVolume(worstTrade))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-red-500/20">
+                        <div className="text-center">
+                          <p className="text-slate-400 text-xs uppercase tracking-wider">Trade Volume</p>
+                          <p className="text-white font-semibold">{formatPriceWithTwoDecimals(getTokenTotalVolume(worstTrade))}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-slate-400 text-xs uppercase tracking-wider">Duration</p>
+                          <p className="text-white font-semibold">{worstTrade.duration}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* No Trades Placeholder */}
+          {selectedWalletId && !isLoading && topTrades.length === 0 && (
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-gray-600 to-gray-700 opacity-0 group-hover:opacity-30 blur-md transition-all duration-700 rounded-2xl"></div>
+              <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-gray-500/40 rounded-2xl shadow-xl shadow-gray-900/10 transition-all duration-500 hover:border-gray-500/60">
+                <div className="p-12 text-center">
+                  <div className="w-20 h-20 bg-gradient-to-br from-gray-600 to-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-gray-900/15">
+                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-4">No Trades to Analyze</h3>
+                  <p className="text-gray-400 text-lg mb-6 max-w-md mx-auto">
+                    Start trading to see your Top Trades here. Your most profitable positions will be displayed once you complete some trades.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button
+                      onClick={() => {
+                        window.open('https://jup.ag', '_blank');
+                      }}
+                      className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-8 py-3 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-emerald-900/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                      aria-label="Start trading on Jupiter Exchange"
+                    >
+                      Start Trading
+                    </button>
+                    <button
+                      onClick={handleRetry}
+                      disabled={isLoading}
+                      className="bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white disabled:text-gray-400 px-8 py-3 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-blue-900/30 disabled:shadow-gray-900/30 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                      aria-label="Refresh trading data"
+                    >
+                      {isLoading ? 'Refreshing...' : 'Refresh Data'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -607,7 +763,7 @@ export default function TopTrades() {
           {/* Enhanced Top Performing Trades Section */}
           <div className="relative group">
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-0 group-hover:opacity-50 blur-md transition-all duration-700 rounded-3xl"></div>
-            <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-emerald-500/40 rounded-3xl shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-emerald-500/40">
+            <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-emerald-500/40 rounded-3xl shadow-xl shadow-blue-900/10 transition-all duration-500 hover:border-emerald-500/40 card-glass">
               <div className="p-6 border-b border-emerald-500/20">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                   <div className="flex items-center space-x-4">
@@ -616,14 +772,14 @@ export default function TopTrades() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
                     </div>
-                    <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
-                      Top Performing Trades
+                    <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent gradient-text">
+                      Elite Performance Trades
                     </h2>
                   </div>
                   
                   {/* Enhanced Sorting Controls */}
                   <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-400 font-medium">Sort by:</span>
+                    <span className="text-sm text-slate-400 font-medium">Sort by:</span>
                     
                     {/* Wrap the buttons in a relative container to prevent tooltip overlap */}
                     <div className="relative inline-block">
@@ -655,26 +811,116 @@ export default function TopTrades() {
               {/* Enhanced table */}
               <div className="overflow-x-auto">
                 <div className="min-w-full inline-block align-middle">
-                  <table className="min-w-full divide-y divide-emerald-500/20">
+                  <table className="min-w-full divide-y divide-emerald-500/20" role="table" aria-label="Elite trading performance data">
                     <thead>
                       <tr className="bg-gradient-to-r from-emerald-950/60 to-green-950/60 backdrop-blur-sm">
-                        {['Star', 'Token', 'P/L', '% Return', 'Final Value', 'Total Trades', 'Last Trade'].map((header) => (
-                          <th key={header} className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider">
-                            {header}
-                          </th>
-                        ))}
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider"
+                          role="columnheader"
+                          aria-label="Star or favorite this trade"
+                          title="Click to star/favorite profitable trades"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            <span className="sr-only">Star</span>
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSortChange('time')}
+                          aria-label="Token name and logo - click to sort by time"
+                          title="Token name and symbol"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Token</span>
+                            {sortField === 'time' && (
+                              <span className="text-emerald-400" aria-hidden="true">
+                                {sortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSortChange('value')}
+                          aria-label="Profit and Loss - click to sort"
+                          title="Total profit or loss from this position"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>P/L</span>
+                            {sortField === 'value' && (
+                              <span className="text-emerald-400" aria-hidden="true">
+                                {sortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                            <button
+                              className="ml-1 text-gray-400 hover:text-emerald-300 transition-colors"
+                              title="P/L = Profit and Loss. Total gains or losses from buying and selling this token."
+                              aria-label="What is P/L?"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSortChange('size')}
+                          aria-label="Total Volume - click to sort"
+                          title="Total USD value of all buy and sell transactions for this token"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Total Volume</span>
+                            {sortField === 'size' && (
+                              <span className="text-emerald-400" aria-hidden="true">
+                                {sortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                            <button
+                              className="ml-1 text-gray-400 hover:text-emerald-300 transition-colors"
+                              title="Total Volume = Sum of all buy values + all sell values in USD for this token"
+                              aria-label="How is total volume calculated?"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider"
+                          role="columnheader"
+                          aria-label="Final Value of position"
+                          title="Total USD value of all transactions for this token"
+                        >
+                          Last Sale
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-emerald-300 uppercase tracking-wider"
+                          role="columnheader"
+                          aria-label="Last trade timestamp"
+                          title="When the most recent trade was executed"
+                        >
+                          Last Trade
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-emerald-500/10">
                       {isLoading ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-12 text-center">
+                          <td colSpan={6} className="px-4 py-12 text-center">
                             <div className="flex items-center justify-center space-x-3">
                               <div className="relative">
                                 <div className="w-8 h-8 border-4 border-emerald-600/30 border-t-emerald-500 rounded-full animate-spin"></div>
                                 <div className="absolute inset-0 w-8 h-8 border-4 border-transparent border-t-green-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
                               </div>
-                              <span className="text-gray-400 font-medium">{currentLoadingMessage || 'Loading top trades...'}</span>
+                              <span className="text-slate-400 font-medium">{currentLoadingMessage || 'Loading elite trading performance...'}</span>
                             </div>
                           </td>
                         </tr>
@@ -683,7 +929,16 @@ export default function TopTrades() {
                           <tr 
                             key={token.tokenAddress}
                             onClick={() => handleTradeClick(token)}
-                            className="hover:bg-emerald-500/10 cursor-pointer transition-all duration-300 group/row border-b border-indigo-500/5"
+                            className="hover:bg-emerald-500/10 cursor-pointer transition-all duration-300 group/row border-b border-blue-500/5"
+                            role="row"
+                            tabIndex={0}
+                            aria-label={`View details for ${token.tokenSymbol} trade`}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleTradeClick(token);
+                              }
+                            }}
                           >
                             <td className="px-4 py-4 whitespace-nowrap">
                               <button
@@ -692,21 +947,24 @@ export default function TopTrades() {
                                   handleStarTrade(token.tokenAddress);
                                 }}
                                 disabled={starringTrade === token.tokenAddress}
-                                className="p-2 rounded-xl hover:bg-emerald-500/20 hover:text-yellow-400 transition-all duration-300 disabled:opacity-50"
-                                aria-label={token.starred ? 'Unstar token' : 'Star token'}
+                                className="p-2 rounded-xl hover:bg-emerald-500/20 hover:text-yellow-400 transition-all duration-300 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                                aria-pressed={token.starred ? 'true' : 'false'}
+                                aria-label={token.starred ? `Unstar ${token.tokenSymbol} trade` : `Star ${token.tokenSymbol} trade`}
+                                title={token.starred ? 'Remove from starred trades' : 'Add to starred trades'}
                               >
                                 {starringTrade === token.tokenAddress ? (
-                                  <div className="relative">
+                                  <div className="relative" aria-label="Updating star status">
                                     <div className="w-4 h-4 border-2 border-emerald-600/30 border-t-emerald-500 rounded-full animate-spin"></div>
                                     <div className="absolute inset-0 w-4 h-4 border-2 border-transparent border-t-yellow-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
                                   </div>
                                 ) : (
                                   <svg 
-                                    className={`h-4 w-4 transition-all duration-300 ${token.starred ? 'text-yellow-400 fill-current' : 'text-gray-400 group-hover/row:text-gray-300'}`} 
+                                    className={`h-4 w-4 transition-all duration-300 ${token.starred ? 'text-yellow-400 fill-current' : 'text-slate-400 group-hover/row:text-slate-300'}`} 
                                     xmlns="http://www.w3.org/2000/svg" 
                                     fill={token.starred ? 'currentColor' : 'none'} 
                                     viewBox="0 0 24 24" 
                                     stroke="currentColor"
+                                    aria-hidden="true"
                                   >
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                                   </svg>
@@ -716,14 +974,18 @@ export default function TopTrades() {
                             <td className="px-4 py-4 whitespace-nowrap">
                               <div className="flex items-center space-x-3">
                                 {token.tokenLogoURI && (
-                                  <img src={token.tokenLogoURI} alt={token.tokenSymbol} className="w-6 h-6 rounded-full ring-2 ring-emerald-500/30" />
+                                  <img 
+                                    src={token.tokenLogoURI} 
+                                    alt={`${token.tokenSymbol} logo`} 
+                                    className="w-6 h-6 rounded-full ring-2 ring-emerald-500/30"
+                                  />
                                 )}
                                 <div>
-                                  <span className="text-gray-100 font-medium group-hover/row:text-white transition-colors">{token.tokenSymbol}</span>
+                                  <span className="text-slate-100 font-medium group-hover/row:text-white transition-colors">{token.tokenSymbol}</span>
                                   {index < 3 && (
                                     <div className="flex items-center space-x-1 mt-1">
-                                      <div className={`w-2 h-2 rounded-full ${index === 0 ? 'bg-yellow-400' : index === 1 ? 'bg-gray-400' : 'bg-orange-600'}`}></div>
-                                      <span className="text-xs text-gray-400">{index === 0 ? '1st' : index === 1 ? '2nd' : '3rd'} Place</span>
+                                      <div className={`w-2 h-2 rounded-full ${index === 0 ? 'bg-yellow-400' : index === 1 ? 'bg-slate-400' : 'bg-orange-600'}`}></div>
+                                      <span className="text-xs text-slate-400">{index === 0 ? '1st' : index === 1 ? '2nd' : '3rd'} Place</span>
                                     </div>
                                   )}
                                 </div>
@@ -732,24 +994,37 @@ export default function TopTrades() {
                             <td className="px-4 py-4 whitespace-nowrap font-semibold text-emerald-400">
                               {formatPriceWithTwoDecimals(token.profitLoss || 0)}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap font-semibold text-emerald-400">
-                              {formatPercentage(getTokenPercentageReturn(token))}
+                            <td className="px-4 py-4 whitespace-nowrap font-semibold text-cyan-400">
+                              {formatPriceWithTwoDecimals(getTokenTotalVolume(token))}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 font-medium group-hover/row:text-gray-200 transition-colors">
-                              {formatPriceWithTwoDecimals(getTokenTotalValue(token))}
+                            <td className="px-4 py-4 whitespace-nowrap text-slate-300 font-medium group-hover/row:text-slate-200 transition-colors">
+                              {getTokenTotalValue(token).toLocaleString('en-US', { 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 2 
+                              })}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
-                              {getTokenTradeCount(token)}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
+                            <td className="px-4 py-4 whitespace-nowrap text-slate-300 group-hover/row:text-slate-200 transition-colors">
                               {formatTimeAgo(getTokenLastTradeTime(token))}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
-                            {selectedWalletId ? 'No profitable trades found for this wallet' : 'Select a wallet to view top trades'}
+                          <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                            <div className="flex flex-col items-center space-y-4">
+                              <svg className="w-16 h-16 text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                              <h3 className="text-lg font-medium text-gray-300 mb-2">
+                                {selectedWalletId ? 'You haven\'t completed enough trades to populate this table.' : 'Select a wallet to view elite trading performance'}
+                              </h3>
+                              <p className="text-gray-500">
+                                {selectedWalletId 
+                                  ? 'Complete more profitable trades to see your top performing positions here.'
+                                  : 'Choose a wallet from the dropdown menu to analyze your trading performance.'
+                                }
+                              </p>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -763,89 +1038,137 @@ export default function TopTrades() {
           {/* Enhanced Performance Summary */}
           <div className="relative group">
             <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 opacity-0 group-hover:opacity-50 blur transition-all duration-500 rounded-2xl"></div>
-            <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-cyan-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:border-cyan-500/40">
+            <div className="relative bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-cyan-500/40 rounded-2xl p-6 shadow-xl shadow-blue-900/5 transition-all duration-500 hover:border-cyan-500/40 card-glass">
               <div className="flex items-center space-x-4 mb-6">
                 <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-900/15">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                  Performance Summary
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent gradient-text">
+                  Professional Performance Analytics
                 </h2>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="relative group/card">
                   <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-emerald-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-emerald-500/40 hover:transform hover:scale-[1.02]">
+                  <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 backdrop-blur-sm border border-emerald-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-emerald-500/40 hover:transform hover:scale-[1.02] card-glass">
                     <div className="flex items-center space-x-3 mb-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-green-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                         </svg>
                       </div>
                       <h3 className="text-emerald-300 font-semibold">Winning Trades</h3>
+                      <button
+                        className="group/tooltip relative ml-auto"
+                        title="Number of profitable trades shown in this table. These are your most successful trading positions with positive profit/loss."
+                        aria-label="Learn more about Winning Trades"
+                      >
+                        <svg className="w-4 h-4 text-gray-400 hover:text-emerald-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                          Profitable positions in top trades
+                        </div>
+                      </button>
                     </div>
                     <p className="text-3xl font-bold text-white mb-1">{getSortedTrades().length}</p>
-                    <p className="text-gray-400 text-sm">Profitable positions</p>
+                    <p className="text-slate-400 text-sm">Profitable positions</p>
                   </div>
                 </div>
 
                 <div className="relative group/card">
                   <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-cyan-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-cyan-500/40 hover:transform hover:scale-[1.02]">
+                  <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 backdrop-blur-sm border border-cyan-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-cyan-500/40 hover:transform hover:scale-[1.02] card-glass">
                     <div className="flex items-center space-x-3 mb-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                         </svg>
                       </div>
                       <h3 className="text-cyan-300 font-semibold">Total Profit</h3>
+                      <button
+                        className="group/tooltip relative ml-auto"
+                        title="Sum of all profit/loss values from your top profitable trades. Calculated as: Σ(Final Value - Initial Investment) for all profitable positions."
+                        aria-label="Learn more about Total Profit"
+                      >
+                        <svg className="w-4 h-4 text-gray-400 hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                          Sum of all P/L from top trades
+                        </div>
+                      </button>
                     </div>
-                    <p className="text-3xl font-bold text-emerald-400 mb-1">
+                    <p className={`text-3xl font-bold mb-1 ${getSortedTrades().reduce((sum, token) => sum + (token.profitLoss || 0), 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {formatPriceWithTwoDecimals(getSortedTrades().reduce((sum, token) => sum + (token.profitLoss || 0), 0))}
                     </p>
-                    <p className="text-gray-400 text-sm">Cumulative gains</p>
+                    <p className="text-slate-400 text-sm">Cumulative gains</p>
                   </div>
                 </div>
 
                 <div className="relative group/card">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-purple-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-purple-500/40 hover:transform hover:scale-[1.02]">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-emerald-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                  <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 backdrop-blur-sm border border-blue-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-blue-500/40 hover:transform hover:scale-[1.02] card-glass">
                     <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-xl flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                         </svg>
                       </div>
-                      <h3 className="text-purple-300 font-semibold">Best Return</h3>
+                      <h3 className="text-blue-300 font-semibold">Highest Volume</h3>
+                      <button
+                        className="group/tooltip relative ml-auto"
+                        title="Highest trading volume from your top trades. Shows the token with the most total buy and sell activity in USD."
+                        aria-label="Learn more about Highest Volume"
+                      >
+                        <svg className="w-4 h-4 text-gray-400 hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                          Highest volume from top trades
+                        </div>
+                      </button>
                     </div>
                     <p className="text-3xl font-bold text-emerald-400 mb-1">
                       {getSortedTrades().length > 0 
-                        ? formatPercentage(Math.max(...getSortedTrades().map(t => getTokenPercentageReturn(t))))
-                        : '0%'
+                        ? formatPriceWithTwoDecimals(Math.max(...getSortedTrades().map(t => getTokenTotalVolume(t))))
+                        : 'N/A'
                       }
                     </p>
-                    <p className="text-gray-400 text-sm">Highest gain</p>
+                    <p className="text-slate-400 text-sm">Highest volume</p>
                   </div>
                 </div>
 
                 <div className="relative group/card">
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-red-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-orange-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-orange-500/40 hover:transform hover:scale-[1.02]">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-cyan-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
+                  <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 backdrop-blur-sm border border-emerald-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-emerald-500/40 hover:transform hover:scale-[1.02] card-glass">
                     <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-orange-600 to-red-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-cyan-600 rounded-xl flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
                         </svg>
                       </div>
-                      <h3 className="text-orange-300 font-semibold">Total Value</h3>
+                      <h3 className="text-emerald-300 font-semibold">Total Volume</h3>
+                      <button
+                        className="group/tooltip relative ml-auto"
+                        title="Combined trading volume of all top trades. Calculated as: Σ(Total USD value of all buy and sell transactions) for each profitable position in the table."
+                        aria-label="Learn more about Total Volume"
+                      >
+                        <svg className="w-4 h-4 text-gray-400 hover:text-emerald-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                          Combined trading volume of top trades
+                        </div>
+                      </button>
                     </div>
                     <p className="text-3xl font-bold text-white mb-1">
-                      {formatPriceWithTwoDecimals(getSortedTrades().reduce((sum, token) => sum + getTokenTotalValue(token), 0))}
+                      {formatPriceWithTwoDecimals(getSortedTrades().reduce((sum, token) => sum + getTokenTotalVolume(token), 0))}
                     </p>
-                    <p className="text-gray-400 text-sm">Current worth</p>
+                    <p className="text-slate-400 text-sm">Combined volume</p>
                   </div>
                 </div>
               </div>
@@ -885,7 +1208,6 @@ export default function TopTrades() {
               userId={user.id}
             />
           )}
-          <TrafficInfoModal />
         </div>
       </NewDashboardLayout>
     </div>

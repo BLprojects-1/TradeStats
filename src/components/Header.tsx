@@ -51,8 +51,8 @@ const Header = ({ userEmail, onSignOut, wallets = [], selectedWalletId = null, o
         {/* Left: Logo, Name, Page Title */}
         <div className="flex items-center gap-3 min-w-0">
           {/* Logo */}
-          <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto" />
-          <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400 tracking-wide select-none">ryvu</span>
+          <img src="/logo.png" alt="TICKR Logo" className="h-8 w-auto" />
+          <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400 tracking-wide select-none">TICKR</span>
           {pageTitle && (
             <span className="ml-6 text-xl sm:text-2xl font-semibold text-white truncate" title={pageTitle}>{pageTitle}</span>
           )}

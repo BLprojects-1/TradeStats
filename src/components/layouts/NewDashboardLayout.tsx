@@ -1,11 +1,12 @@
-import React, { ReactNode, useState, useRef, useEffect, createContext, useContext } from 'react';
+import React, { ReactNode, createContext, useContext, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useAuth } from '../../contexts/AuthContext';
 import { TrackedWallet } from '../../utils/userProfile';
-import { useWalletSelection } from '../../contexts/WalletSelectionContext';
+import { useNotificationContext } from '../../contexts/NotificationContext';
+import { DashboardNavigationProvider } from '../../contexts/DashboardNavigationContext';
 import DashboardHeader from '../DashboardHeader';
-import DashboardSidebar from '../DashboardSidebar';
+import AddTokenModal from '../AddTokenModal';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NewDashboardLayoutProps {
   children: ReactNode;
@@ -16,145 +17,232 @@ interface NewDashboardLayoutProps {
   onWalletChange?: (walletId: string | null) => void;
 }
 
-// Create layout context for sidebar state
+// Create layout context for Add Token modal
 interface LayoutContextType {
-  isSidebarCollapsed: boolean;
-  isMobileSidebarOpen: boolean;
-  isMobile: boolean;
+  isAddTokenModalOpen: boolean;
+  openAddTokenModal: () => void;
+  closeAddTokenModal: () => void;
 }
 
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
 
-export const useLayoutContext = () => {
+// Export the context for direct access if needed
+export { LayoutContext };
+export type { LayoutContextType };
+
+// Hook to use the layout context
+export const useLayoutContext = (): LayoutContextType | null => {
   const context = useContext(LayoutContext);
-  if (context === undefined) {
-    throw new Error('useLayoutContext must be used within a NewDashboardLayout');
+  return context || null;
+};
+
+// Custom hook for Add Token modal - Safe version
+export const useAddTokenModal = () => {
+  const context = useLayoutContext();
+  
+  // Return safe defaults when context is not available
+  if (!context) {
+    return {
+      isAddTokenModalOpen: false,
+      openAddTokenModal: () => {
+        console.warn('useAddTokenModal called outside of NewDashboardLayout context');
+      },
+      closeAddTokenModal: () => {
+        console.warn('useAddTokenModal called outside of NewDashboardLayout context');
+      }
+    };
   }
-  return context;
+  
+  const { isAddTokenModalOpen, openAddTokenModal, closeAddTokenModal } = context;
+  return { isAddTokenModalOpen, openAddTokenModal, closeAddTokenModal };
 };
 
 const NewDashboardLayout = ({
   children,
   title,
-  description = "Your Solana Trading Journal Dashboard",
-  wallets: propWallets,
-  selectedWalletId: propSelectedWalletId,
-  onWalletChange
+  description = "Your Advanced Portfolio Exchange Dashboard"
 }: NewDashboardLayoutProps) => {
-  const { user } = useAuth();
   const router = useRouter();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  
+  // Add Token modal state
+  const [isAddTokenModalOpen, setIsAddTokenModalOpen] = useState(false);
+  
+  // Notification context for success/error messages
+  const { showSuccess, showError } = useNotificationContext();
 
-  // Use the shared wallet selection context
-  const { 
-    wallets: contextWallets, 
-    selectedWalletId: contextSelectedWalletId,
-    setSelectedWalletId: contextSetSelectedWalletId
-  } = useWalletSelection();
-
-  // Use context values, falling back to props for backward compatibility
-  const wallets = contextWallets || propWallets || [];
-  const selectedWalletId = contextSelectedWalletId !== null ? contextSelectedWalletId : propSelectedWalletId;
-
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(!isSidebarCollapsed);
+  // Add Token modal handlers
+  const openAddTokenModal = () => {
+    setIsAddTokenModalOpen(true);
   };
 
-  const toggleMobileSidebar = () => {
-    setIsMobileSidebarOpen(!isMobileSidebarOpen);
+  const closeAddTokenModal = () => {
+    setIsAddTokenModalOpen(false);
   };
 
-  // Handle responsive layout
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    handleResize(); // Set initial value
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const handleAddTokenSuccess = (tokenAddress: string) => {
+    console.log('Token added successfully:', tokenAddress);
+    showSuccess('Token added successfully to your portfolio!');
+    closeAddTokenModal();
+  };
 
-  // Close mobile sidebar on route change
-  useEffect(() => {
-    const handleRouteChange = () => {
-      setIsMobileSidebarOpen(false);
-    };
+  // Page transition variants for smooth Instagram-like transitions
+  const pageVariants = {
+    initial: {
+      opacity: 0,
+      x: 60,
+      scale: 0.96
+    },
+    in: {
+      opacity: 1,
+      x: 0,
+      scale: 1
+    },
+    out: {
+      opacity: 0,
+      x: -60,
+      scale: 0.96
+    }
+  };
 
-    router.events.on('routeChangeComplete', handleRouteChange);
+  const pageTransition = {
+    type: "tween",
+    ease: [0.25, 0.46, 0.45, 0.94],
+    duration: 0.5
+  };
 
-    return () => {
-      router.events.off('routeChangeComplete', handleRouteChange);
+  // Determine initial page from URL for navigation context
+  const getInitialPage = () => {
+    const path = router.pathname;
+    const pathMap: Record<string, any> = {
+      '/dashboard': 'dashboard',
+      '/dashboard/open-trades': 'open-trades',
+      '/dashboard/top-trades': 'top-trades',
+      '/dashboard/trading-history': 'trading-history',
+      '/dashboard/trade-log': 'trade-log',
+      '/checklist': 'checklist',
+      '/dashboard/account': 'account'
     };
-  }, [router.events]);
+    return pathMap[path] || 'dashboard';
+  };
 
   return (
-    <LayoutContext.Provider value={{ isSidebarCollapsed, isMobileSidebarOpen, isMobile }}>
-      <div className="flex flex-col h-screen bg-black">
-        <Head>
-          <title>{title} | ryvu</title>
-          <meta name="description" content={description} />
-          <link rel="icon" href="/favicon.ico" />
-          <style jsx>{`
-            @keyframes slideDownFadeIn {
-              0% {
-                opacity: 0;
-                transform: translateY(-10px) scale(0.95);
-              }
-              100% {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-              }
-            }
+    <DashboardNavigationProvider initialPage={getInitialPage()}>
+      <LayoutContext.Provider value={{ 
+        isAddTokenModalOpen, 
+        openAddTokenModal, 
+        closeAddTokenModal 
+      }}>
+        <>
+          <Head>
+            <title>{title} | TradeStats</title>
+            <meta name="description" content={description} />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <link rel="icon" href="/favicon.png" />
+          </Head>
+
+          <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950" style={{ zoom: 1.1 }}>
             
-            @keyframes slideUpFadeOut {
-              0% {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-              }
-              100% {
-                opacity: 0;
-                transform: translateY(-10px) scale(0.95);
-              }
-            }
-          `}</style>
-        </Head>
-
-        <div className="flex flex-1 min-h-0">
-          {/* Enhanced Sidebar */}
-          <DashboardSidebar
-            isSidebarCollapsed={isSidebarCollapsed}
-            isMobileSidebarOpen={isMobileSidebarOpen}
-            isMobile={isMobile}
-            onToggleSidebar={toggleSidebar}
-            onToggleMobileSidebar={toggleMobileSidebar}
-          />
-
-          {/* Main Content */}
-          <main className="flex-1 overflow-y-auto bg-black">
-            {/* Enhanced Header */}
+            {/* Enhanced Professional Header */}
             <DashboardHeader
               title={title}
-              isSidebarCollapsed={isSidebarCollapsed}
-              isMobile={isMobile}
-              onToggleMobileSidebar={toggleMobileSidebar}
+              isSidebarCollapsed={false}
+              isMobile={false}
+              onToggleMobileSidebar={() => {}}
             />
 
-            {/* Content with proper spacing for the fixed header */}
-            <div 
-              className="container mx-auto px-3 sm:px-4 lg:px-6 pb-6"
-              style={{ 
-                paddingTop: isMobile ? '12.5rem' : '7.5rem'
-              }}
-            >
-              {children}
+            {/* Main Content with Smooth Page Transitions */}
+            <main className="pt-20 min-h-screen">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={router.pathname}
+                  initial="initial"
+                  animate="in"
+                  exit="out"
+                  variants={pageVariants}
+                  transition={pageTransition}
+                  className="w-full"
+                >
+                  <div className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    {/* Professional Content Container */}
+                    <div className="bg-gradient-to-br from-slate-900/90 via-emerald-950/70 to-teal-950/90 backdrop-blur-2xl rounded-3xl border border-emerald-500/30 shadow-2xl shadow-emerald-900/20 min-h-[calc(100vh-120px)] overflow-hidden">
+                      
+                      {/* Content with Enhanced Styling */}
+                      <div className="relative p-6 lg:p-8 h-full">
+                        
+                        {/* Main Content */}
+                        <motion.div
+                          initial={{ opacity: 0, y: 30 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.4, duration: 0.5 }}
+                          className="h-full"
+                        >
+                          {children}
+                        </motion.div>
+
+                        {/* Background Decorative Elements */}
+                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                          <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl"></div>
+                          <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-teal-500/5 rounded-full blur-3xl"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+            </main>
+
+            {/* Add Token Modal */}
+            <AddTokenModal
+              isOpen={isAddTokenModalOpen}
+              onClose={closeAddTokenModal}
+              onAddToken={handleAddTokenSuccess}
+            />
+
+            {/* Enhanced Background Elements */}
+            <div className="fixed inset-0 -z-10 overflow-hidden">
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  opacity: [0.1, 0.15, 0.1]
+                }}
+                transition={{ 
+                  duration: 8, 
+                  repeat: Infinity, 
+                  ease: "easeInOut" 
+                }}
+                className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl"
+              />
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  opacity: [0.1, 0.2, 0.1]
+                }}
+                transition={{ 
+                  duration: 10, 
+                  repeat: Infinity, 
+                  ease: "easeInOut",
+                  delay: 2
+                }}
+                className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl"
+              />
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.15, 1],
+                  opacity: [0.05, 0.1, 0.05]
+                }}
+                transition={{ 
+                  duration: 12, 
+                  repeat: Infinity, 
+                  ease: "easeInOut",
+                  delay: 4
+                }}
+                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl"
+              />
             </div>
-          </main>
-        </div>
-      </div>
-    </LayoutContext.Provider>
+          </div>
+        </>
+      </LayoutContext.Provider>
+    </DashboardNavigationProvider>
   );
 };
 

@@ -1,10 +1,29 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import Image from 'next/image';
+import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import { useWalletSelection } from '../contexts/WalletSelectionContext';
+import { useDashboardNavigation, DashboardPage } from '../contexts/DashboardNavigationContext';
+import { useAddTokenModal } from '../components/layouts/NewDashboardLayout';
 import { TrackedWallet } from '../utils/userProfile';
 import NotificationToast from './NotificationToast';
 import AddWalletModal from './AddWalletModal';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  HiPlus,
+  HiHome,
+  HiClipboardList,
+  HiTrendingUp,
+  HiClock,
+  HiStar,
+  HiCheckCircle,
+  HiUser,
+  HiMenu,
+  HiX,
+  HiCog,
+  HiLogout
+} from 'react-icons/hi';
 
 interface DashboardHeaderProps {
   title: string;
@@ -12,6 +31,45 @@ interface DashboardHeaderProps {
   isMobile: boolean;
   onToggleMobileSidebar: () => void;
 }
+
+interface NavigationItem {
+  name: string;
+  page: DashboardPage;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+  category: 'main' | 'trading' | 'settings';
+}
+
+const useSafeDashboardNavigation = () => {
+  const router = useRouter();
+  
+  try {
+    return useDashboardNavigation();
+  } catch (error) {
+    // Fallback when context is not available
+    console.warn('DashboardNavigationProvider not available, using fallback navigation');
+    
+    return {
+      currentPage: 'dashboard' as DashboardPage,
+      navigateToPage: (page: DashboardPage) => {
+        const pageMap: Record<DashboardPage, string> = {
+          'dashboard': '/dashboard',
+          'open-trades': '/dashboard/open-trades',
+          'top-trades': '/dashboard/top-trades',
+          'trading-history': '/dashboard/trading-history',
+          'trade-log': '/dashboard/trade-log',
+          'checklist': '/checklist',
+          'account': '/dashboard/account'
+        };
+        router.push(pageMap[page] || '/dashboard');
+      },
+      isTransitioning: false,
+      navigationItems: [],
+      getPageFromPath: (path: string) => 'dashboard' as DashboardPage,
+      getPathFromPage: (page: DashboardPage) => '/dashboard'
+    };
+  }
+};
 
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   title,
@@ -21,57 +79,104 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 }) => {
   const { user, signOut } = useAuth();
   const { wallets, selectedWalletId, setSelectedWalletId } = useWalletSelection();
+  const { currentPage, navigateToPage, isTransitioning } = useSafeDashboardNavigation();
+  const { openAddTokenModal } = useAddTokenModal();
   const router = useRouter();
 
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
   const [walletDropdownOpen, setWalletDropdownOpen] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [notificationVisible, setNotificationVisible] = useState<boolean>(false);
   const [notificationMessage, setNotificationMessage] = useState<string>('');
   const [showAddWalletModal, setShowAddWalletModal] = useState<boolean>(false);
-  const [showNoWalletsModal, setShowNoWalletsModal] = useState<boolean>(false);
+  const [showCopied, setShowCopied] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const walletDropdownRef = useRef<HTMLDivElement>(null);
   const walletButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Check if user has no wallets and show modal
-  useEffect(() => {
-    if (user && wallets.length === 0 && !showAddWalletModal && !showNoWalletsModal) {
-      // Small delay to ensure the component is fully mounted
-      const timer = setTimeout(() => {
-        setShowNoWalletsModal(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [user, wallets.length, showAddWalletModal, showNoWalletsModal]);
-
-  const handleAvatarClick = () => setDropdownOpen((open) => !open);
-  const handleAvatarKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleAvatarClick();
-    }
+  const handleAddTokenClick = () => {
+    setMobileMenuOpen(false);
+    openAddTokenModal();
   };
 
+  const handleCopyCA = () => {
+    const contractAddress = 'EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump';
+    navigator.clipboard.writeText(contractAddress);
+    setShowCopied(true);
+    setTimeout(() => setShowCopied(false), 2000);
+  };
+
+  // Navigation items with proper icons
+  const navigationItems: NavigationItem[] = [
+    { 
+      name: 'Dashboard', 
+      page: 'dashboard',
+      icon: HiHome, 
+      description: 'Overview',
+      category: 'main' 
+    },
+    { 
+      name: 'Open Trades', 
+      page: 'open-trades',
+      icon: HiClipboardList, 
+      description: 'Active positions',
+      category: 'trading' 
+    },
+    { 
+      name: 'Top Trades', 
+      page: 'top-trades',
+      icon: HiTrendingUp, 
+      description: 'Best performers',
+      category: 'trading' 
+    },
+    { 
+      name: 'Trading History', 
+      page: 'trading-history',
+      icon: HiClock, 
+      description: 'All trades',
+      category: 'trading' 
+    },
+    { 
+      name: 'Trade Log', 
+      page: 'trade-log',
+      icon: HiStar, 
+      description: 'Starred trades',
+      category: 'trading' 
+    },
+    { 
+      name: 'Checklist', 
+      page: 'checklist',
+      icon: HiCheckCircle, 
+      description: 'Trade criteria',
+      category: 'settings' 
+    },
+    { 
+      name: 'Account', 
+      page: 'account',
+      icon: HiUser, 
+      description: 'Settings',
+      category: 'settings' 
+    }
+  ];
+
+  const handleNavigationClick = (page: DashboardPage) => {
+    setMobileMenuOpen(false);
+    navigateToPage(page);
+  };
+
+  const handleAvatarClick = () => setDropdownOpen((open) => !open);
   const handleSignOut = () => {
     signOut();
     setDropdownOpen(false);
   };
-
   const handleAccountSettings = () => {
     router.push('/dashboard/account');
     setDropdownOpen(false);
   };
-
   const handleWalletDropdownClick = () => setWalletDropdownOpen((open) => !open);
-  const handleWalletDropdownKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleWalletDropdownClick();
-    }
-  };
-
   const handleWalletSelect = async (walletId: string | null) => {
     await setSelectedWalletId(walletId);
     setWalletDropdownOpen(false);
@@ -84,457 +189,502 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       }
     }
   };
-
-  const handleAddWallet = () => {
-    setShowNoWalletsModal(false);
-    setShowAddWalletModal(true);
-  };
-
-  const handleCloseAddWalletModal = () => {
-    setShowAddWalletModal(false);
-  };
-
+  const handleAddWallet = () => setShowAddWalletModal(true);
+  const handleCloseAddWalletModal = () => setShowAddWalletModal(false);
   const handleWalletAdded = async (newWallet: TrackedWallet) => {
     setShowAddWalletModal(false);
     setNotificationMessage('Wallet added successfully!');
     setNotificationVisible(true);
   };
 
-  // Close dropdown when clicking outside
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!dropdownOpen) return;
     const handleClick = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node) &&
-        avatarRef.current &&
-        !avatarRef.current.contains(e.target as Node)
-      ) {
+      if (dropdownOpen && dropdownRef.current && !dropdownRef.current.contains(e.target as Node) && avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [dropdownOpen]);
-
-  useEffect(() => {
-    if (!walletDropdownOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (
-        walletDropdownRef.current &&
-        !walletDropdownRef.current.contains(e.target as Node)
-      ) {
+      if (walletDropdownOpen && walletDropdownRef.current && !walletDropdownRef.current.contains(e.target as Node) && walletButtonRef.current && !walletButtonRef.current.contains(e.target as Node)) {
         setWalletDropdownOpen(false);
+      }
+      if (mobileMenuOpen && mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setMobileMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [walletDropdownOpen]);
+  }, [dropdownOpen, walletDropdownOpen, mobileMenuOpen]);
 
   return (
     <>
-      <header 
-        className={`fixed top-0 right-0 z-20 transition-all duration-300 ${
-          isMobile ? 'left-0 w-full' : 'w-auto'
-        }`}
-        style={{ 
-          left: isMobile ? '0' : (isSidebarCollapsed ? '5rem' : '18rem'),
-          right: '0'
-        }}
+      {/* Ultra-Professional Header */}
+      <motion.header 
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-slate-900/98 via-slate-950/96 to-emerald-950/98 backdrop-blur-2xl border-b border-emerald-400/30 shadow-2xl shadow-emerald-900/20"
       >
-        {/* Match dashboard branding with consistent background */}
-        <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border-b border-indigo-500/40 shadow-xl shadow-indigo-900/10">
-          {/* Main Content */}
-          <div className="relative z-10 flex items-center justify-between h-[94px] px-6 lg:px-8">
-            {/* Left Section - Mobile Menu + Title */}
-            <div className="flex items-center gap-4">
-              {/* Native Mobile Menu Button */}
-              <button
-                onClick={onToggleMobileSidebar}
-                className="group p-2 rounded-lg hover:bg-black/20 text-gray-300 hover:text-white transition-colors duration-200 md:hidden focus:outline-none focus:ring-2 focus:ring-gray-500/50 active:scale-95 active:bg-black/30"
-                aria-label="Open menu"
-              >
-                <svg
-                  className="h-6 w-6 transition-transform duration-150"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              </button>
-
-              {/* Page Title - Match dashboard typography */}
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                  {title}
-                </h1>
-              </div>
-            </div>
-            
-            {/* Right Section - Wallet Selector + User Menu */}
-            <div className="flex items-center gap-4 lg:gap-6">
-              {/* Wallet Dropdown - Desktop */}
-              <div className="relative hidden sm:block min-w-[200px] lg:min-w-[280px]">
-                <button
-                  ref={walletButtonRef}
-                  onClick={handleWalletDropdownClick}
-                  onKeyDown={handleWalletDropdownKeyDown}
-                  className="group flex items-center justify-between w-full bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-indigo-500/40 hover:border-indigo-500/60 rounded-xl px-4 py-3 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-400/50 hover:transform hover:scale-[1.02] shadow-lg shadow-indigo-900/10"
-                  aria-label="Select wallet"
-                  tabIndex={0}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {/* Wallet Icon */}
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                    </div>
-                    
-                    <div className="flex-1 min-w-0 text-left">
-                      <div className="text-sm font-semibold text-gray-100 group-hover:text-white transition-colors duration-200 truncate">
-                        {selectedWalletId 
-                          ? (() => {
-                              const wallet = wallets.find(w => w.id === selectedWalletId);
-                              if (!wallet) return 'Select wallet';
-                              return `${wallet.wallet_address.substring(0, 6)}...${wallet.wallet_address.substring(wallet.wallet_address.length - 4)}`;
-                            })()
-                          : 'Select wallet'
-                        }
-                      </div>
-                      {selectedWalletId && (() => {
-                        const wallet = wallets.find(w => w.id === selectedWalletId);
-                        return wallet && (wallet.label || wallet.nickname) ? (
-                          <div className="text-xs text-indigo-300/80 mt-0.5 truncate">
-                            {wallet.label || wallet.nickname}
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  </div>
-                  
-                  <div className="pointer-events-none transform transition-transform duration-300 group-hover:scale-110 ml-2">
-                    <svg className={`w-5 h-5 text-indigo-400 group-hover:text-indigo-300 transition-all duration-300 ${walletDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Wallet Dropdown Menu - Match branding */}
-                {walletDropdownOpen && (
-                  <div ref={walletDropdownRef} className="absolute left-0 mt-3 w-full bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-indigo-500/40 overflow-hidden z-50 transform transition-all duration-300 ease-out origin-top">
-                    <div className="relative z-10 max-h-80 overflow-y-auto">
-                      <div className="py-2">
-                        {!selectedWalletId && (
-                          <button
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleWalletSelect(null);
-                            }}
-                            className="w-full text-left px-5 py-3 text-sm text-gray-300 hover:bg-indigo-500/10 focus:bg-indigo-500/10 focus:outline-none transition-all duration-200"
-                          >
-                            Select wallet
-                          </button>
-                        )}
-                        {wallets.map((wallet) => (
-                          <button
-                            key={wallet.id}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleWalletSelect(wallet.id);
-                            }}
-                            className={`w-full text-left px-5 py-4 text-sm transition-all duration-200 focus:outline-none group ${
-                              selectedWalletId === wallet.id
-                                ? 'bg-gradient-to-r from-indigo-600/30 to-purple-600/30 text-white border-l-4 border-indigo-400'
-                                : 'text-gray-100 hover:bg-indigo-500/10 focus:bg-indigo-500/10 hover:border-l-4 hover:border-indigo-400/50'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full ${selectedWalletId === wallet.id ? 'bg-indigo-400 shadow-lg shadow-indigo-400/50' : 'bg-gray-500 group-hover:bg-indigo-400/70'} transition-all duration-200`}></div>
-                                <div>
-                                  <div className="font-semibold">
-                                    {wallet.wallet_address.substring(0, 6)}...{wallet.wallet_address.substring(wallet.wallet_address.length - 4)}
-                                  </div>
-                                  {(wallet.label || wallet.nickname) && (
-                                    <div className="text-xs text-gray-400 mt-1">
-                                      {wallet.label || wallet.nickname}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              {selectedWalletId === wallet.id && (
-                                <svg className="w-5 h-5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* User Avatar - Match branding */}
-              <div className="relative">
-                <button
-                  ref={avatarRef}
-                  className="group relative h-12 w-12 rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-[#1a1a2e] transition-all duration-300 hover:from-indigo-500 hover:to-purple-500 shadow-xl shadow-indigo-900/20 border border-indigo-500/40 hover:border-indigo-400 hover:scale-105"
-                  onClick={handleAvatarClick}
-                  onKeyDown={handleAvatarKeyDown}
-                  aria-label="User menu"
-                  tabIndex={0}
-                >
-                  <span className="relative z-10 text-lg drop-shadow-sm">
-                    {user?.email ? user.email[0].toUpperCase() : 'U'}
-                  </span>
-                </button>
-                
-                {/* Avatar Dropdown - Match branding */}
-                {dropdownOpen && (
-                  <div
-                    ref={dropdownRef}
-                    className="absolute right-0 mt-3 w-72 bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-indigo-500/40 overflow-hidden z-50 transform transition-all duration-300 ease-out origin-top-right"
-                  >
-                    <div className="relative z-10">
-                      {/* User Info Section */}
-                      <div className="px-6 py-5 bg-gradient-to-r from-[#252525]/80 to-[#1a1a1a]/80 border-b border-indigo-500/30">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg">
-                            {user?.email ? user.email[0].toUpperCase() : 'U'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-semibold text-gray-200 truncate">{user?.email}</div>
-                            <div className="text-xs text-indigo-300/80 mt-1">Account Settings</div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Menu Items */}
-                      <div className="py-2">
-                        <button
-                          className="w-full text-left px-6 py-4 text-sm text-gray-100 hover:bg-indigo-500/10 focus:bg-indigo-500/10 focus:outline-none transition-all duration-200 flex items-center gap-4 group"
-                          onClick={handleAccountSettings}
-                          tabIndex={0}
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center group-hover:bg-indigo-500/30 transition-colors duration-200 border border-indigo-400/30">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 group-hover:scale-110 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <div className="font-semibold">Account Settings</div>
-                            <div className="text-xs text-indigo-300/60 mt-0.5">Manage your account</div>
-                          </div>
-                        </button>
-                        <button
-                          className="w-full text-left px-6 py-4 text-sm text-red-400 hover:bg-red-900/20 focus:bg-red-900/20 focus:outline-none transition-all duration-200 flex items-center gap-4 group"
-                          onClick={handleSignOut}
-                          tabIndex={0}
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center group-hover:bg-red-500/30 transition-colors duration-200 border border-red-400/30">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 group-hover:scale-110 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
-                          </div>
-                          <div>
-                            <div className="font-semibold">Sign out</div>
-                            <div className="text-xs text-red-300/60 mt-0.5">End your session</div>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+        {/* Main Navigation Bar */}
+        <div className="relative z-10 flex items-center justify-between h-20 px-6 lg:px-8">
           
-          {/* Mobile Wallet Selector - Enhanced for native look */}
-          <div className="bg-gradient-to-r from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border-t border-indigo-500/30 px-4 py-3 sm:hidden shadow-lg">
-            <div className="relative">
-              <button
+          {/* Left: Professional Logo */}
+          <motion.div 
+            className="flex items-center"
+            whileHover={{ scale: 1.05 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Link href="/dashboard" className="flex items-center group">
+              <div className="relative">
+                <Image 
+                  src="/logo.png" 
+                  alt="TradeStats Logo" 
+                  width={160} 
+                  height={40}
+                  className="h-12 w-auto transition-all duration-300 group-hover:scale-105"
+                  priority
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl"></div>
+              </div>
+            </Link>
+          </motion.div>
+
+          {/* Center: Advanced Navigation */}
+          <nav className="hidden xl:flex items-center gap-2">
+            {/* Premium Add Token Button */}
+            <motion.button
+              onClick={handleAddTokenClick}
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              className="group flex items-center gap-3 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600/30 to-teal-600/30 border border-emerald-400/50 text-emerald-100 hover:from-emerald-500/40 hover:to-teal-500/40 hover:border-emerald-300/70 transition-all duration-300 shadow-xl shadow-emerald-900/30 hover:shadow-2xl hover:shadow-emerald-500/40 mr-4"
+            >
+              <motion.div
+                animate={{ rotate: [0, 90, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <HiPlus className="w-5 h-5" />
+              </motion.div>
+              <span className="font-semibold">Add Token</span>
+            </motion.button>
+
+            {/* Premium Navigation Items */}
+            {navigationItems.map((item, index) => {
+              const isActive = currentPage === item.page;
+              const IconComponent = item.icon;
+              
+              return (
+                <motion.div
+                  key={item.name}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1, duration: 0.3 }}
+                >
+                  <button
+                    onClick={() => handleNavigationClick(item.page)}
+                    className={`group relative flex items-center gap-3 px-5 py-3 rounded-2xl transition-all duration-300 ${
+                      isActive
+                        ? 'bg-gradient-to-r from-emerald-500/50 to-teal-500/50 text-white shadow-2xl shadow-emerald-500/40 border border-emerald-300/60'
+                        : 'text-gray-300 hover:text-white hover:bg-emerald-500/20 border border-transparent hover:border-emerald-400/40 hover:shadow-xl hover:shadow-emerald-500/20'
+                    }`}
+                  >
+                    <motion.div
+                      whileHover={{ scale: 1.1, rotate: 5 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <IconComponent className={`w-5 h-5 transition-all duration-300 ${isActive ? 'text-emerald-200' : ''}`} />
+                    </motion.div>
+                    <span className="font-medium text-sm">{item.name}</span>
+                    
+                    {/* Active indicator */}
+                    {isActive && (
+                      <motion.div 
+                        layoutId="activeTab"
+                        className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                  </button>
+                </motion.div>
+              );
+            })}
+          </nav>
+
+          {/* Right: Premium Controls */}
+          <div className="flex items-center gap-4">
+            
+            {/* Premium Social Links */}
+            <div className="hidden 2xl:flex items-center gap-3 mr-4">
+              {[
+                { href: "https://x.com/TICKRjournal", icon: "X", label: "Follow us on X" },
+                { href: "https://discord.gg/6q7UrFsy", icon: "Discord", label: "Join Discord" },
+                { href: "#", icon: "CA", label: "Copy Contract Address", onClick: handleCopyCA }
+              ].map((social, index) => (
+                <motion.a
+                  key={social.icon}
+                  href={social.href}
+                  onClick={social.onClick}
+                  target={social.href !== "#" ? "_blank" : undefined}
+                  rel={social.href !== "#" ? "noopener noreferrer" : undefined}
+                  whileHover={{ scale: 1.1, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="relative w-11 h-11 bg-gradient-to-br from-emerald-600/80 to-teal-600/80 rounded-xl flex items-center justify-center shadow-xl shadow-emerald-900/30 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-400/40 border border-emerald-500/40 hover:border-emerald-400 group"
+                  aria-label={social.label}
+                >
+                  {social.icon === "X" && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                  )}
+                  {social.icon === "Discord" && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
+                    </svg>
+                  )}
+                  {social.icon === "CA" && (
+                    <span className="text-white text-xs font-bold">CA</span>
+                  )}
+                  
+                  {/* Copied indicator */}
+                  {social.icon === "CA" && showCopied && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap shadow-xl"
+                    >
+                      Copied!
+                    </motion.div>
+                  )}
+                </motion.a>
+              ))}
+            </div>
+
+            {/* Premium Wallet Selector */}
+            <div className="relative" ref={walletDropdownRef}>
+              <motion.button
                 ref={walletButtonRef}
                 onClick={handleWalletDropdownClick}
-                onKeyDown={handleWalletDropdownKeyDown}
-                className="group flex items-center justify-between w-full bg-[#2a2a3a]/80 backdrop-blur-sm border border-gray-600/40 hover:border-gray-500/60 rounded-xl px-4 py-3 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 shadow-lg active:scale-98"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="group flex items-center gap-3 bg-gradient-to-r from-emerald-900/60 to-teal-900/60 border border-emerald-400/50 hover:border-emerald-300/70 rounded-2xl px-4 py-3 transition-all duration-300 shadow-xl shadow-emerald-900/20 hover:shadow-2xl hover:shadow-emerald-500/30 backdrop-blur-xl"
                 aria-label="Select wallet"
-                tabIndex={0}
               >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-[#4a4a5a]/60 flex items-center justify-center shadow-sm">
-                    <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors duration-200 truncate">
-                      {selectedWalletId 
-                        ? (() => {
-                            const wallet = wallets.find(w => w.id === selectedWalletId);
-                            if (!wallet) return 'Select wallet';
-                            return `${wallet.wallet_address.substring(0, 8)}...${wallet.wallet_address.substring(wallet.wallet_address.length - 6)}`;
-                          })()
-                        : 'Select wallet'
-                      }
-                    </div>
-                    {selectedWalletId && (() => {
-                      const wallet = wallets.find(w => w.id === selectedWalletId);
-                      return wallet && (wallet.label || wallet.nickname) ? (
-                        <div className="text-xs text-gray-400 mt-0.5 truncate">
-                          {wallet.label || wallet.nickname}
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                </div>
-                
-                <div className="pointer-events-none transform transition-transform duration-300 group-hover:scale-110 ml-2">
-                  <svg className={`w-5 h-5 text-gray-400 group-hover:text-gray-300 transition-all duration-300 ${walletDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
-              </button>
+                <div className="text-left min-w-0 hidden sm:block">
+                  <div className="text-sm font-semibold text-gray-100 group-hover:text-white transition-colors duration-200 truncate max-w-[100px]">
+                    {selectedWalletId 
+                      ? (() => {
+                          const wallet = wallets.find(w => w.id === selectedWalletId);
+                          if (!wallet) return 'Select';
+                          return `${wallet.wallet_address.substring(0, 4)}...${wallet.wallet_address.substring(wallet.wallet_address.length - 4)}`;
+                        })()
+                      : 'Select'
+                    }
+                  </div>
+                </div>
+                <motion.svg 
+                  animate={{ rotate: walletDropdownOpen ? 180 : 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="w-4 h-4 text-emerald-400" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </motion.svg>
+              </motion.button>
 
-              {/* Mobile Wallet Dropdown Menu - Enhanced */}
-              {walletDropdownOpen && (
-                <div ref={walletDropdownRef} className="absolute left-0 mt-3 w-full bg-[#2a2a3a]/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-600/40 overflow-hidden z-50 transform transition-all duration-300 ease-out origin-top">
-                  <div className="relative z-10 max-h-80 overflow-y-auto">
-                    <div className="py-2">
-                      {!selectedWalletId && (
-                        <button
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleWalletSelect(null);
-                          }}
-                          className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/20 focus:bg-gray-700/20 focus:outline-none transition-all duration-200 active:bg-gray-700/30"
-                        >
-                          Select wallet
-                        </button>
-                      )}
-                      {wallets.map((wallet) => (
-                        <button
-                          key={wallet.id}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleWalletSelect(wallet.id);
-                          }}
-                          className={`w-full text-left px-4 py-3 text-sm transition-all duration-200 focus:outline-none group active:scale-98 ${
-                            selectedWalletId === wallet.id
-                              ? 'bg-blue-600/20 text-white border-l-3 border-blue-400'
-                              : 'text-gray-200 hover:bg-gray-700/20 focus:bg-gray-700/20 hover:border-l-3 hover:border-gray-500/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-2 h-2 rounded-full ${selectedWalletId === wallet.id ? 'bg-blue-400 shadow-sm' : 'bg-gray-500 group-hover:bg-gray-400'} transition-all duration-200`}></div>
-                              <div>
-                                <div className="font-medium text-sm">
-                                  {wallet.wallet_address.substring(0, 8)}...{wallet.wallet_address.substring(wallet.wallet_address.length - 6)}
-                                </div>
-                                {(wallet.label || wallet.nickname) && (
-                                  <div className="text-xs text-gray-400 mt-0.5">
-                                    {wallet.label || wallet.nickname}
-                                  </div>
-                                )}
-                              </div>
+              {/* Premium Wallet Dropdown */}
+              <AnimatePresence>
+                {walletDropdownOpen && (
+                  <motion.div
+                    ref={walletDropdownRef}
+                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-3 w-80 bg-gradient-to-br from-slate-900/98 via-emerald-950/95 to-teal-950/98 backdrop-blur-2xl rounded-2xl shadow-2xl border border-emerald-500/40 overflow-hidden z-50"
+                  >
+                    <div className="max-h-80 overflow-y-auto">
+                      <div className="p-2">
+                        {wallets.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <HiPlus className="w-8 h-8 text-emerald-400" />
                             </div>
-                            {selectedWalletId === wallet.id && (
-                              <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
+                            <p className="text-gray-400 text-sm mb-4">No wallets added yet</p>
+                            <motion.button
+                              onClick={handleAddWallet}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 shadow-lg"
+                            >
+                              Add Your First Wallet
+                            </motion.button>
                           </div>
-                        </button>
-                      ))}
+                        ) : (
+                          <>
+                            {wallets.map((wallet, index) => (
+                              <motion.button
+                                key={wallet.id}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleWalletSelect(wallet.id);
+                                }}
+                                className={`w-full text-left p-4 text-sm transition-all duration-200 focus:outline-none group rounded-xl m-1 ${
+                                  selectedWalletId === wallet.id
+                                    ? 'bg-gradient-to-r from-emerald-600/30 to-teal-600/30 text-white border border-emerald-400/50'
+                                    : 'text-gray-100 hover:bg-emerald-500/10 focus:bg-emerald-500/10 border border-transparent hover:border-emerald-400/30'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-3 h-3 rounded-full ${selectedWalletId === wallet.id ? 'bg-emerald-400' : 'bg-gray-500 group-hover:bg-emerald-400/70'} transition-all duration-200`}></div>
+                                    <div>
+                                      <div className="font-semibold">
+                                        {wallet.wallet_address.substring(0, 8)}...{wallet.wallet_address.substring(wallet.wallet_address.length - 6)}
+                                      </div>
+                                      {(wallet.label || wallet.nickname) && (
+                                        <div className="text-xs text-gray-400 mt-1">
+                                          {wallet.label || wallet.nickname}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {selectedWalletId === wallet.id && (
+                                    <motion.svg
+                                      initial={{ scale: 0 }}
+                                      animate={{ scale: 1 }}
+                                      className="w-5 h-5 text-emerald-400"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </motion.svg>
+                                  )}
+                                </div>
+                              </motion.button>
+                            ))}
+                            <div className="border-t border-emerald-500/30 p-3">
+                              <motion.button
+                                onClick={handleAddWallet}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                className="w-full bg-gradient-to-r from-emerald-600/20 to-teal-600/20 hover:from-emerald-600/30 hover:to-teal-600/30 text-emerald-200 px-4 py-3 rounded-xl font-semibold transition-all duration-300 border border-emerald-400/30 hover:border-emerald-300/50"
+                              >
+                                + Add Another Wallet
+                              </motion.button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        </div>
-      </header>
 
-      {/* No Wallets Modal */}
-      {showNoWalletsModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-indigo-500/40 rounded-3xl shadow-2xl shadow-indigo-900/20 max-w-md w-full">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-indigo-500/20">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/30">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Welcome to Journi!</h2>
-              </div>
-              <button
-                onClick={() => setShowNoWalletsModal(false)}
-                className="p-3 rounded-xl bg-slate-800/50 border border-indigo-500/30 hover:bg-slate-700/50 hover:border-indigo-500/50 text-gray-400 hover:text-gray-200 transition-all duration-300 group"
-                aria-label="Close modal"
+            {/* Premium User Avatar */}
+            <div className="relative">
+              <motion.button
+                ref={avatarRef}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="group relative h-12 w-12 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all duration-300 shadow-xl shadow-emerald-900/30 border border-emerald-500/40 hover:border-emerald-400"
+                onClick={handleAvatarClick}
+                aria-label="User menu"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 group-hover:rotate-90 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                <span className="relative z-10 text-sm drop-shadow-sm font-bold">
+                  {user?.email ? user.email[0].toUpperCase() : 'U'}
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </motion.button>
+              
+              {/* Premium User Dropdown */}
+              <AnimatePresence>
+                {dropdownOpen && (
+                  <motion.div
+                    ref={dropdownRef}
+                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-3 w-64 bg-gradient-to-br from-slate-900/98 via-emerald-950/95 to-teal-950/98 backdrop-blur-2xl rounded-2xl shadow-2xl border border-emerald-500/40 overflow-hidden z-50"
+                  >
+                    <div className="p-4 bg-gradient-to-r from-emerald-600/10 to-teal-600/10 border-b border-emerald-500/30">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-bold shadow-lg">
+                          {user?.email ? user.email[0].toUpperCase() : 'U'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-gray-200 truncate">{user?.email}</div>
+                          <div className="text-xs text-emerald-300/80">TradeStats Account</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-2">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full text-left px-4 py-3 text-sm text-gray-100 hover:bg-emerald-500/10 focus:bg-emerald-500/10 focus:outline-none transition-all duration-200 flex items-center gap-3 group rounded-xl"
+                        onClick={handleAccountSettings}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/30 transition-colors duration-200 border border-emerald-400/30">
+                          <HiCog className="h-4 w-4" />
+                        </div>
+                        <span className="font-medium">Settings</span>
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 focus:bg-red-900/20 focus:outline-none transition-all duration-200 flex items-center gap-3 group rounded-xl"
+                        onClick={handleSignOut}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center group-hover:bg-red-500/30 transition-colors duration-200 border border-red-400/30">
+                          <HiLogout className="h-4 w-4" />
+                        </div>
+                        <span className="font-medium">Sign out</span>
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* Content */}
-            <div className="p-6">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-6 relative">
-                  <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 animate-pulse"></div>
-                </div>
-                <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-3">
-                  Add Your First Wallet
-                </h3>
-                <p className="text-gray-300 text-sm mb-6 leading-relaxed">
-                  To get started with Journi, you'll need to add a Solana wallet address. We'll analyze your trading history and help you track your performance.
-                </p>
-                <div className="flex items-center justify-center space-x-2 text-xs text-gray-400 bg-gradient-to-r from-indigo-900/20 to-purple-900/20 rounded-xl p-3 border border-indigo-500/20 mb-6">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  <span>Your wallet data is secure and read-only</span>
-                </div>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={handleAddWallet}
-                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg shadow-indigo-900/20"
+            {/* Mobile Menu Button */}
+            <motion.button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="group p-3 rounded-2xl hover:bg-emerald-600/20 text-gray-300 hover:text-white transition-all duration-200 xl:hidden focus:outline-none focus:ring-2 focus:ring-emerald-500/50 border border-transparent hover:border-emerald-500/30"
+              aria-label="Toggle menu"
+            >
+              <AnimatePresence mode="wait">
+                {mobileMenuOpen ? (
+                  <motion.div
+                    key="close"
+                    initial={{ rotate: -90, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    exit={{ rotate: 90, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    Add Wallet Address
-                  </button>
-                  <button
-                    onClick={() => setShowNoWalletsModal(false)}
-                    className="w-full px-6 py-3 text-gray-400 hover:text-gray-200 text-sm font-medium transition-colors"
+                    <HiX className="h-6 w-6" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="menu"
+                    initial={{ rotate: 90, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    exit={{ rotate: -90, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    I'll do this later
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <HiMenu className="h-6 w-6" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.button>
           </div>
         </div>
-      )}
+
+        {/* Premium Mobile Menu */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div 
+              ref={mobileMenuRef}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="xl:hidden bg-gradient-to-b from-slate-900/98 via-emerald-950/95 to-teal-950/98 backdrop-blur-2xl border-t border-emerald-500/40"
+            >
+              <div className="px-6 py-6 space-y-3">
+                {/* Add Token Button */}
+                <motion.button
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 }}
+                  onClick={handleAddTokenClick}
+                  className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600/30 to-teal-600/30 border border-emerald-400/50 text-emerald-200 hover:from-emerald-500/40 hover:to-teal-500/40 transition-all duration-300 shadow-xl"
+                >
+                  <HiPlus className="w-6 h-6" />
+                  <span className="font-semibold text-lg">Add Token</span>
+                </motion.button>
+
+                {/* Navigation Items */}
+                {navigationItems.map((item, index) => {
+                  const isActive = currentPage === item.page;
+                  const IconComponent = item.icon;
+                  
+                  return (
+                    <motion.button
+                      key={item.name}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: (index + 2) * 0.05 }}
+                      onClick={() => handleNavigationClick(item.page)}
+                      className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-300 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-emerald-500/50 to-teal-500/50 text-white border border-emerald-300/60 shadow-xl'
+                          : 'text-gray-300 hover:text-white hover:bg-emerald-500/20 border border-transparent hover:border-emerald-400/40'
+                      }`}
+                    >
+                      <IconComponent className="w-6 h-6" />
+                      <span className="font-medium text-lg">{item.name}</span>
+                    </motion.button>
+                  );
+                })}
+
+                {/* Social Links */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="pt-6 border-t border-emerald-500/30"
+                >
+                  <div className="flex items-center justify-center gap-6">
+                    {[
+                      { href: "https://x.com/TICKRjournal", icon: "X" },
+                      { href: "https://discord.gg/6q7UrFsy", icon: "Discord" },
+                      { href: "#", icon: "CA", onClick: handleCopyCA }
+                    ].map((social) => (
+                      <motion.a
+                        key={social.icon}
+                        href={social.href}
+                        onClick={social.onClick}
+                        target={social.href !== "#" ? "_blank" : undefined}
+                        rel={social.href !== "#" ? "noopener noreferrer" : undefined}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="w-12 h-12 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 hover:shadow-2xl"
+                      >
+                        {social.icon === "X" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                          </svg>
+                        )}
+                        {social.icon === "Discord" && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
+                          </svg>
+                        )}
+                        {social.icon === "CA" && (
+                          <span className="text-white text-sm font-bold">CA</span>
+                        )}
+                      </motion.a>
+                    ))}
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.header>
 
       {/* Add Wallet Modal */}
       {showAddWalletModal && user && (

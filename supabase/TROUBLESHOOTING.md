@@ -1,6 +1,6 @@
 # Supabase Authentication Troubleshooting Guide
 
-This document provides a detailed analysis of authentication issues that might be encountered with Supabase in the Journi app.
+This document provides a detailed analysis of authentication issues that might be encountered with Supabase in the TICKR app.
 
 ## Understanding 401 Unauthorized Errors
 

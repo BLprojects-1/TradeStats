@@ -1,27 +1,32 @@
-# Journi - Solana Trade Journal Backend
+# TICKR - Professional Solana Trading Analytics
 
-A backend service for tracking and analyzing Solana wallet transactions using dRPC's Growth API.
+A comprehensive trading analytics platform for professional Solana traders, featuring advanced portfolio management, automated trade tracking, and institutional-grade performance insights.
 
 ## Features
 
-- User authentication via Supabase
-- Wallet management and tracking
-- Real-time transaction fetching from Solana blockchain
-- Trade analysis and annotation
-- Caching system for rate limiting
-- REST API endpoints
+### Core Analytics
+- **Real-time Portfolio Monitoring** - Live P/L tracking, performance metrics, and risk analytics
+- **Advanced Trade Journal** - Automated transaction import with professional annotation capabilities  
+- **Institutional Performance Analytics** - Statistical analysis, risk metrics, and pattern recognition
+- **Professional Trading Discipline** - Systematic checklists and automated trade validation
+
+### Technical Infrastructure
+- **Self-Custodial Security** - Zero counterparty risk with complete asset control
+- **Lightning-Fast RPC** - Ultra-low latency DRPC & Helius connections
+- **Scalable Database** - Enterprise PostgreSQL with real-time sync
+- **Intelligent Caching** - Smart data optimization with incremental updates
 
 ## Tech Stack
 
-- Node.js + TypeScript
-- Fastify
-- Supabase (Auth & Database)
-- dRPC Growth API
-- In-memory caching
+- **Frontend**: Next.js 15, React 18, TypeScript, Tailwind CSS
+- **Backend**: Node.js + TypeScript, Fastify
+- **Database**: Supabase (PostgreSQL + Auth)
+- **Blockchain**: Solana via dRPC Growth API
+- **Performance**: Advanced caching with rate limiting
 
 ## Prerequisites
 
-- Node.js 16+
+- Node.js 18+
 - Supabase account
 - dRPC API key
 
@@ -32,6 +37,7 @@ Create a `.env` file in the root directory with:
 ```env
 SUPABASE_URL=your_supabase_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
+DRPC_API_KEY=your_drpc_api_key
 ```
 
 ## Installation
@@ -49,7 +55,7 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ## API Endpoints
 
-### Trades
+### Trading Analytics
 
 ```
 GET /api/wallets/:address/trades
@@ -58,22 +64,24 @@ Query params:
 - sinceSlot (optional)
 ```
 
-### Top Trades
+### Performance Metrics
 
 ```
-GET /api/wallets/:address/top
+GET /api/wallets/:address/performance
 Query params:
-- limit (default: 5)
+- timeframe (1d, 7d, 30d, 90d)
+- metrics (returns, risk, sharpe)
 ```
 
-### Notes
+### Trade Annotations
 
 ```
 POST /api/wallets/:address/notes
 Body:
 {
   "signature": "transaction_signature",
-  "note": "Your note here"
+  "note": "Professional trade analysis",
+  "tags": ["strategy", "risk-managed"]
 }
 ```
 
@@ -90,38 +98,31 @@ npm run build
 npm start
 ```
 
-## Rate Limiting
+## Infrastructure
 
-The service implements rate limiting to stay within dRPC's Growth plan limits:
-- 125 requests per second
-- In-memory caching with 30s TTL
+### Rate Limiting
+- 125 requests per second for optimal dRPC performance
+- Intelligent caching with 30s TTL
 - Per-wallet request debouncing
+
+### Security
+- Self-custodial architecture with zero private key exposure
+- Enterprise-grade data encryption
+- SOC 2 compliant data handling
 
 ## Database Schema
 
-### Users
-- id (UUID, PK)
-- email (TEXT)
-- created_at (TIMESTAMPTZ)
-
-### Wallets
-- id (UUID, PK)
-- user_id (UUID, FK)
-- address (TEXT)
-- created_at (TIMESTAMPTZ)
-
-### Slots
-- wallet_id (UUID, PK, FK)
-- last_slot (BIGINT)
-- updated_at (TIMESTAMPTZ)
-
-### Notes
-- id (UUID, PK)
-- wallet_id (UUID, FK)
-- signature (TEXT)
-- note (TEXT)
-- created_at (TIMESTAMPTZ)
+### Core Tables
+- **users** - User accounts and preferences
+- **wallets** - Tracked wallet addresses per user
+- **trading_history** - Complete transaction records
+- **performance_metrics** - Calculated analytics and insights
+- **trade_annotations** - Professional notes and tags
 
 ## License
 
-MIT
+MIT License - Built for professional traders by professional traders.
+
+---
+
+**TICKR** - Elevating Solana trading through professional-grade analytics and systematic discipline.

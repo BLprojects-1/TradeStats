@@ -1,5 +1,5 @@
 {
-  "name": "journi",
+  "name": "TICKR",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -23,6 +23,7 @@
     "axios": "^1.6.7",
     "cross-fetch": "^4.1.0",
     "fastify": "^4.24.3",
+    "framer-motion": "^12.15.0",
     "fs-extra": "^11.3.0",
     "next": "^15.3.2",
     "p-limit": "^6.2.0",

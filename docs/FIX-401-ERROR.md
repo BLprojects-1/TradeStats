@@ -1,6 +1,6 @@
-# Fixing 401 Unauthorized Errors in Journi
+# Fixing 401 Unauthorized Errors in TICKR
 
-This guide addresses the 401 Unauthorized error that may occur when trying to save user profiles or wallet addresses in Journi.
+This guide addresses the 401 Unauthorized error that may occur when trying to save user profiles or wallet addresses in TICKR.
 
 ## The Problem
 

@@ -52,6 +52,8 @@ export interface TopTradeData {
   profitLoss: number;
   duration: string;
   starred: boolean;
+  totalBuyVolume?: number; // Total USD value of all buy trades
+  totalSellVolume?: number; // Total USD value of all sell trades
 }
 
 export interface TradeLogEntry {

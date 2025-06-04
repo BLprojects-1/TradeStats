@@ -107,87 +107,118 @@ const SignInModal = ({ onClose }: SignInModalProps) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
-      <div className="bg-[#121212] rounded-lg p-8 max-w-md w-full shadow-2xl">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-white">Sign In</h2>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-200"
-            aria-label="Close modal"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="relative max-w-md w-full">
+        {/* Background glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/20 to-teal-600/20 blur-3xl rounded-3xl"></div>
         
-        {error && (
-          <div className="mb-4 p-2 bg-red-900/30 border border-red-500 text-red-200 text-sm rounded">
-            {error}
-          </div>
-        )}
-        
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              style={{
-                WebkitBoxShadow: '0 0 0 1000px #1a1a1a inset',
-                WebkitTextFillColor: 'white',
-                transition: 'background-color 5000s ease-in-out 0s'
-              }}
-              required
-              disabled={loading}
-            />
-          </div>
-          
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              style={{
-                WebkitBoxShadow: '0 0 0 1000px #1a1a1a inset',
-                WebkitTextFillColor: 'white',
-                transition: 'background-color 5000s ease-in-out 0s'
-              }}
-              required
-              disabled={loading}
-            />
-          </div>
-          
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-[#121212] disabled:opacity-50 disabled:cursor-not-allowed mb-4"
-            disabled={loading}
-          >
-            {loading ? 'Signing In...' : 'Sign In'}
-          </button>
-          
-          <div className="text-center">
-            <button
-              type="button"
-              className="text-indigo-400 hover:text-indigo-300 text-sm"
-              onClick={handleResetPassword}
-              disabled={loading}
+        {/* Modal content */}
+        <div className="relative bg-slate-900/80 backdrop-blur-xl border border-emerald-500/30 rounded-3xl p-8 shadow-2xl shadow-emerald-900/20">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+              </div>
+              <h2 className="text-3xl font-bold text-white">Welcome Back</h2>
+            </div>
+            <button 
+              onClick={onClose}
+              className="w-10 h-10 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/50 hover:border-slate-500/50 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-300 transition-all duration-200"
+              aria-label="Close modal"
             >
-              Forgot your password?
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
-        </form>
+          
+          {error && (
+            <div className="mb-6 p-4 bg-red-900/30 border border-red-500/50 text-red-200 rounded-xl">
+              <div className="flex items-start space-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-medium">{error}</span>
+              </div>
+            </div>
+          )}
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="email" className="block text-sm font-semibold text-slate-300 mb-3">
+                Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-800/80 border border-emerald-500/20 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400/50 hover:border-emerald-500/30 transition-all duration-200 placeholder-slate-400"
+                style={{
+                  WebkitBoxShadow: '0 0 0 1000px rgb(30 41 59 / 0.8) inset',
+                  WebkitTextFillColor: 'white',
+                  transition: 'background-color 5000s ease-in-out 0s'
+                }}
+                placeholder="Enter your email"
+                required
+                disabled={loading}
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="password" className="block text-sm font-semibold text-slate-300 mb-3">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-800/80 border border-emerald-500/20 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400/50 hover:border-emerald-500/30 transition-all duration-200 placeholder-slate-400"
+                style={{
+                  WebkitBoxShadow: '0 0 0 1000px rgb(30 41 59 / 0.8) inset',
+                  WebkitTextFillColor: 'white',
+                  transition: 'background-color 5000s ease-in-out 0s'
+                }}
+                placeholder="Enter your password"
+                required
+                disabled={loading}
+              />
+            </div>
+            
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 text-white py-4 px-6 rounded-xl hover:from-emerald-500 hover:via-teal-500 hover:to-amber-500 transition-all duration-300 transform hover:scale-[1.02] shadow-lg shadow-emerald-500/30 font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              disabled={loading}
+            >
+              {loading ? (
+                <div className="flex items-center justify-center space-x-3">
+                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Signing you in...</span>
+                </div>
+              ) : (
+                'Sign In'
+              )}
+            </button>
+            
+            <div className="text-center pt-4">
+              <button
+                type="button"
+                className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors duration-200"
+                onClick={handleResetPassword}
+                disabled={loading}
+              >
+                Forgot your password?
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

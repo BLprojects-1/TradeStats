@@ -23,7 +23,7 @@ export default function MainLayout({
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <Head>
-        <title>{title} | ryvu</title>
+        <title>{title} | TICKR</title>
         <meta name="description" content={description} />
         <link rel="icon" href="/favicon.png" />
       </Head>
@@ -33,8 +33,8 @@ export default function MainLayout({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
             <div className="flex items-center">
               <Link href="/" className="flex items-center">
-                <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto mr-3" />
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">ryvu</h1>
+                <img src="/logo.png" alt="TICKR Logo" className="h-8 w-auto mr-3" />
+                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">TICKR</h1>
               </Link>
             </div>
             

@@ -117,7 +117,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
     };
   }, [dataPoints, svgWidth, svgHeight]);
 
-  // Ryvu brand colors
+  // TICKR brand colors
   const positiveColor = '#10b981'; // Emerald
   const negativeColor = '#f43f5e'; // Rose  
   const positiveFillColor = 'url(#positiveGradient)';
@@ -133,7 +133,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
             : 'opacity-0 translate-y-8 scale-95'
         }`}
       >
-        {/* Ryvu-style background blur effect */}
+        {/* TICKR-style background blur effect */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-25 blur transition-all duration-500 rounded-2xl"></div>
         
         <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-8 shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-indigo-500/60">
@@ -194,7 +194,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           : 'opacity-0 translate-y-8 scale-95'
       }`}
     >
-      {/* Ryvu-style background blur effect */}
+      {/* TICKR-style background blur effect */}
       <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-25 blur transition-all duration-500 rounded-2xl"></div>
       
       <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-8 shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-indigo-500/60">
@@ -315,9 +315,9 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
           >
             {/* Enhanced Gradient Definitions */}
             <defs>
-              {/* Ryvu-branded grid pattern */}
+              {/* TICKR-branded grid pattern */}
               <pattern 
-                id={`ryvu-grid-${chartId}`}
+                id={`TICKR-grid-${chartId}`}
                 width="50" 
                 height="40" 
                 patternUnits="userSpaceOnUse"
@@ -331,14 +331,14 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                 />
               </pattern>
               
-              {/* Positive gradient - Ryvu green */}
+              {/* Positive gradient - TICKR green */}
               <linearGradient id="positiveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#10b981" stopOpacity="0.3"/>
                 <stop offset="50%" stopColor="#10b981" stopOpacity="0.15"/>
                 <stop offset="100%" stopColor="#10b981" stopOpacity="0.05"/>
               </linearGradient>
               
-              {/* Negative gradient - Ryvu red */}
+              {/* Negative gradient - TICKR red */}
               <linearGradient id="negativeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.05"/>
                 <stop offset="50%" stopColor="#f43f5e" stopOpacity="0.15"/>
@@ -361,11 +361,11 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
             <rect 
               width="100%" 
               height="100%" 
-              fill={`url(#ryvu-grid-${chartId})`}
+              fill={`url(#TICKR-grid-${chartId})`}
               rx="12"
             />
 
-            {/* Zero line with Ryvu styling */}
+            {/* Zero line with TICKR styling */}
             {minValue < 0 && maxValue > 0 && (
               <line
                 x1={chartPadding}
@@ -519,7 +519,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                   {/* Enhanced tooltip */}
                   {isHovered && (
                     <g>
-                      {/* Tooltip background with Ryvu styling */}
+                      {/* Tooltip background with TICKR styling */}
                       <rect
                         x={x - 60}
                         y={y - 55}

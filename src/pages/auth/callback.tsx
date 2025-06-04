@@ -140,7 +140,7 @@ export default function AuthCallback() {
             : status === 'error' 
               ? 'Authentication Error' 
               : 'Processing Authentication'}
-           | ryvu
+           | TICKR
         </title>
         <meta name="description" content="Completing your authentication" />
         <link rel="icon" href="/favicon.png" />
@@ -149,8 +149,8 @@ export default function AuthCallback() {
       <header className="bg-gradient-to-r from-[#0c0c0f] to-[#1a1a1a] shadow-md border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center">
-            <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto mr-3" />
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">ryvu</h1>
+            <img src="/logo.png" alt="TICKR Logo" className="h-8 w-auto mr-3" />
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-indigo-400">TICKR</h1>
           </div>
         </div>
       </header>

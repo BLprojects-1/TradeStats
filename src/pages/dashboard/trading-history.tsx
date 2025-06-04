@@ -2,15 +2,13 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWalletSelection } from '../../contexts/WalletSelectionContext';
-import NewDashboardLayout from '../../components/layouts/NewDashboardLayout';
+import NewDashboardLayout, { useAddTokenModal } from '../../components/layouts/NewDashboardLayout';
 import LoadingToast from '../../components/LoadingToast';
 import ApiErrorBanner from '../../components/ApiErrorBanner';
 import { formatTokenAmount, formatSmallPrice, formatDate, formatTime } from '../../utils/formatters';
-import NotificationToast from '../../components/NotificationToast';
 import { useProcessedTradingData } from '../../hooks/useProcessedTradingData';
 import { ProcessedTrade } from '../../utils/historicalTradeProcessing';
 import WalletScanModal from '../../components/WalletScanModal';
-import TrafficInfoModal from '../../components/TrafficInfoModal';
 import TradeInfoModal from '../../components/TradeInfoModal';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 
@@ -20,6 +18,9 @@ export default function TradingHistory() {
   const { user, loading } = useAuth();
   const { selectedWalletId, wallets, isWalletScanning } = useWalletSelection();
   const router = useRouter();
+  
+  // Global Add Token Modal from layout
+  const { openAddTokenModal } = useAddTokenModal();
 
   // New unified notification system
   const { showLoading, showSuccess, showError, replaceNotification } = useNotificationContext();
@@ -35,9 +36,6 @@ export default function TradingHistory() {
   });
 
   // State for refresh functionality
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefreshTime, setLastRefreshTime] = useState(0);
-  const [cooldownTimeLeft, setCooldownTimeLeft] = useState(0);
   const [showWalletScanModal, setShowWalletScanModal] = useState(false);
 
   // Add missing state variables
@@ -53,66 +51,22 @@ export default function TradingHistory() {
   const selectedWallet = wallets.find(w => w.id === selectedWalletId);
   const walletAddress = selectedWallet?.wallet_address || '';
 
-  // Cooldown management
-  const cooldownMs = 120000; // 2 minutes
-  const isOnCooldown = cooldownTimeLeft > 0;
-
-  // Update cooldown timer
-  useEffect(() => {
-    if (cooldownTimeLeft > 0) {
-      const timer = setInterval(() => {
-        const newTimeLeft = Math.max(0, cooldownMs - (Date.now() - lastRefreshTime));
-        setCooldownTimeLeft(newTimeLeft);
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [cooldownTimeLeft, lastRefreshTime, cooldownMs]);
-
-  // Enhanced refresh handler with notifications
-  const handleRefresh = async () => {
-    // Check if on cooldown
-    if (Date.now() - lastRefreshTime < cooldownMs) {
-      const timeLeft = Math.ceil((cooldownMs - (Date.now() - lastRefreshTime)) / 1000);
-      showError(`Please wait ${timeLeft} seconds before refreshing again.`);
-      return;
-    }
-
-    // Check if wallet is selected
-    if (!user?.id || !selectedWalletId) {
-      showError('Please select a wallet first.');
-      return;
-    }
-
-    // Show loading notification
-    const loadingId = showLoading('Loading comprehensive trading data...');
-    setIsRefreshing(true);
-
-    try {
-      await refreshData();
-      
-      // Replace loading with success
-      replaceNotification(loadingId, 'Trading data refreshed successfully!', 'success');
-      setLastRefreshTime(Date.now());
-      setCooldownTimeLeft(cooldownMs);
-    } catch (error) {
-      // Replace loading with error
-      replaceNotification(loadingId, 'Failed to refresh trading data.', 'error');
-      console.error('Error refreshing data:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [tokenFilter, setTokenFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTrades, setTotalTrades] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [sortField, setSortField] = useState<'type' | 'amount' | 'priceUSD' | 'valueUSD' | null>(null);
+  const [sortField, setSortField] = useState<'type' | 'amount' | 'priceUSD' | 'valueUSD' | 'timestamp' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Create a local copy of the trades data that we can modify
   const [localTrades, setLocalTrades] = useState<ProcessedTrade[]>([]);
+
+  // Add time range filter state
+  const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | '90d' | 'all'>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [minTradeValue, setMinTradeValue] = useState<number>(0);
+  const [maxTradeValue, setMaxTradeValue] = useState<number>(0);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -151,12 +105,16 @@ export default function TradingHistory() {
 
   // Sort trades if a sort field is selected
   const sortedTrades = sortField ? [...filteredTrades].sort((a, b) => {
-    let aValue: any = a[sortField];
-    let bValue: any = b[sortField];
+    let aValue: any = a[sortField as keyof ProcessedTrade];
+    let bValue: any = b[sortField as keyof ProcessedTrade];
 
     if (sortField === 'type') {
       aValue = aValue || '';
       bValue = bValue || '';
+    } else if (sortField === 'timestamp') {
+      // Handle timestamp sorting
+      aValue = aValue || 0;
+      bValue = bValue || 0;
     } else {
       aValue = aValue || 0;
       bValue = bValue || 0;
@@ -175,7 +133,7 @@ export default function TradingHistory() {
   const paginatedTrades = sortedTrades.slice(startIndex, endIndex);
   const totalFilteredPages = Math.ceil(sortedTrades.length / TRADES_PER_PAGE);
 
-  const handleSort = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD') => {
+  const handleSort = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD' | 'timestamp') => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -185,7 +143,7 @@ export default function TradingHistory() {
     setCurrentPage(1); // Reset to first page when sorting
   };
 
-  const getSortIcon = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD') => {
+  const getSortIcon = (field: 'type' | 'amount' | 'priceUSD' | 'valueUSD' | 'timestamp') => {
     if (sortField !== field) {
       return (
         <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,6 +172,45 @@ export default function TradingHistory() {
     } else {
       return `$${price.toFixed(2)}`;
     }
+  };
+
+  const formatPriceWithSuperscript = (price: number): JSX.Element => {
+    // Handle null/undefined prices
+    if (!price || price === 0) {
+      return <span>$0.00</span>;
+    }
+
+    if (price >= 0.01) {
+      // For prices >= 0.01, show normal formatting
+      if (price < 1) {
+        return <span>${price.toFixed(4)}</span>;
+      } else {
+        return <span>${price.toFixed(2)}</span>;
+      }
+    }
+    
+    // For very small prices, format with superscript notation
+    const priceStr = price.toFixed(12); // Get enough decimal places
+    const match = priceStr.match(/^0\.(0+)/); // Find leading zeros after decimal
+    
+    if (match && match[1]) {
+      const leadingZeros = match[1].length; // Count of leading zeros
+      const remainingDigits = priceStr.slice(2 + leadingZeros); // Skip "0." and leading zeros
+      
+      // Take first 3-4 significant digits and remove trailing zeros
+      const significantDigits = remainingDigits.slice(0, 4).replace(/0+$/, '') || '0';
+      
+      if (leadingZeros > 0) {
+        return (
+          <span>
+            $0.0<sup>{leadingZeros}</sup>{significantDigits}
+          </span>
+        );
+      }
+    }
+    
+    // Fallback to regular formatting for edge cases
+    return <span>${price.toFixed(8)}</span>;
   };
 
   const formatPriceWithTwoDecimals = (price: number): string => {
@@ -290,8 +287,7 @@ export default function TradingHistory() {
   };
 
   const handleWalletScanSuccess = (result: { newTradesCount: number, message: string }) => {
-    console.log('Wallet scan completed:', result);
-    // Refresh data after successful scan
+    showSuccess(`${result.message}. Found ${result.newTradesCount} new trades.`);
     refreshData();
   };
 
@@ -299,12 +295,16 @@ export default function TradingHistory() {
     if (!sortField) return sortedTrades;
     
     return [...sortedTrades].sort((a, b) => {
-      let aValue: any = a[sortField];
-      let bValue: any = b[sortField];
+      let aValue: any = a[sortField as keyof ProcessedTrade];
+      let bValue: any = b[sortField as keyof ProcessedTrade];
 
       if (sortField === 'type') {
         aValue = aValue || '';
         bValue = bValue || '';
+      } else if (sortField === 'timestamp') {
+        // Handle timestamp sorting
+        aValue = aValue || 0;
+        bValue = bValue || 0;
       } else {
         aValue = aValue || 0;
         bValue = bValue || 0;
@@ -318,17 +318,112 @@ export default function TradingHistory() {
     });
   };
 
+  // Helper function to filter trades by time range
+  const filterTradesByTimeRange = (trades: ProcessedTrade[]) => {
+    if (timeRange === 'all') return trades;
+    
+    const now = Date.now();
+    const timeRangeMs = {
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+      '30d': 30 * 24 * 60 * 60 * 1000,
+      '90d': 90 * 24 * 60 * 60 * 1000,
+    };
+    
+    const cutoffTime = now - timeRangeMs[timeRange];
+    return trades.filter(trade => trade.timestamp >= cutoffTime);
+  };
+
+  // Calculate portfolio metrics
+  const calculatePortfolioMetrics = () => {
+    const timeFilteredTrades = filterTradesByTimeRange(localTrades);
+    
+    // Group trades by token to calculate current holdings
+    const tokenHoldings = new Map<string, {
+      symbol: string;
+      logoURI?: string;
+      totalBought: number;
+      totalSold: number;
+      currentHolding: number;
+      averageBuyPrice: number;
+      averageSellPrice: number;
+      totalBuyValue: number;
+      totalSellValue: number;
+      profit: number;
+    }>();
+
+    timeFilteredTrades.forEach(trade => {
+      const existing = tokenHoldings.get(trade.tokenAddress) || {
+        symbol: trade.tokenSymbol,
+        logoURI: trade.tokenLogoURI || undefined,
+        totalBought: 0,
+        totalSold: 0,
+        currentHolding: 0,
+        averageBuyPrice: 0,
+        averageSellPrice: 0,
+        totalBuyValue: 0,
+        totalSellValue: 0,
+        profit: 0,
+      };
+
+      if (trade.type === 'BUY') {
+        existing.totalBought += Math.abs(trade.amount);
+        existing.totalBuyValue += trade.valueUSD || 0;
+        existing.currentHolding += Math.abs(trade.amount);
+      } else {
+        existing.totalSold += Math.abs(trade.amount);
+        existing.totalSellValue += trade.valueUSD || 0;
+        existing.currentHolding -= Math.abs(trade.amount);
+      }
+
+      existing.profit = existing.totalSellValue - existing.totalBuyValue;
+      existing.averageBuyPrice = existing.totalBought > 0 ? existing.totalBuyValue / existing.totalBought : 0;
+      existing.averageSellPrice = existing.totalSold > 0 ? existing.totalSellValue / existing.totalSold : 0;
+
+      tokenHoldings.set(trade.tokenAddress, existing);
+    });
+
+    // Calculate trading patterns
+    const tradingDays = new Set(timeFilteredTrades.map(trade => 
+      new Date(trade.timestamp).toDateString()
+    )).size;
+
+    const buyTrades = timeFilteredTrades.filter(t => t.type === 'BUY');
+    const sellTrades = timeFilteredTrades.filter(t => t.type === 'SELL');
+    
+    return {
+      tokenHoldings: Array.from(tokenHoldings.values()),
+      totalTokens: tokenHoldings.size,
+      totalVolume: timeFilteredTrades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0),
+      totalProfit: Array.from(tokenHoldings.values()).reduce((sum, token) => sum + token.profit, 0),
+      averageTradeSize: timeFilteredTrades.length > 0 ? 
+        timeFilteredTrades.reduce((sum, trade) => sum + (trade.valueUSD || 0), 0) / timeFilteredTrades.length : 0,
+      tradingDays,
+      averageTradesPerDay: tradingDays > 0 ? timeFilteredTrades.length / tradingDays : 0,
+      largestTrade: Math.max(...timeFilteredTrades.map(t => t.valueUSD || 0), 0),
+      smallestTrade: timeFilteredTrades.length > 0 ? Math.min(...timeFilteredTrades.map(t => t.valueUSD || 0)) : 0,
+      buyCount: buyTrades.length,
+      sellCount: sellTrades.length,
+      mostTradedToken: tokenHoldings.size > 0 ? 
+        Array.from(tokenHoldings.values()).reduce((prev, current) => 
+          (prev.totalBought + prev.totalSold) > (current.totalBought + current.totalSold) ? prev : current
+        ).symbol : 'N/A'
+    };
+  };
+
+  const portfolioMetrics = calculatePortfolioMetrics();
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center relative overflow-hidden">
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center relative overflow-hidden">
         {/* Background Elements */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-          <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
-          <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+          <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-blue-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+          <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-emerald-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
         </div>
         <div className="relative z-10 text-center">
-          <div className="animate-pulse text-indigo-400 text-xl mb-4">Loading your trading history...</div>
-          <div className="w-32 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 mx-auto rounded-full animate-pulse"></div>
+          <div className="animate-pulse text-blue-400 text-xl mb-4">Loading your professional trading history...</div>
+          <div className="w-32 h-1 bg-gradient-to-r from-blue-500 to-emerald-500 mx-auto rounded-full animate-pulse"></div>
         </div>
       </div>
     );
@@ -343,59 +438,26 @@ export default function TradingHistory() {
   const apiError = error;
 
   return (
-    <div className="relative min-h-screen bg-[#0a0a0f] text-gray-100 overflow-hidden">
+    <div className="relative min-h-screen bg-[#020617] text-gray-100 overflow-hidden">
       {/* Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-indigo-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
-        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-purple-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
-        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-indigo-500/3 blur-[50px] rounded-full"></div>
+        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-blue-900/10 blur-[75px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-emerald-900/5 blur-[60px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-blue-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <NewDashboardLayout title="Trading History">
+      <NewDashboardLayout title="Professional Trading History - TICKR">
         <div className="relative z-10 space-y-6 sm:space-y-8">
           {/* Enhanced Header Section */}
           <div className="relative">
-            <div className="bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/10">
+            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-blue-500/40 rounded-2xl p-6 shadow-xl shadow-blue-900/10 card-glass">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
                 <div>
-                  <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                    Trading History
+                  <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mb-2 gradient-text">
+                    Comprehensive Trading History
                   </h1>
-                  <p className="text-gray-300">Complete transaction history from comprehensive analysis</p>
+                  <p className="text-slate-300">Professional analysis of your complete transaction history</p>
                 </div>
-                <button
-                  onClick={handleRefresh}
-                  disabled={isRefreshing || isOnCooldown}
-                  className={`
-                    group/btn flex items-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:scale-100 shadow-lg
-                    ${isRefreshing || isOnCooldown
-                      ? 'bg-gray-700/50 cursor-not-allowed text-gray-400 shadow-gray-900/15'
-                      : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-900/15'
-                    }
-                  `}
-                >
-                  <svg
-                    className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : 'group-hover/btn:rotate-180 transition-transform duration-300'}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  <span>
-                    {isRefreshing
-                      ? 'Refreshing...'
-                      : isOnCooldown
-                      ? `Wait ${Math.ceil(cooldownTimeLeft / 1000)}s`
-                      : 'Refresh'
-                    }
-                  </span>
-                </button>
               </div>
             </div>
           </div>
@@ -428,49 +490,323 @@ export default function TradingHistory() {
             </div>
           )}
 
-          {/* Enhanced Trading History Section */}
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-purple-600 opacity-0 group-hover:opacity-50 blur-md transition-all duration-700 rounded-3xl"></div>
-            <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-violet-500/40 rounded-3xl shadow-xl shadow-indigo-900/10 transition-all duration-500 hover:border-violet-500/40">
-              <div className="p-6 border-b border-indigo-500/20">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-900/15">
+          {/* Empty State for No Trades */}
+          {selectedWalletId && !isLoading && localTrades.length === 0 && (
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-gray-600 to-gray-700 opacity-0 group-hover:opacity-30 blur-md transition-all duration-700 rounded-2xl"></div>
+              <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-gray-500/40 rounded-2xl shadow-xl shadow-gray-900/10 transition-all duration-500 hover:border-gray-500/60">
+                <div className="p-12 text-center">
+                  <div className="w-20 h-20 bg-gradient-to-br from-gray-600 to-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-gray-900/15">
+                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-4">You have no transaction records yet.</h3>
+                  <p className="text-gray-400 text-lg mb-6 max-w-md mx-auto">
+                    Make a trade to begin tracking your comprehensive trading history and professional analytics.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button
+                      onClick={() => {
+                        window.open('https://jup.ag', '_blank');
+                      }}
+                      className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-8 py-3 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-emerald-900/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                      aria-label="Start trading on Jupiter Exchange"
+                    >
+                      Start Trading
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Time Range Filter & Quick Stats */}
+          {selectedWalletId && !isLoading && localTrades.length > 0 && (
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-amber-600 to-orange-600 opacity-0 group-hover:opacity-30 blur-md transition-all duration-700 rounded-2xl"></div>
+              <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-amber-500/40 rounded-2xl shadow-xl shadow-amber-900/10 transition-all duration-500 hover:border-amber-500/60">
+                <div className="p-6">
+                  <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+                    {/* Time Range Selector */}
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-4 mb-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-amber-600 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-amber-900/15">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                          Time Range Analysis
+                        </h3>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: '24h', label: '24 Hours' },
+                          { value: '7d', label: '7 Days' },
+                          { value: '30d', label: '30 Days' },
+                          { value: '90d', label: '90 Days' },
+                          { value: 'all', label: 'All Time' }
+                        ].map((range, index) => (
+                          <button
+                            key={range.value}
+                            onClick={() => setTimeRange(range.value as any)}
+                            onKeyDown={(e) => {
+                              // Keyboard navigation with arrow keys
+                              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                                e.preventDefault();
+                                const ranges = ['24h', '7d', '30d', '90d', 'all'];
+                                const currentIndex = ranges.indexOf(timeRange);
+                                let newIndex;
+                                if (e.key === 'ArrowLeft') {
+                                  newIndex = currentIndex > 0 ? currentIndex - 1 : ranges.length - 1;
+                                } else {
+                                  newIndex = currentIndex < ranges.length - 1 ? currentIndex + 1 : 0;
+                                }
+                                setTimeRange(ranges[newIndex] as any);
+                              }
+                            }}
+                            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                              timeRange === range.value
+                                ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg shadow-amber-900/15 border-b-2 border-orange-400'
+                                : 'bg-amber-900/20 border border-amber-500/30 text-amber-300 hover:text-white hover:bg-amber-800/30 hover:border-amber-400/50'
+                            }`}
+                            aria-pressed={timeRange === range.value}
+                            role="tab"
+                            aria-label={`Set time range to ${range.label}`}
+                          >
+                            {range.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Quick Insights */}
+                    <div className="flex-1">
+                      <h4 className="text-lg font-semibold text-white mb-4">Quick Insights</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-amber-500/20">
+                          <div className="text-amber-400 text-sm font-medium">Most Traded</div>
+                          <div className="text-white font-bold text-lg">
+                            {portfolioMetrics.mostTradedToken}
+                          </div>
+                        </div>
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-amber-500/20">
+                          <div className="text-amber-400 text-sm font-medium">Avg Trade Size</div>
+                          <div className="text-white font-bold text-lg">{portfolioMetrics.averageTradeSize > 0 ? formatPriceWithTwoDecimals(portfolioMetrics.averageTradeSize) : 'N/A'}</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-amber-500/20">
+                          <div className="text-amber-400 text-sm font-medium">Total Volume</div>
+                          <div className="text-white font-bold text-lg">{portfolioMetrics.totalVolume > 0 ? formatPriceWithTwoDecimals(portfolioMetrics.totalVolume) : 'N/A'}</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-amber-500/20">
+                          <div className="text-amber-400 text-sm font-medium">Trades/Day</div>
+                          <div className="text-white font-bold text-lg">{portfolioMetrics.averageTradesPerDay > 0 ? portfolioMetrics.averageTradesPerDay.toFixed(1) : 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Trading Activity Analysis */}
+          {selectedWalletId && !isLoading && localTrades.length > 0 && (
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-0 group-hover:opacity-30 blur-md transition-all duration-700 rounded-2xl"></div>
+              <div className="relative bg-gradient-to-br from-[#1a1a2e]/95 to-[#1a1a28]/95 backdrop-blur-xl border border-purple-500/40 rounded-2xl shadow-xl shadow-purple-900/10 transition-all duration-500 hover:border-purple-500/60">
+                <div className="p-6">
+                  <div className="flex items-center space-x-4 mb-6">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-900/15">
                       <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
                     </div>
-                    <h2 className="text-2xl font-bold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-                      All Transactions
+                    <div>
+                      <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                        Trading Activity Analysis
+                      </h3>
+                      <p className="text-slate-400">Behavioral patterns and insights</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Trading Behavior Metrics */}
+                    <div className="space-y-4">
+                      <h4 className="text-lg font-semibold text-white">Trading Behavior</h4>
+                      
+                      <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-purple-500/20">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-purple-400 font-medium">Buy vs Sell Ratio</span>
+                        </div>
+                        <div className="flex space-x-1 mb-2">
+                          <div 
+                            className="relative h-3 bg-emerald-600 rounded-l-lg overflow-hidden"
+                            style={{ 
+                              width: `${portfolioMetrics.buyCount > 0 ? (portfolioMetrics.buyCount / (portfolioMetrics.buyCount + portfolioMetrics.sellCount)) * 100 : 0}%` 
+                            }}
+                            aria-label={`Buy trades: ${portfolioMetrics.buyCount}`}
+                          >
+                            {/* Pattern overlay for accessibility */}
+                            <div className="absolute inset-0 opacity-30" style={{
+                              backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.3) 2px, rgba(255,255,255,0.3) 4px)'
+                            }}></div>
+                          </div>
+                          <div 
+                            className="relative h-3 bg-red-500 rounded-r-lg overflow-hidden"
+                            style={{ 
+                              width: `${portfolioMetrics.sellCount > 0 ? (portfolioMetrics.sellCount / (portfolioMetrics.buyCount + portfolioMetrics.sellCount)) * 100 : 0}%` 
+                            }}
+                            aria-label={`Sell trades: ${portfolioMetrics.sellCount}`}
+                          >
+                            {/* Pattern overlay for accessibility */}
+                            <div className="absolute inset-0 opacity-30" style={{
+                              backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(255,255,255,0.3) 2px, rgba(255,255,255,0.3) 4px)'
+                            }}></div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-sm text-slate-400">
+                          <span className="flex items-center space-x-2">
+                            <div className="w-3 h-3 bg-emerald-600 rounded flex items-center justify-center">
+                              <div className="w-2 h-2 bg-white opacity-30" style={{
+                                maskImage: 'repeating-linear-gradient(45deg, transparent, transparent 1px, black 1px, black 2px)'
+                              }}></div>
+                            </div>
+                            <span>Buy: {portfolioMetrics.buyCount}</span>
+                          </span>
+                          <span className="flex items-center space-x-2">
+                            <div className="w-3 h-3 bg-red-500 rounded flex items-center justify-center">
+                              <div className="w-2 h-2 bg-white opacity-30" style={{
+                                maskImage: 'repeating-linear-gradient(-45deg, transparent, transparent 1px, black 1px, black 2px)'
+                              }}></div>
+                            </div>
+                            <span>Sell: {portfolioMetrics.sellCount}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-purple-500/20">
+                          <div className="text-purple-400 text-sm font-medium">Smallest Trade</div>
+                          <div className="text-white font-bold text-lg">{formatPriceWithTwoDecimals(portfolioMetrics.smallestTrade)}</div>
+                        </div>
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-purple-500/20">
+                          <div className="text-purple-400 text-sm font-medium">Unique Tokens</div>
+                          <div className="text-white font-bold text-lg">{portfolioMetrics.totalTokens}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Trading Insights */}
+                    <div className="space-y-4">
+                      <h4 className="text-lg font-semibold text-white">Trading Insights</h4>
+                      
+                      <div className="space-y-3">
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-purple-500/20">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="text-white font-medium">Active Trader</div>
+                              <div className="text-slate-400 text-sm">
+                                {portfolioMetrics.averageTradesPerDay > 2 ? 'High' : portfolioMetrics.averageTradesPerDay > 1 ? 'Medium' : 'Low'} frequency trader
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-purple-500/20">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="text-white font-medium">Portfolio Strategy</div>
+                              <div className="text-slate-400 text-sm">
+                                {portfolioMetrics.totalTokens > 10 ? 'Diversified' : portfolioMetrics.totalTokens > 5 ? 'Balanced' : 'Focused'} approach
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-slate-800/60 to-slate-700/60 rounded-xl p-4 border border-purple-500/20">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${portfolioMetrics.totalProfit >= 0 ? 'bg-emerald-600' : 'bg-red-600'}`}>
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={portfolioMetrics.totalProfit >= 0 ? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" : "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"} />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="text-white font-medium">Performance Status</div>
+                              <div className={`text-sm ${portfolioMetrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {portfolioMetrics.totalProfit >= 0 ? 'Profitable' : 'Loss'} trading period
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Enhanced Trading History Section */}
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-emerald-600 opacity-0 group-hover:opacity-50 blur-md transition-all duration-700 rounded-3xl"></div>
+            <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl border border-blue-500/40 rounded-3xl shadow-xl shadow-blue-900/10 transition-all duration-500 hover:border-blue-500/40 card-glass">
+              <div className="p-6 border-b border-blue-500/20">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/15">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent gradient-text">
+                      Complete Transaction Records
                     </h2>
                   </div>
                   
                   {/* Enhanced Sorting Controls */}
                   <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-400 font-medium">Sort by:</span>
+                    <span className="text-sm text-slate-400 font-medium">Sort by:</span>
                     
-                    {/* Wrap the buttons in a relative container to prevent tooltip overlap */}
-                    <div className="relative inline-block">
-                      <div className="flex space-x-2">
-                        {['type', 'amount', 'valueUSD'].map((field) => (
-                          <button
-                            key={field}
-                            onClick={() => handleSort(field as 'type' | 'amount' | 'valueUSD')}
-                            className={`px-4 py-2 rounded-xl text-sm font-medium focus:outline-none z-10 relative ${
-                              sortField === field
-                                ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-900/15'
-                                : 'bg-violet-900/20 border border-violet-500/30 text-violet-300 hover:text-white hover:bg-violet-800/30 hover:border-violet-400/50'
-                            }`}
-                          >
-                            {field === 'type' ? 'Type' : field === 'amount' ? 'Amount' : 'Value'}
+                    <div className="flex space-x-2">
+                      {[
+                        { field: 'type', label: 'Type' },
+                        { field: 'amount', label: 'Amount' },
+                        { field: 'priceUSD', label: 'Price' },
+                        { field: 'valueUSD', label: 'Value' },
+                        { field: 'timestamp', label: 'Time' }
+                      ].map(({ field, label }) => (
+                        <button
+                          key={field}
+                          onClick={() => handleSort(field as 'type' | 'amount' | 'priceUSD' | 'valueUSD' | 'timestamp')}
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                            sortField === field
+                              ? 'bg-gradient-to-r from-blue-600 to-emerald-600 text-white shadow-lg shadow-blue-900/15'
+                              : 'bg-blue-900/20 border border-blue-500/30 text-blue-300 hover:text-white hover:bg-blue-800/30 hover:border-blue-400/50'
+                          }`}
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>{label}</span>
                             {sortField === field && (
-                              <span className="ml-1">
-                                {sortDirection === 'asc' ? '↑' : '↓'}
+                              <span className="text-xs">
+                                {getSortIcon(field as 'type' | 'amount' | 'priceUSD' | 'valueUSD' | 'timestamp')}
                               </span>
                             )}
-                          </button>
-                        ))}
-                      </div>
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -479,26 +815,122 @@ export default function TradingHistory() {
               {/* Enhanced table */}
               <div className="overflow-x-auto">
                 <div className="min-w-full inline-block align-middle">
-                  <table className="min-w-full divide-y divide-indigo-500/20">
+                  <table className="min-w-full divide-y divide-blue-500/20" role="table" aria-label="Complete transaction records">
                     <thead>
                       <tr className="bg-slate-950/40">
-                        {['Star', 'Token', 'Action', 'Amount', 'Price', 'Value', 'Time', 'Tx Hash'].map((header) => (
-                          <th key={header} className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                            {header}
-                          </th>
-                        ))}
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider"
+                          role="columnheader"
+                          aria-label="Star or favorite this transaction"
+                          title="Click to star/favorite transactions"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            <span className="sr-only">Star</span>
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSort('type')}
+                          aria-label="Transaction type - click to sort"
+                          title="Buy or Sell transaction type"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Type</span>
+                            {sortField === 'type' && (
+                              <span className="text-blue-400" aria-hidden="true">
+                                {getSortIcon('type')}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider"
+                          role="columnheader"
+                          aria-label="Token name and logo"
+                          title="Cryptocurrency token traded"
+                        >
+                          Token
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSort('amount')}
+                          aria-label="Token amount - click to sort"
+                          title="Number of tokens in this transaction"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Amount</span>
+                            {sortField === 'amount' && (
+                              <span className="text-blue-400" aria-hidden="true">
+                                {getSortIcon('amount')}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSort('priceUSD')}
+                          aria-label="Price per token in USD - click to sort"
+                          title="USD price per individual token"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Price</span>
+                            {sortField === 'priceUSD' && (
+                              <span className="text-blue-400" aria-hidden="true">
+                                {getSortIcon('priceUSD')}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSort('valueUSD')}
+                          aria-label="Total transaction value in USD - click to sort"
+                          title="Total USD value of this transaction"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Value</span>
+                            {sortField === 'valueUSD' && (
+                              <span className="text-blue-400" aria-hidden="true">
+                                {getSortIcon('valueUSD')}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                        <th 
+                          className="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white transition-colors"
+                          role="columnheader"
+                          onClick={() => handleSort('timestamp' as any)}
+                          aria-label="Transaction timestamp - click to sort chronologically"
+                          title="When this transaction was executed"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <span>Time</span>
+                            {sortField === 'timestamp' && (
+                              <span className="text-blue-400" aria-hidden="true">
+                                {getSortIcon('timestamp' as any)}
+                              </span>
+                            )}
+                          </span>
+                        </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-indigo-500/10">
+                    <tbody className="divide-y divide-blue-500/10">
                       {isLoading ? (
                         <tr>
-                          <td colSpan={8} className="px-4 py-12 text-center">
+                          <td colSpan={7} className="px-4 py-12 text-center">
                             <div className="flex items-center justify-center space-x-3">
                               <div className="relative">
-                                <div className="w-8 h-8 border-4 border-violet-600/30 border-t-violet-500 rounded-full animate-spin"></div>
-                                <div className="absolute inset-0 w-8 h-8 border-4 border-transparent border-t-purple-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                                <div className="w-8 h-8 border-4 border-blue-600/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                <div className="absolute inset-0 w-8 h-8 border-4 border-transparent border-t-emerald-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
                               </div>
-                              <span className="text-gray-400 font-medium">{currentLoadingMessage || 'Loading trading history...'}</span>
+                              <span className="text-slate-400 font-medium">{currentLoadingMessage || 'Loading comprehensive trading history...'}</span>
                             </div>
                           </td>
                         </tr>
@@ -507,7 +939,7 @@ export default function TradingHistory() {
                           <tr 
                             key={trade.signature}
                             onClick={() => handleTradeClick(trade)}
-                            className="hover:bg-violet-500/10 cursor-pointer transition-all duration-300 group/row border-b border-indigo-500/5"
+                            className="hover:bg-blue-500/10 cursor-pointer transition-all duration-300 group/row border-b border-blue-500/5"
                           >
                             <td className="px-4 py-4 whitespace-nowrap">
                               <button
@@ -516,21 +948,24 @@ export default function TradingHistory() {
                                   handleStarTrade(trade.tokenAddress);
                                 }}
                                 disabled={starringTrade === trade.tokenAddress}
-                                className="p-2 rounded-xl hover:bg-violet-500/20 hover:text-yellow-400 transition-all duration-300 disabled:opacity-50"
-                                aria-label={trade.starred ? 'Unstar token' : 'Star token'}
+                                className="p-2 rounded-xl hover:bg-blue-500/20 hover:text-yellow-400 transition-all duration-300 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                                aria-pressed={trade.starred ? 'true' : 'false'}
+                                aria-label={trade.starred ? `Unstar ${trade.tokenSymbol} trade` : `Star ${trade.tokenSymbol} trade`}
+                                title={trade.starred ? 'Remove from starred trades' : 'Add to starred trades'}
                               >
                                 {starringTrade === trade.tokenAddress ? (
-                                  <div className="relative">
-                                    <div className="w-4 h-4 border-2 border-violet-600/30 border-t-violet-500 rounded-full animate-spin"></div>
+                                  <div className="relative" aria-label="Updating star status">
+                                    <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-500 rounded-full animate-spin"></div>
                                     <div className="absolute inset-0 w-4 h-4 border-2 border-transparent border-t-yellow-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
                                   </div>
                                 ) : (
                                   <svg 
-                                    className={`h-4 w-4 transition-all duration-300 ${trade.starred ? 'text-yellow-400 fill-current' : 'text-gray-400 group-hover/row:text-gray-300'}`} 
+                                    className={`h-4 w-4 transition-all duration-300 ${trade.starred ? 'text-yellow-400 fill-current' : 'text-slate-400 group-hover/row:text-slate-300'}`} 
                                     xmlns="http://www.w3.org/2000/svg" 
                                     fill={trade.starred ? 'currentColor' : 'none'} 
                                     viewBox="0 0 24 24" 
                                     stroke="currentColor"
+                                    aria-hidden="true"
                                   >
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                                   </svg>
@@ -538,51 +973,66 @@ export default function TradingHistory() {
                               </button>
                             </td>
                             <td className="px-4 py-4 whitespace-nowrap">
-                              <div className="flex items-center space-x-3">
-                                {trade.tokenLogoURI && (
-                                  <img src={trade.tokenLogoURI} alt={trade.tokenSymbol} className="w-6 h-6 rounded-full ring-2 ring-violet-500/30" />
-                                )}
-                                <span className="text-gray-100 font-medium group-hover/row:text-white transition-colors">{trade.tokenSymbol}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                                trade.type === 'BUY' 
-                                  ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-500/30' 
-                                  : 'bg-rose-900/40 text-rose-400 border border-rose-500/30'
-                              }`}>
-                                {trade.type === 'BUY' ? 'Buy' : 'Sell'}
+                              <span className={`px-3 py-1 rounded-xl text-xs font-semibold ${trade.type === 'BUY' ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/30' : 'bg-red-900/30 text-red-400 border border-red-500/30'}`}>
+                                {trade.type}
                               </span>
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="flex items-center space-x-3">
+                                {trade.tokenLogoURI && (
+                                  <img 
+                                    src={trade.tokenLogoURI} 
+                                    alt={`${trade.tokenSymbol} logo`} 
+                                    className="w-6 h-6 rounded-full ring-2 ring-blue-500/30" 
+                                  />
+                                )}
+                                <span className="text-slate-100 font-medium group-hover/row:text-white transition-colors">{trade.tokenSymbol}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-slate-300 group-hover/row:text-slate-200 transition-colors">
                               {formatTokenAmount(trade.amount)}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
-                              {formatPrice(trade.priceUSD || 0)}
+                            <td className="px-4 py-4 whitespace-nowrap text-slate-300 group-hover/row:text-slate-200 transition-colors">
+                              {formatPriceWithSuperscript(trade.priceUSD)}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 font-medium group-hover/row:text-gray-200 transition-colors">
-                              {formatPriceWithTwoDecimals(trade.valueUSD || 0)}
+                            <td className="px-4 py-4 whitespace-nowrap text-slate-300 font-medium group-hover/row:text-slate-200 transition-colors">
+                              {formatPriceWithTwoDecimals(trade.valueUSD)}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-300 group-hover/row:text-gray-200 transition-colors">
+                            <td className="px-4 py-4 whitespace-nowrap text-slate-300 group-hover/row:text-slate-200 transition-colors" title={new Date(trade.timestamp).toLocaleString()}>
                               {formatTimeAgo(trade.timestamp)}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <a
-                                href={`https://solscan.io/tx/${trade.signature}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-violet-400 hover:text-violet-300 font-mono text-sm transition-colors duration-300 hover:underline"
-                              >
-                                {trade.signature ? trade.signature.slice(0, 8) : 'N/A'}...
-                              </a>
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                            {selectedWalletId ? 'No trading history found for this wallet' : 'Select a wallet to view trading history'}
+                          <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                            <div className="flex flex-col items-center space-y-4">
+                              <svg className="w-16 h-16 text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                              <h3 className="text-lg font-medium text-gray-300 mb-2">
+                                {selectedWalletId ? 'You have no transaction records yet.' : 'Select a wallet to view comprehensive trading history'}
+                              </h3>
+                              <p className="text-gray-500 text-center max-w-md">
+                                {selectedWalletId 
+                                  ? 'Complete some trades and refresh your data to see your transaction history here with professional analytics and insights.'
+                                  : 'Choose a wallet from the dropdown menu to analyze your complete trading history with advanced metrics.'
+                                }
+                              </p>
+                              {selectedWalletId && (
+                                <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                                  <button
+                                    onClick={() => {
+                                      window.open('https://jup.ag', '_blank');
+                                    }}
+                                    className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-6 py-2 rounded-lg font-medium transition-all duration-300 shadow-lg shadow-emerald-900/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                                    aria-label="Start trading on Jupiter Exchange"
+                                  >
+                                    Start Trading
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -593,99 +1043,10 @@ export default function TradingHistory() {
             </div>
           </div>
 
-          {/* Enhanced Trading Summary */}
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-teal-600 opacity-0 group-hover:opacity-50 blur transition-all duration-500 rounded-2xl"></div>
-            <div className="relative bg-gradient-to-br from-[#1a1a2e]/90 to-[#1a1a28]/90 backdrop-blur-xl border border-cyan-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-900/5 transition-all duration-500 hover:border-cyan-500/40">
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-900/15">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent">
-                  Trading Summary
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="relative group/card">
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-purple-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-violet-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-violet-500/40 hover:transform hover:scale-[1.02]">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                      </div>
-                      <h3 className="text-violet-300 font-semibold">Total Trades</h3>
-                    </div>
-                    <p className="text-3xl font-bold text-white mb-1">{getSortedTrades().length}</p>
-                    <p className="text-gray-400 text-sm">All transactions</p>
-                  </div>
-                </div>
-
-                <div className="relative group/card">
-                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-emerald-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-emerald-500/40 hover:transform hover:scale-[1.02]">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-green-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
-                        </svg>
-                      </div>
-                      <h3 className="text-emerald-300 font-semibold">Buy Orders</h3>
-                    </div>
-                    <p className="text-3xl font-bold text-white mb-1">
-                      {getSortedTrades().filter(t => t.type === 'BUY').length}
-                    </p>
-                    <p className="text-gray-400 text-sm">Purchase transactions</p>
-                  </div>
-                </div>
-
-                <div className="relative group/card">
-                  <div className="absolute inset-0 bg-gradient-to-r from-rose-600 to-red-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-rose-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-rose-500/40 hover:transform hover:scale-[1.02]">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-rose-600 to-red-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
-                        </svg>
-                      </div>
-                      <h3 className="text-rose-300 font-semibold">Sell Orders</h3>
-                    </div>
-                    <p className="text-3xl font-bold text-white mb-1">
-                      {getSortedTrades().filter(t => t.type === 'SELL').length}
-                    </p>
-                    <p className="text-gray-400 text-sm">Sale transactions</p>
-                  </div>
-                </div>
-
-                <div className="relative group/card">
-                  <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 opacity-25 group-hover/card:opacity-40 blur transition-all duration-500 rounded-2xl"></div>
-                  <div className="relative bg-gradient-to-br from-[#252525]/80 to-[#1a1a1a]/80 backdrop-blur-sm border border-cyan-500/40 p-6 rounded-2xl transition-all duration-500 hover:border-cyan-500/40 hover:transform hover:scale-[1.02]">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                      </div>
-                      <h3 className="text-cyan-300 font-semibold">Total Volume</h3>
-                    </div>
-                    <p className="text-3xl font-bold text-white mb-1">
-                      {formatPriceWithTwoDecimals(getSortedTrades().reduce((sum, trade) => sum + (trade.valueUSD || 0), 0))}
-                    </p>
-                    <p className="text-gray-400 text-sm">USD traded</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <LoadingToast 
             isVisible={!!(isLoading || (selectedWalletId && isWalletScanning(selectedWalletId) && trades.length === 0))} 
             message={selectedWalletId && isWalletScanning(selectedWalletId) && wallets.find(w => w.id === selectedWalletId)?.initial_scan_complete !== true ? 
-              "Initial wallet scan in progress. This may take a moment. We're scanning your transaction history." : 
+              "Initial comprehensive scan in progress. We're analyzing your complete transaction history for professional insights." : 
               currentLoadingMessage || ''
             } 
           />
@@ -715,7 +1076,6 @@ export default function TradingHistory() {
               userId={user.id}
             />
           )}
-          <TrafficInfoModal />
         </div>
       </NewDashboardLayout>
     </div>

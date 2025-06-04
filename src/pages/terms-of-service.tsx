@@ -1,221 +1,352 @@
 import React from 'react';
 import Head from 'next/head';
 import Footer from '../components/Footer';
-import Image from 'next/image';
 import Link from 'next/link';
 
 const TermsOfService = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-[#0a0a0f] text-gray-100">
+    <div className="flex flex-col min-h-screen bg-gradient-background text-slate-100 relative overflow-hidden">
       <Head>
-        <title>Terms of Service | Ryvu</title>
-        <meta name="description" content="Ryvu Terms of Service - Learn about the terms that govern your use of our platform." />
+        <title>Terms of Service | TICKR | Professional Solana Trading Analytics</title>
+        <meta name="description" content="TICKR Terms of Service - Professional trading analytics platform terms and conditions." />
+        <link rel="icon" href="/favicon.svg" />
       </Head>
 
-      <header className="bg-[#0a0a0f]/80 backdrop-blur-md border-b border-indigo-900/20 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-5 flex justify-between items-center">
+      {/* Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-3/4 h-3/4 bg-blue-600/10 blur-[150px] rounded-full transform -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-2/3 h-2/3 bg-emerald-600/10 blur-[120px] rounded-full transform translate-y-1/3 -translate-x-1/4"></div>
+      </div>
+
+      <header className="relative z-10 bg-slate-950/80 backdrop-blur-md border-b border-slate-700/50 sticky top-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex justify-between items-center">
           <div className="flex items-center">
-            <Link href="/" className="block">
-              <Image 
-                src="/logo.png" 
-                alt="Ryvu Logo" 
-                width={140} 
-                height={40}
-                className="h-6 sm:h-10 w-auto"
-                priority
-              />
+            <Link href="/" className="flex items-center">
+              <svg width="120" height="32" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
+                <defs>
+                  <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style={{stopColor:'#3B82F6', stopOpacity:1}} />
+                    <stop offset="100%" style={{stopColor:'#10B981', stopOpacity:1}} />
+                  </linearGradient>
+                </defs>
+                <g transform="translate(0, 6)">
+                  <rect width="20" height="20" rx="4" fill="url(#logoGradient)" />
+                  <path d="M6 10 L9 13 L14 8" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+                <g transform="translate(28, 0)" fill="#F1F5F9">
+                  <path d="M2 4 L2 8 L0 8 L0 10 L2 10 L2 28 L4 28 L4 10 L6 10 L6 8 L4 8 L4 4 Z" />
+                  <path d="M10 4 L10 28 L12 28 L12 4 Z" />
+                  <path d="M16 6 C16 4.895 16.895 4 18 4 L20 4 C21.105 4 22 4.895 22 6 L22 8 L20 8 L20 6 L18 6 L18 26 L20 26 L20 24 L22 24 L22 26 C22 27.105 21.105 28 20 28 L18 28 C16.895 28 16 27.105 16 26 Z" />
+                  <path d="M26 4 L26 14 L30 10 L32 10 L29 13 L32 28 L30 28 L28 18 L26 20 L26 28 L24 28 L24 4 Z" />
+                  <path d="M36 4 L36 28 L38 28 L38 18 L40 18 L42 28 L44 28 L42 18 C43.105 18 44 17.105 44 16 L44 6 C44 4.895 43.105 4 42 4 Z M38 6 L42 6 L42 16 L38 16 Z" />
+                </g>
+              </svg>
             </Link>
           </div>
-          <div className="flex items-center gap-2">
-            <a 
-              href="https://x.com/Ryvujournal" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-900/30 transition-transform hover:scale-110"
-              aria-label="Follow us on X (Twitter)"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </a>
-            <button 
-              onClick={() => {
-                navigator.clipboard.writeText('EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump');
-                // Show a temporary notification
-                const notification = document.createElement('div');
-                notification.textContent = 'Copied!';
-                notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-                document.body.appendChild(notification);
-                setTimeout(() => notification.remove(), 2000);
-              }}
-              className="flex items-center space-x-1.5 px-2.5 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-md shadow-indigo-900/30 text-white text-sm transition-transform hover:scale-110 relative"
-              aria-label="Copy Contract Address"
-              tabIndex={0}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
+          <div className="flex items-center space-x-4">
+            <div className="hidden sm:flex items-center space-x-3">
+              <a 
+                href="https://x.com/TICKRjournal" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-9 h-9 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 transition-all duration-200 hover:scale-110 hover:shadow-blue-500/30"
+                aria-label="Follow us on X (Twitter)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+              </a>
+              <button 
+                onClick={() => {
                   navigator.clipboard.writeText('EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump');
-                  // Show a temporary notification
                   const notification = document.createElement('div');
-                  notification.textContent = 'Copied!';
-                  notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                  notification.textContent = 'Contract address copied!';
+                  notification.className = 'fixed bottom-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
                   document.body.appendChild(notification);
                   setTimeout(() => notification.remove(), 2000);
-                }
-              }}
+                }}
+                className="flex items-center space-x-1.5 px-2.5 h-9 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg shadow-lg shadow-blue-500/20 text-white text-sm transition-all duration-200 hover:scale-110 hover:shadow-blue-500/30"
+                aria-label="Copy Contract Address"
+              >
+                <span>CA</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+            <Link 
+              href="/" 
+              className="text-slate-300 hover:text-blue-300 font-medium transition-colors"
             >
-              <span>CA</span>
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-          </div>
-          <div>
-            <Link href="/" className="px-3 sm:px-4 py-1 sm:py-2 text-sm sm:text-base text-indigo-300 hover:text-indigo-200 font-medium transition-colors">
               Back to Home
             </Link>
           </div>
         </div>
       </header>
 
-      <main className="flex-grow py-12">
+      <main className="flex-grow relative z-10 py-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gradient-to-b from-[#1a1a2e] to-[#1a1a28] p-8 md:p-12 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-900/5">
-            <h1 className="text-3xl font-bold mb-8 text-white">Terms of Service</h1>
+          <div className="card-glass p-8 md:p-12">
+            <div className="text-center mb-12">
+              <h1 className="text-4xl sm:text-5xl font-bold mb-6 gradient-text">Terms of Service</h1>
+              <p className="text-xl text-slate-300">
+                Professional trading analytics platform terms and conditions for enterprise-grade service delivery.
+              </p>
+            </div>
             
-            <div className="space-y-6 text-gray-300">
-              <p className="text-sm text-gray-400">Last Updated: {new Date().toLocaleDateString()}</p>
+            <div className="prose prose-invert prose-blue max-w-none">
+              <div className="mb-8 p-4 bg-blue-600/10 border border-blue-500/20 rounded-lg">
+                <p className="text-sm text-slate-400 mb-2">Last Updated: {new Date().toLocaleDateString()}</p>
+                <p className="text-slate-300 font-medium">
+                  These Terms of Service govern your use of TICKR's professional Solana trading analytics platform and services.
+                </p>
+              </div>
               
-              <p>
-                Welcome to Ryvu. Please read these Terms of Service ("Terms") carefully before using our website (ryvu.xyz) and services.
-              </p>
-              
-              <p>
-                By accessing or using Ryvu, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our services.
-              </p>
-              
-              <p>The terms &quot;User&quot;, &quot;You&quot;, &quot;Your&quot;, &quot;Service&quot;, and &quot;Agreement&quot; have specific meanings in this document.</p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">1. Service Description</h2>
-              
-              <p>
-                Ryvu is a Solana trading journal platform that allows users to track, analyze, and optimize their cryptocurrency trading activities on the Solana blockchain.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">2. Account Registration</h2>
-              
-              <p>
-                To use certain features of our service, you may need to create an account. You agree to provide accurate, current, and complete information during the registration process and to update such information to keep it accurate and complete.
-              </p>
-              
-              <p>
-                You are responsible for safeguarding your account credentials and for all activities that occur under your account. You agree to notify us immediately of any unauthorized use of your account.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">3. Wallet Connection</h2>
-              
-              <p>
-                Our service allows you to connect your Solana wallet(s) to analyze your trading activity. When connecting your wallet, you:
-              </p>
-              
-              <ul className="list-disc pl-6 space-y-2 mt-2">
-                <li>Authorize us to read public blockchain data associated with your wallet address</li>
-                <li>Understand that we do not take custody of your funds or private keys</li>
-                <li>Acknowledge that you are the rightful owner or authorized user of any wallet you connect</li>
-              </ul>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">4. User Conduct</h2>
-              
-              <p>You agree not to:</p>
-              
-              <ul className="list-disc pl-6 space-y-2 mt-2">
-                <li>Use our services for any illegal purpose</li>
-                <li>Violate any laws in your jurisdiction</li>
-                <li>Interfere with or disrupt the integrity or performance of our services</li>
-                <li>Attempt to gain unauthorized access to our services or systems</li>
-                <li>Impersonate another person or entity</li>
-                <li>Engage in any abusive, harassing, or harmful behavior</li>
-              </ul>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">5. Intellectual Property</h2>
-              
-              <p>
-                Our services, including all content, features, and functionality, are owned by Ryvu and are protected by copyright, trademark, and other intellectual property laws.
-              </p>
-              
-              <p>
-                You may not copy, modify, distribute, sell, or lease any part of our services without our explicit permission.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">6. User Content</h2>
-              
-              <p>
-                You retain ownership of any content you create, submit, or display through our services. By providing content, you grant us a worldwide, non-exclusive, royalty-free license to use, reproduce, modify, and distribute your content for the purpose of providing and improving our services.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">7. Disclaimer of Warranties</h2>
-              
-              <p className="uppercase font-medium">
-                Our services are provided "as is" and "as available" without warranties of any kind, either express or implied.
-              </p>
-              
-              <p>
-                We do not guarantee that our services will be uninterrupted, secure, or error-free. We do not warrant the accuracy, completeness, or usefulness of any information provided.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">8. Limitation of Liability</h2>
-              
-              <p className="uppercase font-medium">
-                To the maximum extent permitted by law, Ryvu shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use or inability to use our services.
-              </p>
-              
-              <p>
-                We are not responsible for any losses or damages resulting from your use of our services, including but not limited to trading decisions, financial losses, or data breaches.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">9. Risk Disclosure</h2>
-              
-              <p>
-                Cryptocurrency trading involves significant risk. You acknowledge and agree that:
-              </p>
-              
-              <ul className="list-disc pl-6 space-y-2 mt-2">
-                <li>Cryptocurrency prices can be volatile</li>
-                <li>Past performance is not indicative of future results</li>
-                <li>You are solely responsible for your trading decisions</li>
-                <li>Our platform is for informational purposes only and does not constitute financial advice</li>
-              </ul>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">10. Termination</h2>
-              
-              <p>
-                We reserve the right to suspend or terminate your access to our services at any time for any reason, including but not limited to a violation of these Terms.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">11. Changes to Terms</h2>
-              
-              <p>
-                We may modify these Terms at any time. We will notify you of any changes by updating the "Last Updated" date at the top of these Terms.
-              </p>
-              
-              <p>
-                Your continued use of our services after the changes take effect constitutes your acceptance of the revised Terms.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">12. Governing Law</h2>
-              
-              <p>
-                These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which Ryvu operates, without regard to its conflict of law provisions.
-              </p>
-              
-              <h2 className="text-xl font-semibold mt-8 mb-4 text-white">13. Contact Us</h2>
-              
-              <p>
-                If you have any questions about these Terms, please contact us at:
-              </p>
-              <p className="mt-2">
-                <a href="mailto:ryvujournal@gmail.com" className="text-indigo-400 hover:text-indigo-300 transition">ryvujournal@gmail.com</a>
-              </p>
+              <div className="space-y-8">
+                <div className="bg-emerald-600/10 border border-emerald-500/20 rounded-lg p-6">
+                  <p className="text-slate-300">
+                    Welcome to TICKR's professional trading analytics platform. By accessing or using our services, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our professional platform.
+                  </p>
+                  <p className="text-slate-300 mt-4">
+                    The terms "User", "You", "Your", "Service", and "Agreement" have specific meanings defined within this document for professional service delivery.
+                  </p>
+                </div>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">1</span>
+                    </div>
+                    Professional Service Description
+                  </h2>
+                  
+                  <p className="text-slate-300">
+                    TICKR is a professional-grade Solana trading analytics platform that provides institutional-level portfolio management, trade analysis, and performance optimization tools for serious cryptocurrency traders and investment professionals.
+                  </p>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">2</span>
+                    </div>
+                    Professional Account Registration
+                  </h2>
+                  
+                  <p className="text-slate-300 mb-4">
+                    To access our professional features, you must create an account with accurate, current, and complete information. You agree to:
+                  </p>
+                  <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                    <li>Provide accurate professional information during registration</li>
+                    <li>Maintain and update account information for accuracy</li>
+                    <li>Safeguard your account credentials with institutional-level security</li>
+                    <li>Immediately notify us of any unauthorized account access</li>
+                    <li>Accept responsibility for all activities under your account</li>
+                  </ul>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">3</span>
+                    </div>
+                    Wallet Connection & Analytics
+                  </h2>
+                  
+                  <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6">
+                    <p className="text-slate-300 mb-4">
+                      Our platform provides professional-grade analytics by connecting to your Solana wallet(s). When connecting your wallet, you:
+                    </p>
+                    <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                      <li>Authorize read-only access to public blockchain data associated with your wallet</li>
+                      <li>Confirm that we maintain zero custody of your funds or private keys</li>
+                      <li>Acknowledge rightful ownership or authorized use of connected wallets</li>
+                      <li>Accept that all analytics are derived from publicly available blockchain data</li>
+                      <li>Understand that wallet disconnection can be performed at any time</li>
+                    </ul>
+                  </div>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">4</span>
+                    </div>
+                    Professional Conduct Standards
+                  </h2>
+                  
+                  <p className="text-slate-300 mb-4">As a professional platform user, you agree not to:</p>
+                  <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                    <li>Use our services for illegal purposes or violate applicable laws</li>
+                    <li>Interfere with or disrupt platform integrity or performance</li>
+                    <li>Attempt unauthorized access to our systems or infrastructure</li>
+                    <li>Impersonate another person, entity, or trading professional</li>
+                    <li>Engage in abusive, harassing, or malicious behavior</li>
+                    <li>Reverse engineer or attempt to extract proprietary analytics algorithms</li>
+                  </ul>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">5</span>
+                    </div>
+                    Intellectual Property Rights
+                  </h2>
+                  
+                  <div className="bg-blue-600/10 border border-blue-500/20 rounded-lg p-6">
+                    <p className="text-slate-300 mb-4">
+                      Our professional analytics platform, including all content, features, algorithms, and functionality, are owned by TICKR and protected by intellectual property laws.
+                    </p>
+                    <p className="text-slate-300">
+                      You may not copy, modify, distribute, sell, or lease any part of our professional services without explicit written permission from TICKR.
+                    </p>
+                  </div>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">6</span>
+                    </div>
+                    Professional Content & Analytics
+                  </h2>
+                  
+                  <p className="text-slate-300 mb-4">
+                    You retain ownership of trading notes, annotations, and other content you create. By providing content, you grant TICKR a license to use, process, and display your content for service provision and platform improvement.
+                  </p>
+                  <p className="text-slate-300">
+                    We reserve the right to analyze aggregated, anonymized data for platform enhancement and professional insights development.
+                  </p>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">7</span>
+                    </div>
+                    Professional Disclaimers
+                  </h2>
+                  
+                  <div className="bg-amber-600/10 border border-amber-500/20 rounded-lg p-6">
+                    <p className="text-amber-300 font-semibold mb-4 uppercase">
+                      IMPORTANT PROFESSIONAL DISCLAIMERS:
+                    </p>
+                    <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                      <li>Our services are provided "AS IS" without warranties of any kind</li>
+                      <li>We do not guarantee uninterrupted, secure, or error-free service</li>
+                      <li>Platform analytics are for informational purposes only</li>
+                      <li>We do not provide financial, investment, or trading advice</li>
+                      <li>All trading decisions are solely your responsibility</li>
+                    </ul>
+                  </div>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">8</span>
+                    </div>
+                    Limitation of Liability
+                  </h2>
+                  
+                  <div className="bg-red-600/10 border border-red-500/20 rounded-lg p-6">
+                    <p className="text-red-300 font-semibold mb-4 uppercase">
+                      CRITICAL LIABILITY LIMITATIONS:
+                    </p>
+                    <p className="text-slate-300 mb-4">
+                      To the maximum extent permitted by law, TICKR shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of our professional services.
+                    </p>
+                    <p className="text-slate-300">
+                      We are not responsible for trading losses, financial damages, data breaches affecting third-party services, or decisions made based on platform analytics.
+                    </p>
+                  </div>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">9</span>
+                    </div>
+                    Professional Risk Disclosure
+                  </h2>
+                  
+                  <div className="bg-orange-600/10 border border-orange-500/20 rounded-lg p-6">
+                    <p className="text-orange-300 font-semibold mb-4">
+                      PROFESSIONAL TRADING RISK ACKNOWLEDGMENT:
+                    </p>
+                    <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                      <li>Cryptocurrency trading involves substantial financial risk</li>
+                      <li>Market volatility can result in significant losses</li>
+                      <li>Past performance does not indicate future results</li>
+                      <li>You are solely responsible for all trading decisions</li>
+                      <li>Our platform provides analytics, not financial advice</li>
+                      <li>Professional due diligence is essential for all investments</li>
+                    </ul>
+                  </div>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">10</span>
+                    </div>
+                    Account Termination
+                  </h2>
+                  
+                  <p className="text-slate-300">
+                    We reserve the right to suspend or terminate your access to our professional platform at any time for violations of these Terms, suspicious activity, or other reasons at our discretion. Upon termination, your right to use the services ceases immediately.
+                  </p>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">11</span>
+                    </div>
+                    Terms Modifications
+                  </h2>
+                  
+                  <p className="text-slate-300">
+                    We may modify these Terms at any time to reflect service changes, legal requirements, or business needs. We will notify you of material changes through platform notifications or direct communication. Continued use after modifications constitutes acceptance of the updated Terms.
+                  </p>
+                </section>
+                
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center mr-3">
+                      <span className="text-white font-bold text-sm">12</span>
+                    </div>
+                    Professional Support & Contact
+                  </h2>
+                  
+                  <div className="bg-gradient-to-r from-blue-600/10 to-emerald-600/10 border border-blue-500/20 rounded-lg p-6">
+                    <p className="text-slate-300 mb-4">
+                      For questions about these Terms, professional support, or enterprise inquiries, contact our dedicated support team:
+                    </p>
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <a 
+                        href="mailto:TICKRjournal@gmail.com?subject=Terms%20of%20Service%20Inquiry" 
+                        className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                      >
+                        TICKRjournal@gmail.com
+                      </a>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="mt-12 pt-8 border-t border-slate-700/50">
+                  <p className="text-slate-400 text-sm">
+                    These Terms constitute the entire agreement between you and TICKR regarding use of our professional trading analytics platform. If any provision is found unenforceable, the remainder shall remain in full force and effect.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

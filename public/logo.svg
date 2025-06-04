@@ -1,0 +1,33 @@
+<svg width="120" height="32" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- TICKR Logo with modern typography and icon -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon: Stylized chart/tick mark -->
+  <g transform="translate(0, 6)">
+    <rect width="20" height="20" rx="4" fill="url(#logoGradient)" />
+    <path d="M6 10 L9 13 L14 8" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+  
+  <!-- Text: TICKR -->
+  <g transform="translate(28, 0)" fill="#F1F5F9">
+    <!-- T -->
+    <path d="M2 4 L2 8 L0 8 L0 10 L2 10 L2 28 L4 28 L4 10 L6 10 L6 8 L4 8 L4 4 Z" />
+    
+    <!-- I -->
+    <path d="M10 4 L10 28 L12 28 L12 4 Z" />
+    
+    <!-- C -->
+    <path d="M16 6 C16 4.895 16.895 4 18 4 L20 4 C21.105 4 22 4.895 22 6 L22 8 L20 8 L20 6 L18 6 L18 26 L20 26 L20 24 L22 24 L22 26 C22 27.105 21.105 28 20 28 L18 28 C16.895 28 16 27.105 16 26 Z" />
+    
+    <!-- K -->
+    <path d="M26 4 L26 14 L30 10 L32 10 L29 13 L32 28 L30 28 L28 18 L26 20 L26 28 L24 28 L24 4 Z" />
+    
+    <!-- R -->
+    <path d="M36 4 L36 28 L38 28 L38 18 L40 18 L42 28 L44 28 L42 18 C43.105 18 44 17.105 44 16 L44 6 C44 4.895 43.105 4 42 4 Z M38 6 L42 6 L42 16 L38 16 Z" />
+  </g>
+</svg> 

@@ -221,8 +221,8 @@ export default function FixTradingPrices() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {trades.slice(0, 10).map((trade) => (
-                    <tr key={trade.signature}>
+                  {trades.slice(0, 10).map((trade, index) => (
+                    <tr key={trade.signature || `trade-${index}`}>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-white">
                         {trade.token_symbol}
                       </td>

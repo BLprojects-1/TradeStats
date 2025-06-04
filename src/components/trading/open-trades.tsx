@@ -1,20 +1,15 @@
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
-import { useAuth } from '../../contexts/AuthContext';
-import { useWalletSelection } from '../../contexts/WalletSelectionContext';
-import DashboardLayout from '../../components/layouts/DashboardLayout';
-import LoadingToast from '../../components/LoadingToast';
-import ApiErrorBanner from '../../components/ApiErrorBanner';
-import { tradingHistoryService } from '../../services/tradingHistoryService';
-import { ProcessedTrade } from '../../services/tradeProcessor';
-import { jupiterApiService } from '../../services/jupiterApiService';
-import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
-import TradeInfoModal from '../../components/TradeInfoModal';
-import { useRefreshButton } from '../../hooks/useRefreshButton';
-import NotificationToast from '../../components/NotificationToast';
+import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
+import NewDashboardLayout from '../layouts/NewDashboardLayout';
+import { useWalletSelection } from '../../contexts/WalletSelectionContext';
+import { tradingHistoryService } from '../../services/tradingHistoryService';
 import { processTradesToHoldings } from '../../utils/tradeProcessing';
-import { supabase } from '../../lib/supabase';
+import { formatTokenAmount, formatSmallPrice } from '../../utils/formatters';
+import LoadingToast from '../LoadingToast';
+import ApiErrorBanner from '../ApiErrorBanner';
+import TradeInfoModal from '../TradeInfoModal';
+import { supabase } from '../../utils/supabaseClient';
 
 interface CachedTrade {
   token_address: string;
@@ -36,7 +31,6 @@ const OpenTrades = () => {
   const { user } = useAuth();
   const userId = user?.id;
   const { selectedWalletId, wallets } = useWalletSelection();
-  const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -146,7 +140,7 @@ const OpenTrades = () => {
   };
 
   return (
-    <DashboardLayout title="Open Trades">
+    <NewDashboardLayout title="Open Trades">
       <div className="space-y-6">
         {/* Header with refresh button */}
         <div className="flex justify-between items-center">
@@ -234,7 +228,7 @@ const OpenTrades = () => {
           />
         )}
       </div>
-    </DashboardLayout>
+    </NewDashboardLayout>
   );
 };
 

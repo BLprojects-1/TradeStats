@@ -26,6 +26,8 @@ export interface TopTradeData {
   profitLoss: number;
   duration: string;
   starred: boolean;
+  totalBuyVolume?: number; // Total USD value of all buy trades
+  totalSellVolume?: number; // Total USD value of all sell trades
 }
 
 export interface TradeLogEntry {
@@ -174,6 +176,26 @@ class SupabaseTradingService {
       // Group trades by token
       const tokenMap = new Map<string, TokenHolding>();
 
+      console.log('📊 Processing trades by type:');
+      const buyTrades = uniqueTrades.filter(t => t.type === 'BUY');
+      const sellTrades = uniqueTrades.filter(t => t.type === 'SELL');
+      console.log(`  - BUY trades: ${buyTrades.length}`);
+      console.log(`  - SELL trades: ${sellTrades.length}`);
+      console.log(`  - Other trades: ${uniqueTrades.length - buyTrades.length - sellTrades.length}`);
+
+      // Sample a few trades to see the data structure
+      if (uniqueTrades.length > 0) {
+        console.log('📋 Sample trade data:');
+        const sampleTrade = uniqueTrades[0];
+        console.log('  Sample trade:', {
+          type: sampleTrade.type,
+          amount: sampleTrade.amount,
+          value_usd: sampleTrade.value_usd,
+          token_symbol: sampleTrade.token_symbol,
+          timestamp: sampleTrade.timestamp
+        });
+      }
+
       for (const trade of uniqueTrades) {
         const key = trade.token_address;
 
@@ -199,12 +221,13 @@ class SupabaseTradingService {
           holding.starred = true;
         }
 
+        // Use absolute values and ensure we're tracking actual token amounts, not USD values
         if (trade.type === 'BUY') {
-          holding.totalBought += Math.abs(trade.amount);
-          holding.profitLoss -= trade.value_usd || 0; // Cost
-        } else {
-          holding.totalSold += Math.abs(trade.amount);
-          holding.profitLoss += trade.value_usd || 0; // Revenue
+          holding.totalBought += Math.abs(trade.amount || 0);
+          holding.profitLoss -= Math.abs(trade.value_usd || 0); // Cost (negative for buys)
+        } else if (trade.type === 'SELL') {
+          holding.totalSold += Math.abs(trade.amount || 0);
+          holding.profitLoss += Math.abs(trade.value_usd || 0); // Revenue (positive for sells)
         }
       }
 
@@ -217,10 +240,11 @@ class SupabaseTradingService {
       for (const holding of tokenMap.values()) {
         holding.netPosition = holding.totalBought - holding.totalSold;
 
-        console.log(`💰 ${holding.tokenSymbol}: bought=${holding.totalBought}, sold=${holding.totalSold}, net=${holding.netPosition}`);
+        console.log(`💰 ${holding.tokenSymbol}: bought=${holding.totalBought.toFixed(6)}, sold=${holding.totalSold.toFixed(6)}, net=${holding.netPosition.toFixed(6)}`);
 
-        // Reduce threshold to 0.000001 to include more positions and add value threshold
-        if (Math.abs(holding.netPosition) > 0.000001) {
+        // More reasonable threshold for open positions - at least 0.001 tokens remaining
+        // This catches most meaningful positions while filtering out dust
+        if (holding.netPosition > 0.001) {
           // Get the most recent trade for this token to get the historical price
           const mostRecentTrade = uniqueTrades
             .filter(trade => trade.token_address === holding.tokenAddress)
@@ -233,40 +257,51 @@ class SupabaseTradingService {
             // Get the current price from Jupiter API
             const currentPriceUSD = await this.getCurrentTokenPrice(holding.tokenAddress);
 
-            // Calculate the current value of the position
-            const currentValue = Math.abs(holding.netPosition) * currentPriceUSD;
+            // Calculate the current value of the position using the remaining balance
+            const currentValue = holding.netPosition * currentPriceUSD;
             holding.totalValue = currentValue;
 
-            // Calculate the unrealized P/L
-            // This is (current value - cost basis)
-            // Cost basis is (totalBought * historicalPriceUSD - totalSold * historicalPriceUSD)
-            const costBasis = (holding.totalBought - holding.totalSold) * historicalPriceUSD;
-            const unrealizedPL = currentValue - costBasis;
+            // Calculate the unrealized P/L more accurately
+            // Cost basis = average price paid * tokens still held
+            const avgBuyPrice = holding.totalBought > 0 ? 
+              Math.abs(holding.profitLoss + (holding.totalSold * historicalPriceUSD)) / holding.totalBought : 
+              historicalPriceUSD;
+            
+            const costBasisForRemaining = holding.netPosition * avgBuyPrice;
+            const unrealizedPL = currentValue - costBasisForRemaining;
 
-            // Add the unrealized P/L to the existing P/L
+            // For open positions, show unrealized P/L
             holding.profitLoss = unrealizedPL;
 
-            console.log(`💎 ${holding.tokenSymbol}: currentPrice=$${currentPriceUSD}, value=$${currentValue}, P/L=$${unrealizedPL}`);
+            console.log(`💎 ${holding.tokenSymbol}: currentPrice=$${currentPriceUSD.toFixed(6)}, avgBuyPrice=$${avgBuyPrice.toFixed(6)}, value=$${currentValue.toFixed(2)}, unrealizedPL=$${unrealizedPL.toFixed(2)}`);
 
-            // Only filter out if value is less than $0.01 (1 cent)
-            if (currentValue >= 0.01) {
+            // Filter out very small positions (less than $0.10)
+            if (currentValue >= 0.10) {
               openPositions.push(holding);
             } else {
-              console.log(`🚫 Filtered out ${holding.tokenSymbol} - value too low: $${currentValue}`);
+              console.log(`🚫 Filtered out ${holding.tokenSymbol} - value too low: $${currentValue.toFixed(4)}`);
             }
           } catch (priceError) {
             console.error(`❌ Error getting price for ${holding.tokenSymbol}:`, priceError);
-            // Still add the position even if we can't get the price
-            holding.totalValue = 0;
-            holding.profitLoss = holding.profitLoss; // Keep the realized P/L
-            openPositions.push(holding);
+            
+            // Still add the position even if we can't get the price, but only if the amount is significant
+            if (holding.netPosition > 1.0) { // At least 1 token
+              holding.totalValue = 0;
+              holding.profitLoss = 0; // Can't calculate without price
+              openPositions.push(holding);
+            }
           }
+        } else if (holding.netPosition < -0.001) {
+          // This indicates a negative balance, which shouldn't happen but let's log it
+          console.log(`⚠️ Negative balance detected for ${holding.tokenSymbol}: ${holding.netPosition.toFixed(6)}`);
         } else {
-          console.log(`🚫 Filtered out ${holding.tokenSymbol} - net position too small: ${holding.netPosition}`);
+          console.log(`🚫 Filtered out ${holding.tokenSymbol} - no remaining position: ${holding.netPosition.toFixed(6)}`);
         }
       }
 
       console.log('✅ Final open positions:', openPositions.length);
+      console.log('🎯 Open positions summary:', openPositions.map(p => `${p.tokenSymbol}: ${p.netPosition.toFixed(6)} tokens ($${p.totalValue.toFixed(2)})`));
+      
       return openPositions.sort((a, b) => b.totalValue - a.totalValue);
     } catch (error) {
       console.error('❌ Error in getOpenTrades:', error);
@@ -321,7 +356,9 @@ class SupabaseTradingService {
             totalSold: 0,
             profitLoss: 0,
             duration: '0m',
-            starred: trade.starred
+            starred: trade.starred,
+            totalBuyVolume: 0,
+            totalSellVolume: 0
           });
         }
 
@@ -335,9 +372,11 @@ class SupabaseTradingService {
         if (trade.type === 'BUY') {
           performance.totalBought += Math.abs(trade.amount);
           performance.profitLoss -= trade.value_usd || 0;
+          performance.totalBuyVolume! += trade.value_usd || 0;
         } else {
           performance.totalSold += Math.abs(trade.amount);
           performance.profitLoss += trade.value_usd || 0;
+          performance.totalSellVolume! += trade.value_usd || 0;
         }
       }
 

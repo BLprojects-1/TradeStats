@@ -192,15 +192,15 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <Head>
-        <title>Setup | ryvu</title>
+        <title>Setup | TICKR</title>
         <meta name="description" content="Set up your Solana Trading Journal" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.png" />
       </Head>
 
       <header className="bg-gradient-to-r from-[#0c0c0f] to-[#1a1a1a] shadow-md border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center">
-            <img src="/logo.png" alt="ryvu Logo" className="h-8 w-auto" />
+            <img src="/logo.png" alt="TICKR Logo" className="h-8 w-auto" />
           </div>
         </div>
       </header>
@@ -325,7 +325,7 @@ const OnboardingForm = ({ userId, onComplete }: OnboardingFormProps) => {
                   Inspect JWT Token
                 </button>
                 <a 
-                  href="https://github.com/yourusername/journi/blob/main/supabase/TROUBLESHOOTING.md" 
+                  href="https://github.com/yourusername/TICKR/blob/main/supabase/TROUBLESHOOTING.md" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="px-3 py-1 bg-blue-800 text-white text-xs rounded"

@@ -98,57 +98,60 @@ const Debugger401 = () => {
   };
 
   return (
-    <div className="bg-gray-900 p-4 rounded-lg text-white">
-      <h2 className="text-xl font-bold mb-4">401 Unauthorized Debugger</h2>
+    <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-teal-950 p-6 rounded-2xl text-white border border-emerald-500/30 shadow-2xl shadow-emerald-900/20">
+      <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent">TradeStats Authentication Debugger</h2>
       
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-3 mb-6">
         <button
           onClick={testSession}
           disabled={loading}
-          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-50 transition-all duration-300 shadow-lg shadow-emerald-500/20 border border-emerald-400/30"
         >
           Test Session
         </button>
         <button
           onClick={testSelect}
           disabled={loading}
-          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+          className="px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl hover:from-teal-500 hover:to-teal-600 disabled:opacity-50 transition-all duration-300 shadow-lg shadow-teal-500/20 border border-teal-400/30"
         >
           Test SELECT
         </button>
         <button
           onClick={testInsert}
           disabled={loading}
-          className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+          className="px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 text-white rounded-xl hover:from-amber-500 hover:to-yellow-500 disabled:opacity-50 transition-all duration-300 shadow-lg shadow-amber-500/20 border border-amber-400/30"
         >
           Test INSERT
         </button>
       </div>
       
       {loading && (
-        <div className="animate-pulse text-blue-300 mb-4">Running test...</div>
+        <div className="animate-pulse text-emerald-300 mb-4 flex items-center space-x-2">
+          <div className="w-4 h-4 bg-emerald-400 rounded-full animate-bounce"></div>
+          <span>Running diagnostic test...</span>
+        </div>
       )}
       
       {error && (
-        <div className="bg-red-900/30 border border-red-500 p-3 rounded mb-4 text-red-200 text-sm">
-          <div className="font-bold">Error:</div>
-          <div className="font-mono whitespace-pre-wrap">{error}</div>
+        <div className="bg-gradient-to-r from-red-900/40 to-orange-900/40 border border-red-400/50 p-4 rounded-xl mb-4 text-red-200 text-sm backdrop-blur-sm">
+          <div className="font-bold text-red-300 mb-2">🚨 Error Detected:</div>
+          <div className="font-mono whitespace-pre-wrap bg-black/20 p-3 rounded-lg">{error}</div>
         </div>
       )}
       
       {result && (
-        <div className="bg-gray-800 p-3 rounded text-sm font-mono whitespace-pre-wrap overflow-auto max-h-64">
+        <div className="bg-gradient-to-br from-slate-800/60 to-emerald-900/30 p-4 rounded-xl text-sm font-mono whitespace-pre-wrap overflow-auto max-h-64 border border-emerald-500/20 backdrop-blur-sm">
           {JSON.stringify(result, null, 2)}
         </div>
       )}
       
-      <div className="mt-4 text-sm text-gray-400">
-        <p>If you're seeing 401 Unauthorized errors:</p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>Run the emergency SQL in the Supabase dashboard</li>
-          <li>Sign out and sign back in to refresh your token</li>
-          <li>Check that RLS policies are properly set up</li>
-          <li>Verify proper authentication</li>
+      <div className="mt-6 text-sm text-emerald-200/80 bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-4 rounded-xl border border-emerald-400/20">
+        <p className="font-semibold text-emerald-300 mb-3">🔧 If you're experiencing 401 Unauthorized errors:</p>
+        <ol className="list-decimal pl-6 space-y-2">
+          <li>Execute the emergency SQL commands in the TradeStats dashboard</li>
+          <li>Sign out and sign back in to refresh your authentication token</li>
+          <li>Verify that RLS policies are properly configured</li>
+          <li>Confirm proper TradeStats authentication</li>
         </ol>
       </div>
     </div>

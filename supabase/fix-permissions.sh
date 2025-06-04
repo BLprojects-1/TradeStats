@@ -6,7 +6,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Journi - Supabase RLS Policy Fix Script${NC}"
+echo -e "${YELLOW}TICKR - Supabase RLS Policy Fix Script${NC}"
 echo "--------------------------------------"
 echo -e "This script will fix the Row Level Security (RLS) policies in your Supabase project."
 echo -e "It will ensure that authenticated users can properly interact with the database tables."
