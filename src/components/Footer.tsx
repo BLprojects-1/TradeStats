@@ -6,7 +6,7 @@ const Footer = () => {
   const [showCopied, setShowCopied] = useState(false);
   
   const handleCopyCA = () => {
-    const contractAddress = '4Hcm1TfA1MvVhCQHvJCcKL7ymUhJZAV7P439H5ZHnKRh';
+    const contractAddress = 'CznXPae3VynYrWhbo3RqhyxAWGqcNYg6pfcyjdsipump';
     navigator.clipboard.writeText(contractAddress);
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);

@@ -58,7 +58,7 @@ const Contact = () => {
               </a>
               <button 
                 onClick={() => {
-                  navigator.clipboard.writeText('4Hcm1TfA1MvVhCQHvJCcKL7ymUhJZAV7P439H5ZHnKRh');
+                  navigator.clipboard.writeText('CznXPae3VynYrWhbo3RqhyxAWGqcNYg6pfcyjdsipump');
                   const notification = document.createElement('div');
                   notification.textContent = 'Contract address copied!';
                   notification.className = 'fixed bottom-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
