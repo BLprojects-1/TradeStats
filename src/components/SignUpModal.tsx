@@ -282,7 +282,7 @@ const SignUpModal = ({ onClose, onSwitchToSignIn }: SignUpModalProps) => {
                 )}
               </div>
               <h2 className="text-3xl font-bold text-white">
-                {isSignedUp ? 'Check Your Email' : 'Join TICKR'}
+                {isSignedUp ? 'Check Your Email' : 'Join TradeStats'}
               </h2>
             </div>
             <button 

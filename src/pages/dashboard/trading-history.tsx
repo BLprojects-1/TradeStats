@@ -446,7 +446,7 @@ export default function TradingHistory() {
         <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 bg-blue-500/3 blur-[50px] rounded-full"></div>
       </div>
 
-      <NewDashboardLayout title="Professional Trading History - TICKR">
+      <NewDashboardLayout title="Professional Trading History - TradeStats">
         <div className="relative z-10 space-y-6 sm:space-y-8">
           {/* Enhanced Header Section */}
           <div className="relative">

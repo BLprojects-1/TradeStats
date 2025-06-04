@@ -1,6 +1,6 @@
-# Supabase Setup for TICKR App
+# Supabase Setup for TradeStats App
 
-This guide explains how to set up the required Supabase database tables and policies for the TICKR app.
+This guide explains how to set up the required Supabase database tables and policies for the TradeStats app.
 
 ## Database Setup
 

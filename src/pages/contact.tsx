@@ -7,8 +7,8 @@ const Contact = () => {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-background text-slate-100 relative overflow-hidden">
       <Head>
-        <title>Contact Us | TICKR | Professional Solana Trading Analytics</title>
-        <meta name="description" content="Contact the TICKR team for professional trading analytics support, enterprise inquiries, and technical assistance." />
+        <title>Contact Us | TradeStats | Professional Solana Trading Analytics</title>
+        <meta name="description" content="Contact the TradeStats team for professional trading analytics support, enterprise inquiries, and technical assistance." />
         <link rel="icon" href="/favicon.svg" />
       </Head>
 
@@ -116,10 +116,10 @@ const Contact = () => {
                       Direct access to our technical team for platform support, feature requests, and troubleshooting assistance.
                     </p>
                     <a 
-                      href="mailto:TICKRjournal@gmail.com" 
+                      href="mailto:TradeStatsjournal@gmail.com" 
                       className="inline-flex items-center text-blue-400 hover:text-blue-300 font-medium transition-colors group"
                     >
-                      <span>TICKRjournal@gmail.com</span>
+                      <span>TradeStatsjournal@gmail.com</span>
                       <svg className="w-4 h-4 ml-2 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                       </svg>
@@ -150,7 +150,7 @@ const Contact = () => {
                         rel="noopener noreferrer"
                         className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
                       >
-                        @TICKRjournal
+                        @TradeStatsjournal
                       </a>
                     </div>
                   </div>
@@ -171,7 +171,7 @@ const Contact = () => {
                   Interested in enterprise-grade analytics solutions, institutional partnerships, or custom integrations? Our business development team is ready to discuss professional solutions tailored to your organization.
                 </p>
                 <a 
-                  href="mailto:TICKRjournal@gmail.com?subject=Enterprise%20Inquiry" 
+                  href="mailto:TradeStatsjournal@gmail.com?subject=Enterprise%20Inquiry" 
                   className="btn-primary text-lg inline-flex items-center gap-2"
                 >
                   <span>Contact Enterprise Sales</span>

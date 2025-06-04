@@ -7,8 +7,8 @@ const PrivacyPolicy = () => {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-background text-slate-100 relative overflow-hidden">
       <Head>
-        <title>Privacy Policy | TICKR | Professional Solana Trading Analytics</title>
-        <meta name="description" content="TICKR Privacy Policy - Learn how we protect your data and privacy in our professional trading analytics platform." />
+        <title>Privacy Policy | TradeStats | Professional Solana Trading Analytics</title>
+        <meta name="description" content="TradeStats Privacy Policy - Learn how we protect your data and privacy in our professional trading analytics platform." />
         <link rel="icon" href="/favicon.svg" />
       </Head>
 
@@ -99,7 +99,7 @@ const PrivacyPolicy = () => {
               <div className="mb-8 p-4 bg-blue-600/10 border border-blue-500/20 rounded-lg">
                 <p className="text-sm text-slate-400 mb-2">Last Updated: {new Date().toLocaleDateString()}</p>
                 <p className="text-slate-300 font-medium">
-                  This Privacy Policy outlines how TICKR collects, uses, and protects your information when using our professional Solana trading analytics platform.
+                  This Privacy Policy outlines how TradeStats collects, uses, and protects your information when using our professional Solana trading analytics platform.
                 </p>
               </div>
               
@@ -165,7 +165,7 @@ const PrivacyPolicy = () => {
                   
                   <div className="bg-emerald-600/10 border border-emerald-500/20 rounded-lg p-6">
                     <p className="text-slate-300">
-                      <strong className="text-emerald-400">Professional-Grade Analytics:</strong> TICKR analyzes public blockchain data associated with your connected wallet addresses to provide institutional-level trading insights. This data is already publicly available on the Solana blockchain and immutable by design. We transform this raw data into actionable professional analytics while maintaining the highest standards of data integrity.
+                      <strong className="text-emerald-400">Professional-Grade Analytics:</strong> TradeStats analyzes public blockchain data associated with your connected wallet addresses to provide institutional-level trading insights. This data is already publicly available on the Solana blockchain and immutable by design. We transform this raw data into actionable professional analytics while maintaining the highest standards of data integrity.
                     </p>
                   </div>
                 </section>
@@ -285,10 +285,10 @@ const PrivacyPolicy = () => {
                         </svg>
                       </div>
                       <a 
-                        href="mailto:TICKRjournal@gmail.com?subject=Privacy%20Policy%20Inquiry" 
+                        href="mailto:TradeStatsjournal@gmail.com?subject=Privacy%20Policy%20Inquiry" 
                         className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
                       >
-                        TICKRjournal@gmail.com
+                        TradeStatsjournal@gmail.com
                       </a>
                     </div>
                   </div>

@@ -85,8 +85,8 @@ export default function ResetPassword() {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-background text-slate-100 relative overflow-hidden">
       <Head>
-        <title>Reset Password | TICKR | Professional Solana Trading Analytics</title>
-        <meta name="description" content="Reset your TICKR account password securely" />
+        <title>Reset Password | TradeStats | Professional Solana Trading Analytics</title>
+        <meta name="description" content="Reset your TradeStats account password securely" />
         <link rel="icon" href="/favicon.svg" />
       </Head>
 
@@ -243,7 +243,7 @@ export default function ResetPassword() {
               <p className="text-center text-sm text-slate-400">
                 Having trouble? 
                 <a 
-                  href="mailto:TICKRjournal@gmail.com?subject=Password%20Reset%20Help" 
+                  href="mailto:TradeStatsjournal@gmail.com?subject=Password%20Reset%20Help" 
                   className="text-blue-400 hover:text-blue-300 ml-1 font-medium transition-colors"
                 >
                   Contact Support

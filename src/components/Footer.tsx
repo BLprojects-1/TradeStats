@@ -96,7 +96,7 @@ const Footer = () => {
               {/* Axiom */}
               <li>
                 <a
-                  href="https://axiom.trade/@TICKR"
+                  href="https://axiom.trade/@TradeStats"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition-colors group"
@@ -181,12 +181,12 @@ const Footer = () => {
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div className="max-w-2xl">
               <p className="text-sm text-slate-400 leading-relaxed">
-                <strong className="text-slate-300">Professional Trading Platform:</strong> TICKR provides advanced analytics and portfolio management tools for Solana trading. All investments carry risk. Trading cryptocurrencies involves substantial risk and may not be suitable for all investors. Past performance does not guarantee future results.
+                <strong className="text-slate-300">Professional Trading Platform:</strong> TradeStats provides advanced analytics and portfolio management tools for Solana trading. All investments carry risk. Trading cryptocurrencies involves substantial risk and may not be suitable for all investors. Past performance does not guarantee future results.
               </p>
             </div>
             <div className="text-right">
               <p className="text-sm text-slate-400 mb-2">
-                © 2025 TICKR Analytics. All rights reserved.
+                © 2025 TradeStats Analytics. All rights reserved.
               </p>
               <p className="text-xs text-slate-500">
                 Built for professional traders

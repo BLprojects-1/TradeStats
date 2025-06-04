@@ -153,8 +153,8 @@ export default function Roadmap() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-950 text-white relative overflow-x-hidden">
       <Head>
-        <title>Roadmap | TICKR | Professional Solana Trading Analytics</title>
-        <meta name="description" content="Discover TICKR's professional development roadmap - institutional-grade trading analytics features and enterprise platform evolution." />
+        <title>Roadmap | TradeStats | Professional Solana Trading Analytics</title>
+        <meta name="description" content="Discover TradeStats's professional development roadmap - institutional-grade trading analytics features and enterprise platform evolution." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.png" />
       </Head>
@@ -174,7 +174,7 @@ export default function Roadmap() {
             <Link href="/" className="flex items-center">
               <img 
                 src="/logo.png" 
-                alt="TICKR Logo" 
+                alt="TradeStats Logo" 
                 className="h-12 w-auto"
               />
             </Link>
@@ -410,7 +410,7 @@ export default function Roadmap() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 transform scale-120 origin-center">
           <div className="text-center">
             <p className="text-slate-400 text-lg">
-              © 2024 TICKR. Built for professional Solana traders.
+              © 2024 TradeStats. Built for professional Solana traders.
             </p>
           </div>
         </div>

@@ -60,7 +60,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-950 text-white relative overflow-x-hidden">
       <Head>
-        <title>TICKR | Professional Solana Trading Analytics</title>
+        <title>TradeStats | Professional Solana Trading Analytics</title>
         <meta name="description" content="Advanced trading analytics, portfolio management, and performance insights for professional Solana traders." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.png" />
@@ -81,7 +81,7 @@ export default function Home() {
             <Link href="/" className="flex items-center">
               <img 
                 src="/logo.png" 
-                alt="TICKR Logo" 
+                alt="TradeStats Logo" 
                 className="h-12 w-auto"
               />
             </Link>
@@ -202,7 +202,7 @@ export default function Home() {
                         <div className="w-4 h-4 bg-amber-400 rounded-full"></div>
                         <div className="w-4 h-4 bg-emerald-400 rounded-full"></div>
                       </div>
-                      <div className="text-sm text-slate-400">TICKR.app/dashboard</div>
+                      <div className="text-sm text-slate-400">TradeStats.app/dashboard</div>
                     </div>
 
                     {/* Mock Dashboard Content */}
@@ -326,7 +326,7 @@ export default function Home() {
                   Ready to Elevate Your Trading?
                 </h2>
                 <p className="text-2xl text-slate-300 mb-12 max-w-3xl mx-auto">
-                  Join professional traders who rely on TICKR for advanced analytics and systematic trading discipline.
+                  Join professional traders who rely on TradeStats for advanced analytics and systematic trading discipline.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-6 justify-center">
                   <button 
@@ -355,7 +355,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 transform scale-120 origin-center">
           <div className="text-center">
             <p className="text-slate-400 text-lg">
-              © 2024 TICKR. Built for professional Solana traders.
+              © 2024 TradeStats. Built for professional Solana traders.
             </p>
           </div>
         </div>

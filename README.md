@@ -1,4 +1,4 @@
-# TICKR - Professional Solana Trading Analytics
+# TradeStats - Professional Solana Trading Analytics
 
 A comprehensive trading analytics platform for professional Solana traders, featuring advanced portfolio management, automated trade tracking, and institutional-grade performance insights.
 
@@ -125,4 +125,4 @@ MIT License - Built for professional traders by professional traders.
 
 ---
 
-**TICKR** - Elevating Solana trading through professional-grade analytics and systematic discipline.
+**TradeStats** - Elevating Solana trading through professional-grade analytics and systematic discipline.

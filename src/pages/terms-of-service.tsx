@@ -7,8 +7,8 @@ const TermsOfService = () => {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-background text-slate-100 relative overflow-hidden">
       <Head>
-        <title>Terms of Service | TICKR | Professional Solana Trading Analytics</title>
-        <meta name="description" content="TICKR Terms of Service - Professional trading analytics platform terms and conditions." />
+        <title>Terms of Service | TradeStats | Professional Solana Trading Analytics</title>
+        <meta name="description" content="TradeStats Terms of Service - Professional trading analytics platform terms and conditions." />
         <link rel="icon" href="/favicon.svg" />
       </Head>
 
@@ -99,14 +99,14 @@ const TermsOfService = () => {
               <div className="mb-8 p-4 bg-blue-600/10 border border-blue-500/20 rounded-lg">
                 <p className="text-sm text-slate-400 mb-2">Last Updated: {new Date().toLocaleDateString()}</p>
                 <p className="text-slate-300 font-medium">
-                  These Terms of Service govern your use of TICKR's professional Solana trading analytics platform and services.
+                  These Terms of Service govern your use of TradeStats's professional Solana trading analytics platform and services.
                 </p>
               </div>
               
               <div className="space-y-8">
                 <div className="bg-emerald-600/10 border border-emerald-500/20 rounded-lg p-6">
                   <p className="text-slate-300">
-                    Welcome to TICKR's professional trading analytics platform. By accessing or using our services, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our professional platform.
+                    Welcome to TradeStats's professional trading analytics platform. By accessing or using our services, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our professional platform.
                   </p>
                   <p className="text-slate-300 mt-4">
                     The terms "User", "You", "Your", "Service", and "Agreement" have specific meanings defined within this document for professional service delivery.
@@ -122,7 +122,7 @@ const TermsOfService = () => {
                   </h2>
                   
                   <p className="text-slate-300">
-                    TICKR is a professional-grade Solana trading analytics platform that provides institutional-level portfolio management, trade analysis, and performance optimization tools for serious cryptocurrency traders and investment professionals.
+                    TradeStats is a professional-grade Solana trading analytics platform that provides institutional-level portfolio management, trade analysis, and performance optimization tools for serious cryptocurrency traders and investment professionals.
                   </p>
                 </section>
                 
@@ -197,10 +197,10 @@ const TermsOfService = () => {
                   
                   <div className="bg-blue-600/10 border border-blue-500/20 rounded-lg p-6">
                     <p className="text-slate-300 mb-4">
-                      Our professional analytics platform, including all content, features, algorithms, and functionality, are owned by TICKR and protected by intellectual property laws.
+                      Our professional analytics platform, including all content, features, algorithms, and functionality, are owned by TradeStats and protected by intellectual property laws.
                     </p>
                     <p className="text-slate-300">
-                      You may not copy, modify, distribute, sell, or lease any part of our professional services without explicit written permission from TICKR.
+                      You may not copy, modify, distribute, sell, or lease any part of our professional services without explicit written permission from TradeStats.
                     </p>
                   </div>
                 </section>
@@ -214,7 +214,7 @@ const TermsOfService = () => {
                   </h2>
                   
                   <p className="text-slate-300 mb-4">
-                    You retain ownership of trading notes, annotations, and other content you create. By providing content, you grant TICKR a license to use, process, and display your content for service provision and platform improvement.
+                    You retain ownership of trading notes, annotations, and other content you create. By providing content, you grant TradeStats a license to use, process, and display your content for service provision and platform improvement.
                   </p>
                   <p className="text-slate-300">
                     We reserve the right to analyze aggregated, anonymized data for platform enhancement and professional insights development.
@@ -256,7 +256,7 @@ const TermsOfService = () => {
                       CRITICAL LIABILITY LIMITATIONS:
                     </p>
                     <p className="text-slate-300 mb-4">
-                      To the maximum extent permitted by law, TICKR shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of our professional services.
+                      To the maximum extent permitted by law, TradeStats shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of our professional services.
                     </p>
                     <p className="text-slate-300">
                       We are not responsible for trading losses, financial damages, data breaches affecting third-party services, or decisions made based on platform analytics.
@@ -332,10 +332,10 @@ const TermsOfService = () => {
                         </svg>
                       </div>
                       <a 
-                        href="mailto:TICKRjournal@gmail.com?subject=Terms%20of%20Service%20Inquiry" 
+                        href="mailto:TradeStatsjournal@gmail.com?subject=Terms%20of%20Service%20Inquiry" 
                         className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
                       >
-                        TICKRjournal@gmail.com
+                        TradeStatsjournal@gmail.com
                       </a>
                     </div>
                   </div>
@@ -343,7 +343,7 @@ const TermsOfService = () => {
 
                 <div className="mt-12 pt-8 border-t border-slate-700/50">
                   <p className="text-slate-400 text-sm">
-                    These Terms constitute the entire agreement between you and TICKR regarding use of our professional trading analytics platform. If any provision is found unenforceable, the remainder shall remain in full force and effect.
+                    These Terms constitute the entire agreement between you and TradeStats regarding use of our professional trading analytics platform. If any provision is found unenforceable, the remainder shall remain in full force and effect.
                   </p>
                 </div>
               </div>

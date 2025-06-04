@@ -14,7 +14,7 @@
 -- only their own data.
 -- =========================================================
 
--- This script completely resets and rebuilds permissions for the TICKR app tables
+-- This script completely resets and rebuilds permissions for the TradeStats app tables
 -- It addresses the 401 Unauthorized issue with a more permissive approach
 
 -- 1. First disable RLS temporarily to ensure we can reset everything
@@ -52,14 +52,14 @@ ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracked_wallets ENABLE ROW LEVEL SECURITY;
 
 -- 5. Create a very permissive policy for authenticated users (for initial testing)
-CREATE POLICY "TICKR_auth_users_full_access" 
+CREATE POLICY "TradeStats_auth_users_full_access" 
   ON public.user_profiles 
   FOR ALL
   TO authenticated
   USING (true)
   WITH CHECK (true);
 
-CREATE POLICY "TICKR_auth_users_full_access" 
+CREATE POLICY "TradeStats_auth_users_full_access" 
   ON public.tracked_wallets 
   FOR ALL
   TO authenticated

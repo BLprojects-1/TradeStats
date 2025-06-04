@@ -1,10 +1,10 @@
-# Authentication System in TICKR
+# Authentication System in TradeStats
 
-This document provides an overview of how authentication works in TICKR.
+This document provides an overview of how authentication works in TradeStats.
 
 ## Overview
 
-TICKR uses Supabase for authentication, with the following features:
+TradeStats uses Supabase for authentication, with the following features:
 
 - Email/password authentication
 - Email confirmation

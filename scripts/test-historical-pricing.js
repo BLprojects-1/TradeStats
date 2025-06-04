@@ -190,7 +190,7 @@ class HistoricalPriceAnalyzer {
         {
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'TICKR-Trading-App/1.0',
+            'User-Agent': 'TradeStats-Trading-App/1.0',
             'x-cg-pro-api-key': process.env.COINGECKO_API_KEY || ''
           }
         }

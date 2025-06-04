@@ -1,12 +1,12 @@
-# Supabase Configuration for TICKR
+# Supabase Configuration for TradeStats
 
-This directory contains SQL scripts and utilities to set up and fix Supabase for the TICKR application.
+This directory contains SQL scripts and utilities to set up and fix Supabase for the TradeStats application.
 
 ## Database Setup
 
 ### Required Tables
 
-The TICKR application requires two main tables:
+The TradeStats application requires two main tables:
 
 1. `user_profiles` - Stores user display names and profile information
 2. `tracked_wallets` - Stores wallet addresses connected to each user
@@ -91,7 +91,7 @@ This directory contains the following key migrations:
 
 ## How RLS Works in Supabase
 
-Row Level Security (RLS) in Supabase restricts which rows a user can access in a table. For TICKR:
+Row Level Security (RLS) in Supabase restricts which rows a user can access in a table. For TradeStats:
 
 1. Each user should only see their own profile and wallet data
 2. Policies use `auth.uid()` to get the current user's ID
