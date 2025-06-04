@@ -46,7 +46,7 @@ const TermsOfService = () => {
           <div className="flex items-center space-x-4">
             <div className="hidden sm:flex items-center space-x-3">
               <a 
-                href="https://x.com/TICKRjournal" 
+                href="https://x.com/Tradestatsxyz" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="w-9 h-9 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 transition-all duration-200 hover:scale-110 hover:shadow-blue-500/30"
@@ -58,7 +58,7 @@ const TermsOfService = () => {
               </a>
               <button 
                 onClick={() => {
-                  navigator.clipboard.writeText('EWnHE6JuF1nrih1xZNJBSd6977swuEquuyyrTuLQpump');
+                  navigator.clipboard.writeText('4Hcm1TfA1MvVhCQHvJCcKL7ymUhJZAV7P439H5ZHnKRh');
                   const notification = document.createElement('div');
                   notification.textContent = 'Contract address copied!';
                   notification.className = 'fixed bottom-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
